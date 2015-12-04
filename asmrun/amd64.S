@@ -502,6 +502,7 @@ LBL(caml_start_program):
     /* Build an exception handler */
         lea     LBL(108)(%rip), %r13
         pushq   %r13; CFI_ADJUST(8)
+        subq    %rsp, %r14
         pushq   %r14; CFI_ADJUST(8)
         CFI_ADJUST(16)
         movq    %rsp, %r14
@@ -510,6 +511,7 @@ LBL(caml_start_program):
 LBL(107):
     /* Pop the exception handler */
         popq    %r14; CFI_ADJUST(-8)
+        addq    %rsp, %r14
         popq    %r12; CFI_ADJUST(-8)   /* dummy register */
         CFI_ADJUST(-16)
 LBL(109):
@@ -540,6 +542,7 @@ CFI_STARTPROC
         jne     LBL(110)
         movq    %r14, %rsp
         popq    %r14
+        addq    %rsp, %r14
         ret
 LBL(110):
         STORE_TL_VAR($0, caml_backtrace_pos)
@@ -562,6 +565,7 @@ LBL(111):
         movq    %r12, %rax            /* Recover exception bucket */
         movq    %r14, %rsp
         popq    %r14
+        addq    %rsp, %r14
         ret
 CFI_ENDPROC
 
@@ -571,6 +575,7 @@ CFI_STARTPROC
         jne     LBL(111)
         movq    %r14, %rsp
         popq    %r14
+        addq    %rsp, %r14
         ret
 CFI_ENDPROC
 
@@ -583,6 +588,7 @@ CFI_STARTPROC
         movq    C_ARG_1, %rax
         LOAD_TL_VAR(caml_exception_pointer, %rsp)  /* Cut stack */
         popq    %r14                   /* Recover previous exception handler */
+        addq    %rsp, %r14
         LOAD_TL_VAR(caml_young_ptr, %r15) /* Reload alloc ptr */
         ret
 LBL(112):
@@ -602,6 +608,7 @@ LBL(112):
         movq    %r12, %rax            /* Recover exception bucket */
         LOAD_TL_VAR(caml_exception_pointer,%rsp)
         popq    %r14                  /* Recover previous exception handler */
+        addq    %rsp, %r14
         LOAD_TL_VAR(caml_young_ptr,%r15) /* Reload alloc ptr */
         ret
 CFI_ENDPROC
@@ -616,6 +623,7 @@ FUNCTION(G(caml_stack_overflow))
         LEA_VAR(caml_exn_Stack_overflow, %rax)
         movq    %r14, %rsp            /* cut the stack */
         popq    %r14                  /* recover previous exn handler */
+        addq    %rsp, %r14
         ret                           /* jump to handler's code */
 
 /* Callback from C to OCaml */

@@ -666,12 +666,14 @@ let emit_instr fallthrough i =
         `	call	{emit_label lbl}\n`
     | Lpushtrap ->
         cfi_adjust_cfa_offset 8;
+        `	sub	%rsp, %r14\n`;
         `	pushq	%r14\n`;
         cfi_adjust_cfa_offset 8;
         `	movq	%rsp, %r14\n`;
         stack_offset := !stack_offset + 16
     | Lpoptrap ->
         `	popq	%r14\n`;
+        `	addq	%rsp, %r14\n`;
         cfi_adjust_cfa_offset (-8);
         `	addq	$8, %rsp\n`;
         cfi_adjust_cfa_offset (-8);
@@ -688,6 +690,7 @@ let emit_instr fallthrough i =
         | true, Lambda.Raise_notrace ->
           `	movq	%r14, %rsp\n`;
           `	popq	%r14\n`;
+          `	addq	%rsp, %r14\n`;
           `	ret\n`
         end
 
