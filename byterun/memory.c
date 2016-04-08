@@ -24,9 +24,6 @@ static void write_barrier(value obj, int field, value val)
       } else {
         caml_darken(val, 0);
       }
-    } else if (Is_young(val) && val < obj) {
-      /* Both obj and val are young and val is more recent than obj. */
-      Ref_table_add(&caml_remembered_set.minor_ref, Op_val(obj) + field);
     }
   }
 }
@@ -308,5 +305,9 @@ int is_minor (value v) {
 
 header_t hd_val(value v) {
   return Hd_val(v);
+}
+
+int is_foreign (value v) {
+  return Is_foreign(v);
 }
 #endif

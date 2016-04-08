@@ -154,6 +154,12 @@ CAMLextern __thread struct caml__roots_block *caml_local_roots;  /* defined in r
   CAMLparam0 (); \
   CAMLxparamN (x, (size))
 
+#define CAMLparam0_domain(domain) \
+  struct caml__roots_block *caml__frame = *(domain)->local_roots
+
+#define CAMLparam1_domain(domain,x) \
+  CAMLparam0_domain(domain); \
+  CAMLxparam1_domain(domain,x)
 
 #if defined(__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ > 7))
   #define CAMLunused __attribute__ ((unused))
@@ -166,6 +172,17 @@ CAMLextern __thread struct caml__roots_block *caml_local_roots;  /* defined in r
   CAMLunused int caml__dummy_##x = ( \
     (caml__roots_##x.next = caml_local_roots), \
     (caml_local_roots = &caml__roots_##x), \
+    (caml__roots_##x.mutexes = 0), \
+    (caml__roots_##x.nitems = 1), \
+    (caml__roots_##x.ntables = 1), \
+    (caml__roots_##x.tables [0] = &x), \
+    0)
+
+#define CAMLxparam1_domain(domain,x) \
+  struct caml__roots_block caml__roots_##x; \
+  CAMLunused int caml__dummy_##x = ( \
+    (caml__roots_##x.next = *(domain)->local_roots), \
+    (*(domain)->local_roots = &caml__roots_##x), \
     (caml__roots_##x.mutexes = 0), \
     (caml__roots_##x.nitems = 1), \
     (caml__roots_##x.ntables = 1), \
@@ -285,6 +302,11 @@ CAMLextern __thread struct caml__roots_block *caml_local_roots;  /* defined in r
   return; \
 }while (0)
 
+#define CAMLreturn0_domain(domain) do{ \
+  *(domain)->local_roots = caml__frame; \
+  return; \
+}while (0)
+
 #define CAMLreturnT(type, result) do{ \
   type caml__temp_result = (result); \
   CAMLcheck_mutexes; \
@@ -292,7 +314,17 @@ CAMLextern __thread struct caml__roots_block *caml_local_roots;  /* defined in r
   return (caml__temp_result); \
 }while(0)
 
+#define CAMLreturnT_domain(domain, type, result) do{ \
+  type caml__temp_result = (result); \
+  *(domain)->local_roots = caml__frame; \
+  return (caml__temp_result); \
+}while(0)
+
+
 #define CAMLreturn(result) CAMLreturnT(value, result)
+
+#define CAMLreturn_domain(domain, result) \
+  CAMLreturnT_domain(domain, value, result)
 
 #define CAMLnoreturn ((void) caml__frame)
 

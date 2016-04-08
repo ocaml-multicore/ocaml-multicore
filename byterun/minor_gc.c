@@ -284,129 +284,6 @@ void forward_pointer (value v, value *p) {
   }
 }
 
-CAMLexport value caml_promote(struct domain* domain, value root)
-{
-  value **r;
-  value iter, f;
-  header_t hd;
-  mlsize_t sz, i;
-  tag_t tag;
-  int saved_stack = 0;
-  struct caml_domain_state *domain_state = domain->state;
-  value young_ptr = (value)domain_state->young_ptr;
-  value young_end = (value)domain_state->young_end;
-
-  /* Integers are already shared */
-  if (Is_long(root))
-    return root;
-
-  tag = Tag_val(root);
-   /* Non-stack objects which are in the major heap are already shared. */
-  if (tag != Stack_tag && !Is_minor(root))
-    return root;
-
-  if (!caml_stack_is_saved()) {
-    saved_stack = 1;
-    caml_save_stack_gc();
-  }
-
-  Assert(!oldify_todo_list);
-  oldest_promoted = (value)domain_state->young_start;
-  // caml_gc_log ("caml_promote: root=%p tag=%u young_start=%p young_ptr=0x%lx young_end=0x%lx owner=%d",
-  //            (value*)root, tag, domain_state->young_start, young_ptr, young_end, domain->id);
-  promote_domain = domain;
-
-  if (tag != Stack_tag) {
-    Assert(caml_owner_of_young_block(root) == domain);
-
-    /* For non-stack objects, don't promote referenced stacks. They are
-     * promoted only when explicitly requested. */
-    oldify_one (root, &root, 0);
-  } else {
-    /* The object is a stack */
-    if (Is_minor(root)) {
-      oldify_one (root, &root, 1);
-    } else {
-      /* Though the stack is in the major heap, it can contain objects in the
-       * minor heap. They must be promoted. */
-      caml_scan_dirty_stack_domain(caml_oldify_one, root, domain);
-    }
-  }
-
-  oldify_mopup (0);
-
-  // caml_gc_log ("caml_promote: new root=0x%lx oldest_promoted=0x%lx",
-  //            root, oldest_promoted);
-
-  Assert (!Is_minor(root));
-  /* XXX KC: We might checking for rpc's just before a stw_phase of a major
-   * collection? Is this necessary? */
-  caml_darken(root, 0);
-
-  if (tag == Stack_tag) {
-    /* Since we've promoted the objects on the stack, the stack is now clean. */
-    caml_clean_stack_domain(root, domain);
-  }
-
-  /* Scan local roots */
-  caml_do_local_roots (forward_pointer, domain);
-
-  /* Scan current stack */
-  caml_scan_stack (forward_pointer, *(domain->current_stack));
-
-  /* Scan major to young pointers. */
-  for (r = domain->remembered_set->major_ref.base; r < domain->remembered_set->major_ref.ptr; r++) {
-    value old_p = **r;
-    if (Is_block(old_p) && young_ptr <= old_p && old_p < young_end) {
-      value new_p = old_p;
-      forward_pointer (new_p, &new_p);
-      if (old_p != new_p)
-        __sync_bool_compare_and_swap (*r,old_p,new_p);
-      //caml_gc_log ("forward: old_p=%p new_p=%p **r=%p",(value*)old_p, (value*)new_p,(value*)**r);
-    }
-  }
-
-  /* Scan young to young pointers */
-  for (r = domain->remembered_set->minor_ref.base; r < domain->remembered_set->minor_ref.ptr; r++) {
-    forward_pointer (**r, *r);
-  }
-
-  /* Scan newer objects */
-  iter = young_ptr;
-  Assert(oldest_promoted < young_end);
-  while (iter <= oldest_promoted) {
-    hd = Hd_hp(iter);
-    iter = Val_hp(iter);
-    if (hd == 0) {
-      /* Fowarded object. */
-      mlsize_t wsz = Wosize_val(Op_val(iter)[0]);
-      Assert (wsz <= Max_young_wosize);
-      sz = Bsize_wsize(wsz);
-    } else {
-      tag = Tag_hd (hd);
-      Assert (tag != Infix_tag);
-      sz = Bosize_hd (hd);
-      Assert (Wosize_hd(hd) <= Max_young_wosize);
-      //caml_gc_log ("Scan: iter=%p sz=%lu tag=%u", (value*)iter, Wsize_bsize(sz), tag);
-      if (tag < No_scan_tag && tag != Stack_tag) { /* Stacks will be scanned lazily, so skip. */
-        for (i = 0; i < Wsize_bsize(sz); i++) {
-          f = Op_val(iter)[i];
-          if (Is_block(f)) {
-            forward_pointer (f,((value*)iter) + i);
-          }
-        }
-      }
-    }
-    iter += sz;
-  }
-
-  if (saved_stack)
-    caml_restore_stack_gc();
-
-  promote_domain = 0;
-  return root;
-}
-
 //*****************************************************************************
 
 /* Make sure the minor heap is empty by performing a minor collection
@@ -502,13 +379,20 @@ void caml_empty_minor_heap_domain (struct domain* domain)
 #ifdef DEBUG
   {
     value *p;
-    for (p = (value *) caml_domain_state->young_start;
-         p < (value *) caml_domain_state->young_end; ++p){
+    for (p = (value *) domain_state->young_start;
+         p < (value *) domain_state->young_end; ++p){
       *p = Debug_free_minor;
     }
     ++ minor_gc_counter;
   }
 #endif
+}
+
+CAMLexport value caml_promote(struct domain* domain, value root)
+{
+  CAMLparam1_domain(domain, root);
+  caml_empty_minor_heap_domain (domain);
+  CAMLreturn_domain(domain, root);
 }
 
 void caml_empty_minor_heap ()
