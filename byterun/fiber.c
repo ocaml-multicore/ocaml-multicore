@@ -88,7 +88,6 @@ static void load_stack(value newstack)
   caml_stack_high = Stack_high(newstack);
   caml_extern_sp = caml_stack_high + Stack_sp(newstack);
   caml_current_stack = newstack;
-  caml_scan_stack (forward_pointer, newstack);
 }
 
 #define Fiber_stack_wosize ((Stack_threshold / sizeof(value)) *2)
