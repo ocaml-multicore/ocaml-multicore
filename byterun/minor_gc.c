@@ -12,24 +12,24 @@
 /***********************************************************************/
 
 #include <string.h>
-#include "config.h"
-#include "fail.h"
-#include "finalise.h"
-#include "gc.h"
-#include "gc_ctrl.h"
-#include "major_gc.h"
-#include "memory.h"
-#include "minor_gc.h"
-#include "misc.h"
-#include "mlvalues.h"
-#include "roots.h"
-#include "signals.h"
-#include "weak.h"
-#include "domain.h"
-#include "shared_heap.h"
-#include "addrmap.h"
-#include "fiber.h"
-#include "eventlog.h"
+#include "caml/config.h"
+#include "caml/fail.h"
+#include "caml/finalise.h"
+#include "caml/gc.h"
+#include "caml/gc_ctrl.h"
+#include "caml/major_gc.h"
+#include "caml/memory.h"
+#include "caml/minor_gc.h"
+#include "caml/misc.h"
+#include "caml/mlvalues.h"
+#include "caml/roots.h"
+#include "caml/signals.h"
+#include "caml/weak.h"
+#include "caml/domain.h"
+#include "caml/shared_heap.h"
+#include "caml/addrmap.h"
+#include "caml/fiber.h"
+#include "caml/eventlog.h"
 
 asize_t __thread caml_minor_heap_size;
 
@@ -384,6 +384,7 @@ void caml_empty_minor_heap (void)
   stat_live_bytes = 0;
 
   if (minor_allocated_bytes != 0){
+    if (caml_minor_gc_begin_hook != NULL) (*caml_minor_gc_begin_hook) ();
     caml_gc_log ("Minor collection starting");
     caml_do_local_roots(&caml_oldify_one, caml_domain_self());
 
@@ -442,8 +443,8 @@ void caml_empty_minor_heap (void)
   }
   clear_table (&caml_remembered_set.fiber_ref);
 
+  if (caml_minor_gc_end_hook != NULL) (*caml_minor_gc_end_hook) ();
   caml_restore_stack_gc();
-
 
 #ifdef DEBUG
   {

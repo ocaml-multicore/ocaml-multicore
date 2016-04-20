@@ -69,6 +69,39 @@ struct caml_context {
   value * gc_regs;              /* pointer to register block */
 };
 
+/* Structure of frame descriptors */
+
+typedef struct {
+  uintnat retaddr;
+  unsigned short frame_size;
+  unsigned short num_live;
+  unsigned short live_ofs[1];
+} frame_descr;
+
+struct caml_loc_info {
+  int loc_valid;
+  int loc_is_raise;
+  char * loc_filename;
+  int loc_lnum;
+  int loc_startchr;
+  int loc_endchr;
+};
+
+/* Hash table of frame descriptors */
+
+extern frame_descr ** caml_frame_descriptors;
+extern int caml_frame_descriptors_mask;
+
+#define Hash_retaddr(addr) \
+  (((uintnat)(addr) >> 3) & caml_frame_descriptors_mask)
+
+extern void caml_init_frame_descriptors(void);
+extern void caml_register_frametable(intnat *);
+extern void caml_register_dyn_global(void *);
+
+CAMLextern void extract_location_info(frame_descr * d,
+                                      /*out*/ struct caml_loc_info * li);
+
 extern uintnat caml_stack_usage (void);
 
 /* Declaration of variables used in the asm code */

@@ -25,7 +25,7 @@
 #if !_WIN32
 #include <sys/wait.h>
 #endif
-#include "config.h"
+#include "caml/config.h"
 #ifdef HAS_UNISTD
 #include <unistd.h>
 #endif
@@ -39,16 +39,17 @@
 #ifdef HAS_GETTIMEOFDAY
 #include <sys/time.h>
 #endif
-#include "alloc.h"
-#include "debugger.h"
-#include "fail.h"
-#include "instruct.h"
-#include "mlvalues.h"
-#include "osdeps.h"
-#include "signals.h"
-#include "fiber.h"
-#include "sys.h"
-#include "startup.h"
+
+#include "caml/alloc.h"
+#include "caml/debugger.h"
+#include "caml/fail.h"
+#include "caml/fiber.h"
+#include "caml/instruct.h"
+#include "caml/mlvalues.h"
+#include "caml/osdeps.h"
+#include "caml/signals.h"
+#include "caml/sys.h"
+#include "caml/startup.h"
 
 static char * error_message(void)
 {
@@ -267,6 +268,9 @@ CAMLprim value caml_sys_getenv(value var)
   if (res == 0) caml_raise_not_found();
   return caml_copy_string(res);
 }
+
+char * caml_exe_name;
+char ** caml_main_argv;
 
 CAMLprim value caml_sys_get_argv(value unit)
 {

@@ -5,10 +5,10 @@ let minor_heap_align_bits = 24
 
 type t =
 #define DOMAIN_STATE(idx, type, name) | Domain_##name
-#include "domain_state.tbl"
+#include "caml/domain_state.tbl"
 #undef DOMAIN_STATE
 
 let idx_of_field = function
 #define DOMAIN_STATE(idx, type, name) | Domain_##name -> idx
-#include "domain_state.tbl"
+#include "caml/domain_state.tbl"
 #undef DOMAIN_STATE
