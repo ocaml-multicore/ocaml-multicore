@@ -1,8 +1,21 @@
+/***********************************************************************/
+/*                                                                     */
+/*                                OCaml                                */
+/*                                                                     */
+/*            Xavier Leroy, projet Cristal, INRIA Rocquencourt         */
+/*                                                                     */
+/*  Copyright 1996 Institut National de Recherche en Informatique et   */
+/*  en Automatique.  All rights reserved.  This file is distributed    */
+/*  under the terms of the GNU Library General Public License, with    */
+/*  the special exception on linking described in file ../LICENSE.     */
+/*                                                                     */
+/***********************************************************************/
+
 #ifndef CAML_FRAME_DESCRIPTORS_H
 #define CAML_FRAME_DESCRIPTORS_H
 
-#include "mlvalues.h"
-#include "roots.h"
+#include "caml/mlvalues.h"
+#include "caml/roots.h"
 
 /* Structure of frame descriptors */
 

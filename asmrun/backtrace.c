@@ -276,7 +276,7 @@ static void print_location(struct caml_loc_info * li, int index)
 void caml_print_exception_backtrace(void)
 {
   intnat i;
-  struct loc_info li;
+  struct caml_loc_info li;
 
   for (i = 0; i < caml_domain_state->backtrace_pos; i++) {
     extract_location_info((frame_descr *) (caml_backtrace_buffer[i]), &li);

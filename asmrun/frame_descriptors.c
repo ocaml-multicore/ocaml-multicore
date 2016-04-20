@@ -1,6 +1,19 @@
+/***********************************************************************/
+/*                                                                     */
+/*                                OCaml                                */
+/*                                                                     */
+/*            Xavier Leroy, projet Cristal, INRIA Rocquencourt         */
+/*                                                                     */
+/*  Copyright 1996 Institut National de Recherche en Informatique et   */
+/*  en Automatique.  All rights reserved.  This file is distributed    */
+/*  under the terms of the GNU Library General Public License, with    */
+/*  the special exception on linking described in file ../LICENSE.     */
+/*                                                                     */
+/***********************************************************************/
+
 #include "frame_descriptors.h"
 #include "stack.h"
-#include "platform.h"
+#include "caml/platform.h"
 
 typedef struct link {
   intnat* frametable;
@@ -104,9 +117,6 @@ void caml_register_frametable(intnat *table)
 
   caml_plat_unlock(&descr_mutex);
 }
-
-
-
 
 void caml_scan_stack_roots(scanning_action f,
                            char* sp, uintnat retaddr, value* regs) {
