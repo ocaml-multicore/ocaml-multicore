@@ -652,9 +652,10 @@ CFI_STARTPROC
     /* Save callee-save registers */
         PUSH_CALLEE_SAVE_REGS
     /* Initial loading of arguments */
-        movq    C_ARG_1, %rdi      /* closure -- no op with Unix conventions */
-        movq    C_ARG_2, %rax      /* first argument */
-        movq    C_ARG_3, %rbx      /* second argument */
+        movq    C_ARG_1, %r15      /* young_ptr */
+        movq    C_ARG_2, %rdi      /* closure */
+        movq    C_ARG_3, %rax      /* first argument */
+        movq    C_ARG_4, %rbx      /* second argument */
         LEA_VAR(caml_apply2, %r12) /* code pointer */
         jmp     LBL(caml_start_program)
 CFI_ENDPROC
@@ -664,10 +665,11 @@ CFI_STARTPROC
     /* Save callee-save registers */
         PUSH_CALLEE_SAVE_REGS
     /* Initial loading of arguments */
-        movq    C_ARG_2, %rax      /* first argument */
-        movq    C_ARG_3, %rbx      /* second argument */
-        movq    C_ARG_1, %rsi      /* closure */
-        movq    C_ARG_4, %rdi      /* third argument */
+        movq    C_ARG_1, %r15      /* young_ptr */
+        movq    0(C_ARG_3), %rax   /* first argument */
+        movq    8(C_ARG_3), %rbx   /* second argument */
+        movq    C_ARG_2, %rsi      /* closure */
+        movq    16(C_ARG_3), %rdi      /* third argument */
         LEA_VAR(caml_apply3, %r12) /* code pointer */
         jmp     LBL(caml_start_program)
 CFI_ENDPROC
