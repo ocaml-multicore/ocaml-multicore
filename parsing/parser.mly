@@ -1846,18 +1846,18 @@ effect_declaration:
   | effect_constructor_rebind           { $1 }
 ;
 effect_constructor_declaration:
-  | constr_ident attributes COLON core_type_list MINUSGREATER simple_core_type
+  | EFFECT constr_ident attributes COLON core_type_list MINUSGREATER simple_core_type
       post_item_attributes
-      { Te.effect_decl (mkrhs $1 1) $6 ~args:(List.rev $4)
-          ~loc:(symbol_rloc()) ~attrs:($7 @ $2) }
-  | constr_ident attributes COLON simple_core_type post_item_attributes
-      { Te.effect_decl (mkrhs $1 1) $4
-          ~loc:(symbol_rloc()) ~attrs:($5 @ $2) }
+      { Te.effect_decl (mkrhs $2 1) $7 ~args:(List.rev $5)
+          ~loc:(symbol_rloc()) ~attrs:($8 @ $3) }
+  | EFFECT constr_ident attributes COLON simple_core_type post_item_attributes
+      { Te.effect_decl (mkrhs $2 1) $5
+          ~loc:(symbol_rloc()) ~attrs:($6 @ $3) }
 ;
 effect_constructor_rebind:
-  | constr_ident attributes EQUAL constr_longident post_item_attributes
-      { Te.effect_rebind (mkrhs $1 1) (mkrhs $4 4)
-          ~loc:(symbol_rloc()) ~attrs:($5 @ $2) }
+  | EFFECT constr_ident attributes EQUAL constr_longident post_item_attributes
+      { Te.effect_rebind (mkrhs $2 1) (mkrhs $5 4)
+          ~loc:(symbol_rloc()) ~attrs:($6 @ $3) }
 ;
 
 generalized_constructor_arguments:
