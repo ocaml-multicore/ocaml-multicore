@@ -16,6 +16,8 @@
 #ifndef CAML_STACK_H
 #define CAML_STACK_H
 
+#include "frame_descriptors.h"
+
 /* Macros to access the stack frame */
 
 #ifdef TARGET_sparc
@@ -68,6 +70,20 @@ struct caml_context {
   uintnat last_retaddr;         /* last return address in OCaml code */
   value * gc_regs;              /* pointer to register block */
 };
+
+struct caml_loc_info {
+  int loc_valid;
+  int loc_is_raise;
+  char * loc_filename;
+  int loc_lnum;
+  int loc_startchr;
+  int loc_endchr;
+};
+
+extern void caml_register_dyn_global(void *);
+
+CAMLextern void extract_location_info(frame_descr * d,
+                                      /*out*/ struct caml_loc_info * li);
 
 extern uintnat caml_stack_usage (void);
 

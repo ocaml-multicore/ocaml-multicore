@@ -13,26 +13,22 @@
 
 /* To walk the memory roots for garbage collection */
 
-#include "finalise.h"
-#include "globroots.h"
-#include "major_gc.h"
-#include "memory.h"
-#include "minor_gc.h"
-#include "misc.h"
-#include "mlvalues.h"
-#include "roots.h"
-#include "fiber.h"
-#include "major_gc.h"
-#include "shared_heap.h"
-#include "fiber.h"
+#include "caml/fiber.h"
+#include "caml/finalise.h"
+#include "caml/globroots.h"
+#include "caml/major_gc.h"
+#include "caml/memory.h"
+#include "caml/minor_gc.h"
+#include "caml/misc.h"
+#include "caml/mlvalues.h"
+#include "caml/roots.h"
+#include "caml/fiber.h"
+#include "caml/shared_heap.h"
 
 #ifdef NATIVE_CODE
-#include "frame_descriptors.h"
-
 /* Communication with [caml_start_program] and [caml_call_gc]. */
 
 /* FIXME: there should be one of these per domain */
-
 intnat caml_globals_inited = 0;
 static intnat caml_globals_scanned = 0;
 

@@ -17,13 +17,13 @@
 */
 
 #include <string.h>
-#include "alloc.h"
-#include "custom.h"
-#include "major_gc.h"
-#include "memory.h"
-#include "mlvalues.h"
-#include "fiber.h"
-#include "domain.h"
+#include "caml/alloc.h"
+#include "caml/custom.h"
+#include "caml/domain.h"
+#include "caml/fiber.h"
+#include "caml/major_gc.h"
+#include "caml/memory.h"
+#include "caml/mlvalues.h"
 
 #define Setup_for_gc
 #define Restore_after_gc
@@ -144,6 +144,12 @@ CAMLprim value caml_alloc_dummy(value size)
   return caml_alloc (wosize, 0);
 }
 
+CAMLprim value caml_alloc_dummy_function(value size,value arity)
+{
+  /* the arity argument is used by the js_of_ocaml runtime */
+  return caml_alloc_dummy(size);
+}
+
 CAMLprim value caml_alloc_dummy_float (value size)
 {
   mlsize_t wosize = Int_val(size) * Double_wosize;
@@ -175,3 +181,7 @@ CAMLprim value caml_update_dummy(value dummy, value newval)
   }
   return Val_unit;
 }
+
+
+
+

@@ -93,7 +93,7 @@
 /* Access to the current domain state block. */
 
 #define CAML_CONFIG_H_NO_TYPEDEFS
-#include "../byterun/config.h"
+#include "../byterun/caml/config.h"
 
 #define GET_DOMAIN_STATE(reg) \
 	movq	%r15, reg ; \
@@ -127,7 +127,7 @@
         popq    %r13 ;                           \
         store_caml_##name %r13 ;                 \
   .endm
-#include "../byterun/domain_state.tbl"
+#include "../byterun/caml/domain_state.tbl"
 #undef DOMAIN_STATE
 
 
@@ -362,6 +362,21 @@ LBL(caml_call_gc):
         ret
 CFI_ENDPROC
 
+FUNCTION(G(caml_perform))
+CFI_STARTPROC
+        ret
+CFI_ENDPROC
+
+FUNCTION(G(caml_resume))
+CFI_STARTPROC
+        ret
+CFI_ENDPROC
+
+FUNCTION(G(caml_delegate))
+CFI_STARTPROC
+        ret
+CFI_ENDPROC
+
 FUNCTION(G(caml_alloc1))
 CFI_STARTPROC
 LBL(caml_alloc1):
@@ -489,7 +504,7 @@ FUNCTION(G(caml_start_program))
     /* Load caml_young_ptr into r15 (was passed as an argument from C) */
         movq    C_ARG_1, %r15
     /* Initial entry point is G(caml_program) */
-        leaq    GCALL(caml_program)(%rip), %r12
+        LEA_VAR(caml_program, %r12)
     /* Common code for caml_start_program and caml_callback* */
 LBL(caml_start_program):
     /* Build a callback link */
@@ -641,7 +656,7 @@ CFI_STARTPROC
         movq    C_ARG_2, %rdi      /* closure */
         movq    C_ARG_3, %rax      /* first argument */
         movq    C_ARG_4, %rbx      /* second argument */
-        leaq    GCALL(caml_apply2)(%rip), %r12  /* code pointer */
+        LEA_VAR(caml_apply2, %r12) /* code pointer */
         jmp     LBL(caml_start_program)
 CFI_ENDPROC
 
@@ -655,13 +670,13 @@ CFI_STARTPROC
         movq    8(C_ARG_3), %rbx   /* second argument */
         movq    C_ARG_2, %rsi      /* closure */
         movq    16(C_ARG_3), %rdi      /* third argument */
-        leaq    GCALL(caml_apply3)(%rip), %r12  /* code pointer */
+        LEA_VAR(caml_apply3, %r12) /* code pointer */
         jmp     LBL(caml_start_program)
 CFI_ENDPROC
 
 FUNCTION(G(caml_ml_array_bound_error))
 CFI_STARTPROC
-        leaq    GCALL(caml_array_bound_error)(%rip), %rax
+        LEA_VAR(caml_array_bound_error, %rax)
         jmp     LBL(caml_c_call)
 CFI_ENDPROC
 
