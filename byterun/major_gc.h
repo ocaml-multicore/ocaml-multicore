@@ -3,10 +3,7 @@
 
 extern __thread value* caml_mark_stack;
 extern __thread int caml_mark_stack_count;
-
 extern __thread uintnat caml_allocated_words;
-
-
 
 intnat caml_major_collection_slice (intnat);
 void caml_finish_marking (void);
@@ -15,4 +12,4 @@ void caml_darken(value, value* ignored);
 void caml_mark_root(value, value*);
 void caml_empty_mark_stack(void);
 
-#endif
+#endif /* CAML_MAJOR_GC_H */

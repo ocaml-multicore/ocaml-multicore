@@ -232,12 +232,12 @@ value caml_interprete(code_t prog, asize_t prog_size)
 #ifdef THREADED_CODE
     caml_instr_table = (char **) jumptable;
     caml_instr_base = Jumptbl_base;
-    caml_thread_code(raise_unhandled_code, 
+    caml_thread_code(raise_unhandled_code,
                      sizeof(raise_unhandled_code));
 #endif
     value raise_unhandled_closure =
       caml_alloc_small(1, Closure_tag);
-    Init_field(raise_unhandled_closure, 0, 
+    Init_field(raise_unhandled_closure, 0,
                Val_bytecode(raise_unhandled_code));
     raise_unhandled = caml_create_root(raise_unhandled_closure);
     caml_global_data = caml_create_root(Val_unit);
@@ -249,7 +249,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
   jumptbl_base = Jumptbl_base;
 #endif
   initial_trap_sp_off = caml_trap_sp_off;
-  initial_stack_words = caml_stack_high - caml_extern_sp;
+  initial_stack_words = caml_domain_state->stack_high - caml_extern_sp;
   initial_external_raise = caml_external_raise;
   caml_callback_depth++;
   saved_pc = NULL;
@@ -277,7 +277,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
 #ifdef DEBUG
  next_instr:
   if (caml_icount-- == 0) caml_stop_here ();
-  Assert(sp == caml_stack_high || caml_on_current_stack(sp));
+  Assert(sp == caml_domain_state->stack_high || caml_on_current_stack(sp));
 #endif
   goto *(void *)(jumptbl_base + *pc++); /* Jump to the first instruction */
 #else
@@ -286,6 +286,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
 
     Assert(!Is_foreign(accu));
     Assert(!Is_foreign(env));
+
     caml_bcodcount++;
     if (caml_icount-- == 0) caml_stop_here ();
     if (caml_startup_params.trace_flag>1) printf("\n##%ld\n", caml_bcodcount);
@@ -297,7 +298,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
       caml_trace_accu_sp_file(accu,sp,prog,prog_size,stdout);
       fflush(stdout);
     };
-    Assert(sp == caml_stack_high || caml_on_current_stack(sp));
+    Assert(sp == caml_domain_state->stack_high || caml_on_current_stack(sp));
 #endif
     curr_instr = *pc++;
 
@@ -496,11 +497,11 @@ value caml_interprete(code_t prog, asize_t prog_size)
         extra_args--;
         pc = Code_val(accu);
         env = accu;
-      } else if (sp == caml_stack_high) {
-        value parent_stack = Stack_parent(caml_current_stack);
-        value hval = Stack_handle_value(caml_current_stack);
+      } else if (sp == caml_domain_state->stack_high) {
+        value parent_stack = Stack_parent(caml_domain_state->current_stack);
+        value hval = Stack_handle_value(caml_domain_state->current_stack);
         Assert(parent_stack != Val_long(0));
-        
+
         caml_extern_sp = sp;
         value old_stack = caml_switch_stack(parent_stack);
         sp = caml_extern_sp;
@@ -686,6 +687,8 @@ value caml_interprete(code_t prog, asize_t prog_size)
         Init_field(block, 0, accu);
         for (i = 1; i < wosize; i++) Init_field(block, i, *sp++);
       } else {
+        /* XXX KC: Is setup/restore needed? See comment in caml_alloc_shr in
+         * CLOSURE and CLOSUREREC. */
         Setup_for_gc;
         block = caml_alloc_shr(wosize, tag);
         Restore_after_gc;
@@ -757,15 +760,31 @@ value caml_interprete(code_t prog, asize_t prog_size)
     Instruct(GETFIELD):
       accu = FieldImm(accu, *pc); pc++; Next;
     Instruct(GETMUTABLEFIELD0):
-      accu = Field(accu, 0); Next;
+      Setup_for_c_call;
+      accu = Field(accu, 0);
+      Restore_after_c_call;
+      Next;
     Instruct(GETMUTABLEFIELD1):
-      accu = Field(accu, 1); Next;
+      Setup_for_c_call;
+      accu = Field(accu, 1);
+      Restore_after_c_call;
+      Next;
     Instruct(GETMUTABLEFIELD2):
-      accu = Field(accu, 2); Next;
+      Setup_for_c_call;
+      accu = Field(accu, 2);
+      Restore_after_c_call;
+      Next;
     Instruct(GETMUTABLEFIELD3):
-      accu = Field(accu, 3); Next;
+      Setup_for_c_call;
+      accu = Field(accu, 3);
+      Restore_after_c_call;
+      Next;
     Instruct(GETMUTABLEFIELD):
-      accu = Field(accu, *pc); pc++; Next;
+      Setup_for_c_call;
+      accu = Field(accu, *pc);
+      Restore_after_c_call;
+      pc++;
+      Next;
     Instruct(GETFLOATFIELD): {
       double d = Double_field(accu, *pc);
       Alloc_small(accu, Double_wosize, Double_tag);
@@ -868,7 +887,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
       Trap_link(sp) = Val_long(caml_trap_sp_off);
       sp[2] = env;
       sp[3] = Val_long(extra_args);
-      caml_trap_sp_off = sp - caml_stack_high;
+      caml_trap_sp_off = sp - caml_domain_state->stack_high;
       pc++;
       Next;
 
@@ -899,15 +918,15 @@ value caml_interprete(code_t prog, asize_t prog_size)
       if (caml_domain_state->backtrace_active) caml_stash_backtrace(accu, pc, sp, 0);
     raise_notrace:
       if (caml_trap_sp_off > 0) {
-        if (Stack_parent(caml_current_stack) == Val_long(0)) {
+        if (Stack_parent(caml_domain_state->current_stack) == Val_long(0)) {
           caml_external_raise = initial_external_raise;
           caml_trap_sp_off = initial_trap_sp_off;
-          caml_extern_sp = caml_stack_high - initial_stack_words;
+          caml_extern_sp = caml_domain_state->stack_high - initial_stack_words;
           caml_callback_depth--;
           return Make_exception_result(accu);
         } else {
-          value parent_stack = Stack_parent(caml_current_stack);
-          value hexn = Stack_handle_exception(caml_current_stack);
+          value parent_stack = Stack_parent(caml_domain_state->current_stack);
+          value hexn = Stack_handle_exception(caml_domain_state->current_stack);
           caml_extern_sp = sp;
           value old_stack = caml_switch_stack(parent_stack);
           sp = caml_extern_sp;
@@ -924,7 +943,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
           goto check_stacks;
         }
       } else {
-        sp = caml_stack_high + caml_trap_sp_off;
+        sp = caml_domain_state->stack_high + caml_trap_sp_off;
         pc = Pc_val(Trap_pc(sp));
         caml_trap_sp_off = Long_val(Trap_link(sp));
         env = sp[2];
@@ -938,7 +957,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
 /* Stack checks */
 
     check_stacks:
-      if (sp < caml_stack_threshold) {
+      if (sp < caml_domain_state->stack_threshold) {
         value saved[] = {env, accu};
         caml_extern_sp = sp;
         caml_realloc_stack(Stack_threshold / sizeof(value), saved, 2);
@@ -1072,25 +1091,11 @@ value caml_interprete(code_t prog, asize_t prog_size)
     Instruct(ASRINT):
       accu = (value)((((intnat) accu - 1) >> Long_val(*sp++)) | 1); Next;
 
-    Instruct(EQ): {
-      if (Is_long (accu) || Is_long(*sp)) {
-        accu = Val_int((intnat) accu == (intnat) *sp++);
-        Next;
-      }
-      if (Is_promoted_hd(Hd_val(accu)) && Is_young(accu))
-        accu = caml_addrmap_lookup(&caml_remembered_set.promotion, accu);
-      value v2 = *(value*)sp;
-      if (Is_promoted_hd(Hd_val(v2)) && Is_young(v2))
-        v2 = caml_addrmap_lookup(&caml_remembered_set.promotion, v2);
-      accu = Val_int((intnat) accu == (intnat) v2);
-      sp++;
-      Next;
-    }
-
 #define Integer_comparison(typ,opname,tst) \
     Instruct(opname): \
       accu = Val_int((typ) accu tst (typ) *sp++); Next;
 
+    Integer_comparison(intnat,EQ, ==)
     Integer_comparison(intnat,NEQ, !=)
     Integer_comparison(intnat,LTINT, <)
     Integer_comparison(intnat,LEINT, <=)
@@ -1245,7 +1250,7 @@ do_resume:
       caml_extern_sp = sp;
       caml_switch_stack(accu);
       sp = caml_extern_sp;
-      
+
       caml_trap_sp_off = Long_val(sp[0]);
       sp[0] = resume_arg;
       accu = resume_fn;
@@ -1265,8 +1270,8 @@ do_resume:
 
     Instruct(PERFORM): {
       value eff = accu;
-      value parent_stack = Stack_parent(caml_current_stack);
-      value heff = Stack_handle_effect(caml_current_stack);
+      value parent_stack = Stack_parent(caml_domain_state->current_stack);
+      value heff = Stack_handle_effect(caml_domain_state->current_stack);
 
       if (parent_stack == Val_long(0)) {
         accu = Field(caml_read_root(caml_global_data), UNHANDLED_EXN);
@@ -1298,8 +1303,8 @@ do_resume:
     Instruct(DELEGATETERM): {
       value eff = accu;
       value performer = sp[0];
-      value self = caml_current_stack;
-      value parent = Stack_parent(caml_current_stack);
+      value self = caml_domain_state->current_stack;
+      value parent = Stack_parent(caml_domain_state->current_stack);
 
       sp = sp + *pc - 2;
       sp[0] = Val_long(caml_trap_sp_off);

@@ -28,11 +28,14 @@
 /* </private> */
 #include "misc.h"
 #include "mlvalues.h"
+#include "alloc.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#define BVAR_EMPTY      0x10000
+#define BVAR_OWNER_MASK 0x0ffff
 
 CAMLextern value caml_alloc_shr (mlsize_t, tag_t);
 CAMLextern void caml_adjust_gc_speed (mlsize_t, mlsize_t);
@@ -56,7 +59,6 @@ color_t caml_allocation_color (void *hp);
 
 /* <private> */
 
-
 /* FIXME */
 /* There are two GC bits in the object header, with the following
    possible values:
@@ -64,8 +66,7 @@ color_t caml_allocation_color (void *hp);
     11: forwarded by a fault promotion */
 
 #define Is_promoted_hd(hd)  (((hd) & (3 << 8)) == (3 << 8))
-#define Promotedhd_hd(hd)  ((hd) | (3 << 8))  
-
+#define Promotedhd_hd(hd)  ((hd) | (3 << 8))
 
 #ifdef DEBUG
 #define DEBUG_clear(result, wosize) do{ \
@@ -162,6 +163,12 @@ CAMLextern __thread struct caml__roots_block *caml_local_roots;  /* defined in r
   CAMLparam0 (); \
   CAMLxparamN (x, (size))
 
+#define CAMLparam0_domain(domain) \
+  struct caml__roots_block *caml__frame = *(domain)->local_roots
+
+#define CAMLparam1_domain(domain,x) \
+  CAMLparam0_domain(domain); \
+  CAMLxparam1_domain(domain,x)
 
 #if defined(__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ > 7))
   #define CAMLunused __attribute__ ((unused))
@@ -174,6 +181,17 @@ CAMLextern __thread struct caml__roots_block *caml_local_roots;  /* defined in r
   CAMLunused int caml__dummy_##x = ( \
     (caml__roots_##x.next = caml_local_roots), \
     (caml_local_roots = &caml__roots_##x), \
+    (caml__roots_##x.mutexes = 0), \
+    (caml__roots_##x.nitems = 1), \
+    (caml__roots_##x.ntables = 1), \
+    (caml__roots_##x.tables [0] = &x), \
+    0)
+
+#define CAMLxparam1_domain(domain,x) \
+  struct caml__roots_block caml__roots_##x; \
+  CAMLunused int caml__dummy_##x = ( \
+    (caml__roots_##x.next = *(domain)->local_roots), \
+    (*(domain)->local_roots = &caml__roots_##x), \
     (caml__roots_##x.mutexes = 0), \
     (caml__roots_##x.nitems = 1), \
     (caml__roots_##x.ntables = 1), \
@@ -293,6 +311,11 @@ CAMLextern __thread struct caml__roots_block *caml_local_roots;  /* defined in r
   return; \
 }while (0)
 
+#define CAMLreturn0_domain(domain) do{ \
+  *(domain)->local_roots = caml__frame; \
+  return; \
+}while (0)
+
 #define CAMLreturnT(type, result) do{ \
   type caml__temp_result = (result); \
   CAMLcheck_mutexes; \
@@ -300,10 +323,20 @@ CAMLextern __thread struct caml__roots_block *caml_local_roots;  /* defined in r
   return (caml__temp_result); \
 }while(0)
 
+#define CAMLreturnT_domain(domain, type, result) do{ \
+  type caml__temp_result = (result); \
+  *(domain)->local_roots = caml__frame; \
+  return (caml__temp_result); \
+}while(0)
+
+
 #define CAMLreturn(result) CAMLreturnT(value, result)
 
+#define CAMLreturn_domain(domain, result) \
+  CAMLreturnT_domain(domain, value, result)
+
 #define CAMLnoreturn ((void) caml__frame)
-  
+
   /* modify a field */
 #define Store_field(block, offset, val) caml_modify_field(block, offset, val)
 
@@ -410,7 +443,10 @@ CAMLextern value caml_read_root (caml_root);
 
 CAMLextern void caml_modify_root (caml_root, value);
 
+/* BVars */
 
+CAMLprim value caml_bvar_create(value);
+intnat caml_bvar_status(value);
 
 #ifdef __cplusplus
 }
