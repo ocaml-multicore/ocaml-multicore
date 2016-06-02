@@ -85,7 +85,6 @@ static __thread uintnat stat_live_bytes = 0;
 
 /* Promotion input and output variables. */
 static __thread struct domain* promote_domain = 0;
-static __thread value oldest_promoted = 0;
 
 static value alloc_shared(mlsize_t wosize, tag_t tag)
 {
@@ -120,9 +119,6 @@ static void oldify_one (value v, value *p, int promote_stack)
     if (hd == 0){         /* If already forwarded */
       *p = Op_val(v)[0];  /*  then forward pointer is first field. */
     } else {
-      if (((value)Hp_val(v)) > oldest_promoted) {
-        oldest_promoted = (value)Hp_val(v);
-      }
       tag = Tag_hd (hd);
       if (tag < Infix_tag){
         value field0;
