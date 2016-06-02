@@ -227,7 +227,6 @@ static void load_stack(value newstack)
   caml_domain_state->stack_high = Stack_high(newstack);
   caml_extern_sp = caml_domain_state->stack_high + Stack_sp(newstack);
   caml_domain_state->current_stack = newstack;
-  caml_scan_stack (forward_pointer, newstack);
 }
 
 CAMLprim value caml_alloc_stack(value hval, value hexn, value heff)
