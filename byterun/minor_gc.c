@@ -256,32 +256,6 @@ static void caml_oldify_mopup (void) {
 
 //*****************************************************************************
 
-void forward_pointer (value v, value *p) {
-  header_t hd;
-  mlsize_t offset;
-  value fwd;
-  struct caml_domain_state* domain_state =
-    promote_domain ? promote_domain->state : caml_domain_state;
-  char* young_ptr = domain_state->young_ptr;
-  char* young_end = domain_state->young_end;
-
-  if (Is_block (v) && young_ptr <= Hp_val(v) && Hp_val(v) < young_end) {
-    hd = Hd_val(v);
-    if (hd == 0) {
-      // caml_gc_log ("forward_pointer: p=%p old=%p new=%p", p, (value*)v, (value*)Op_val(v)[0]);
-      *p = Op_val(v)[0];
-      Assert (Is_block(*p) && !Is_minor(*p));
-    } else if (Tag_hd(hd) == Infix_tag) {
-      offset = Infix_offset_hd(hd);
-      fwd = 0;
-      forward_pointer (v - offset, &fwd);
-      if (fwd) *p = fwd + offset;
-    }
-  }
-}
-
-//*****************************************************************************
-
 /* Make sure the minor heap is empty by performing a minor collection
    if needed.
 */
