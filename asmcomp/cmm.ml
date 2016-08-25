@@ -80,6 +80,7 @@ type operation =
   | Cfloatofint | Cintoffloat
   | Ccmpf of comparison
   | Craise of Lambda.raise_kind * Debuginfo.t
+  | Cxbegin | Cxend
   | Ccheckbound of Debuginfo.t
 
 type expression =

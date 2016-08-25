@@ -43,6 +43,11 @@ exception Exit
 (** The [Exit] exception is not raised by any library function.  It is
     provided for use in your programs. *)
 
+(** {6 Transactional Memory} *)
+
+exception Aborted
+external xbegin : exn -> unit = "%xbegin"
+external xend : unit -> unit = "%xend"
 
 (** {6 Effects} *)
 

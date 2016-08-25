@@ -146,6 +146,8 @@ let primitives_table = create_hashtable 57 [
   "%setfield0", Psetfield(0, true, Mutable);
   "%makeblock", Pmakeblock(0, Immutable);
   "%makemutable", Pmakeblock(0, Mutable);
+  "%xbegin", Pxbegin;
+  "%xend", Pxend;
   "%raise", Praise Raise_regular;
   "%reraise", Praise Raise_reraise;
   "%raise_notrace", Praise Raise_notrace;

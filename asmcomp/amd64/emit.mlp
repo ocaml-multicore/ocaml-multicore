@@ -606,6 +606,27 @@ let emit_instr fallthrough i =
         `	sqrtsd	{emit_reg i.arg.(0)}, {emit_reg i.res.(0)}\n`
     | Lop(Ispecific(Ifloatsqrtf addr)) ->
         `	sqrtsd	{emit_addressing addr i.arg 0}, {emit_reg i.res.(0)}\n`
+    | Lop(Ispecific Ixbegin) ->
+        let txn_test = new_label () in
+        let txn_begin = new_label () in
+        ` movq  {emit_reg i.arg.(0)}, %rdx\n`;
+        ` mov $0xffffffff, %eax\n`;
+        ` xbegin  {emit_label txn_test}\n`;
+        `{emit_label txn_test}:\n`;
+        ` cmp $0xffffffff, %eax\n`;
+        ` je  {emit_label txn_begin}\n`;
+        (* Abort *)
+        ` movq  %rdx, %rax\n`;
+        ` movq  %r15, %rsp\n`;
+        `	{locate_domain_state ()}, %rsp\n`;
+        `	movq	{domain_field Domainstate.Domain_stack_high}(%rsp), %rsp\n`;
+        ` subq  %r14, %rsp\n`;
+        `	popq	%r14\n`;
+        `	ret\n`;
+        (* XBEGIN_SUCCESS *)
+        `{emit_label txn_begin}:\n`;
+    | Lop(Ispecific Ixend) ->
+        `	xend\n`
     | Lreloadretaddr ->
         ()
     | Lreturn ->
@@ -678,7 +699,7 @@ let emit_instr fallthrough i =
         if macosx then
           `	.const\n`
         else if mingw64 || cygwin then
-          `	.section .rdata,\"dr\"\n` 
+          `	.section .rdata,\"dr\"\n`
         else
           `	.section .rodata\n`;
         emit_align 4;

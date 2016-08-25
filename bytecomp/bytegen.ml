@@ -605,6 +605,10 @@ let rec comp_expr env exp sz cont =
           comp_expr env exp1 sz (Kstrictbranchif lbl ::
             comp_expr env exp2 sz cont1)
       end
+  | Lprim(Pxbegin, [arg]) ->
+      comp_expr env arg sz (Kraise Raise_regular :: discard_dead_code cont)
+  | Lprim(Pxend, [arg]) ->
+      cont
   | Lprim(Praise k, [arg]) ->
       comp_expr env arg sz (Kraise k :: discard_dead_code cont)
   | Lprim(Paddint, [arg; Lconst(Const_base(Const_int n))])

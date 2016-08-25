@@ -32,8 +32,11 @@ let invalid_arg s = raise(Invalid_argument s)
 
 exception Exit
 
-(* Effects *)
+exception Aborted
+external xbegin : exn -> unit = "%xbegin"
+external xend : unit -> unit = "%xend"
 
+(* Effects *)
 
 type ('a, 'b) stack
 external take_cont : ('a, 'b) continuation -> ('a, 'b) stack = "caml_bvar_take"

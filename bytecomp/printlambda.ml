@@ -128,6 +128,8 @@ let primitive ppf = function
   | Presume -> fprintf ppf "resume"
   | Preperform -> fprintf ppf "reperform"
   | Pccall p -> fprintf ppf "%s" p.prim_name
+  | Pxbegin -> fprintf ppf "xbegin"
+  | Pxend -> fprintf ppf "xend"
   | Praise k -> fprintf ppf "%s" (Lambda.raise_kind k)
   | Psequand -> fprintf ppf "&&"
   | Psequor -> fprintf ppf "||"

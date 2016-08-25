@@ -215,6 +215,8 @@ method! select_operation op args =
   (* AMD64 does not support immediate operands for multiply high signed *)
   | Cmulhi ->
       (Iintop Imulh, args)
+  | Cxbegin -> (Ispecific Ixbegin, args)
+  | Cxend -> (Ispecific Ixend, args)
   | _ -> super#select_operation op args
 
 (* Recognize float arithmetic with mem *)

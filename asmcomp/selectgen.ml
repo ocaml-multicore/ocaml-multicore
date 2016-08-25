@@ -41,6 +41,7 @@ let oper_result_type = function
   | Cfloatofint -> typ_float
   | Cintoffloat -> typ_int
   | Craise _ -> typ_void
+  | Cxbegin | Cxend -> typ_void
   | Ccheckbound _ -> typ_void
 
 (* Infer the size in bytes of the result of a simple expression *)
@@ -191,7 +192,8 @@ method is_simple_expr = function
   | Cop(op, args) ->
       begin match op with
         (* The following may have side effects *)
-      | Capply _ | Cextcall _ | Calloc | Cstore _ | Craise _ -> false
+      | Capply _ | Cextcall _ | Calloc | Cstore _
+      | Craise _ | Cxbegin | Cxend -> false
         (* The remaining operations are simple if their args are *)
       | _ ->
           List.for_all self#is_simple_expr args
