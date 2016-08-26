@@ -29,7 +29,7 @@ method! class_of_operation op =
     | Ioffset_loc(_, _) -> Op_store true
     | Ifloatarithmem _ | Ifloatsqrtf _ -> Op_load
     | Ibswap _ | Isqrtf -> super#class_of_operation op
-    | Ixbegin | Ixend -> Op_store true
+    | Ixbegin | Ixend | Ixabort _ -> Op_store true
     end
   | _ -> super#class_of_operation op
 

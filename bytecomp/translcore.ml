@@ -24,6 +24,7 @@ open Lambda
 type error =
     Illegal_letrec_pat
   | Illegal_letrec_expr
+  | Illegal_xabort
   | Free_super_var
   | Unknown_builtin_primitive of string
 
@@ -148,6 +149,7 @@ let primitives_table = create_hashtable 57 [
   "%makemutable", Pmakeblock(0, Mutable);
   "%xbegin", Pxbegin;
   "%xend", Pxend;
+  "%xabort", Pxabort;
   "%raise", Praise Raise_regular;
   "%reraise", Praise Raise_reraise;
   "%raise_notrace", Praise Raise_notrace;
@@ -722,6 +724,12 @@ and transl_exp0 e =
         | (Ploc _, _) -> assert false
         | (_, _) ->
             begin match (prim, argl) with
+            | (Pxabort, [Lconst (Const_base (Const_int i))]) ->
+                if i < 0 || i >= 128 then
+                  raise(Error(e.exp_loc, Illegal_xabort))
+                else wrap0 (Lprim(prim, argl))
+            | (Pxabort, _) ->
+                raise(Error(e.exp_loc, Illegal_xabort))
             | (Plazyforce, [a]) ->
                 wrap (Matching.inline_lazy_force a e.exp_loc)
             | (Plazyforce, _) -> assert false
@@ -1254,6 +1262,9 @@ let report_error ppf = function
   | Free_super_var ->
       fprintf ppf
         "Ancestor names can only be used to select inherited methods"
+  | Illegal_xabort ->
+      fprintf ppf
+        "Argument of xbort must be an immediate int between 0 and 127."
   | Unknown_builtin_primitive prim_name ->
     fprintf ppf  "Unknown builtin primitive \"%s\"" prim_name
 

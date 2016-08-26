@@ -66,7 +66,7 @@ type operation =
   | Cfloatofint | Cintoffloat
   | Ccmpf of comparison
   | Craise of Lambda.raise_kind * Debuginfo.t
-  | Cxbegin | Cxend
+  | Cxbegin | Cxend | Cxabort of int
   | Ccheckbound of Debuginfo.t
 
 type expression =

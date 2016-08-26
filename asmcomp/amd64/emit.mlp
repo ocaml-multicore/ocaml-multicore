@@ -609,24 +609,22 @@ let emit_instr fallthrough i =
     | Lop(Ispecific Ixbegin) ->
         let txn_test = new_label () in
         let txn_begin = new_label () in
-        ` movq  {emit_reg i.arg.(0)}, %rdx\n`;
-        ` mov $0xffffffff, %eax\n`;
-        ` xbegin  {emit_label txn_test}\n`;
+        `	movq	{emit_reg i.arg.(0)}, %rdx\n`;
+        `	movq	$0x00000000ffffffff, %rax\n`;
+        `	xbegin	{emit_label txn_test}\n`;
         `{emit_label txn_test}:\n`;
-        ` cmp $0xffffffff, %eax\n`;
-        ` je  {emit_label txn_begin}\n`;
+        `	cmp	$0xffffffff, %eax\n`;
+        `	je	{emit_label txn_begin}\n`;
         (* Abort *)
-        ` movq  %rdx, %rax\n`;
-        ` movq  %r15, %rsp\n`;
-        `	{locate_domain_state ()}, %rsp\n`;
-        `	movq	{domain_field Domainstate.Domain_stack_high}(%rsp), %rsp\n`;
-        ` subq  %r14, %rsp\n`;
-        `	popq	%r14\n`;
-        `	ret\n`;
+        `	salq	%rax\n`;
+        `	addq	$1,%rax\n`;
+        `	jmpq	*(%rdx)\n`;
         (* XBEGIN_SUCCESS *)
         `{emit_label txn_begin}:\n`;
     | Lop(Ispecific Ixend) ->
         `	xend\n`
+    | Lop(Ispecific (Ixabort i)) ->
+        `	xabort	${emit_int i}\n`
     | Lreloadretaddr ->
         ()
     | Lreturn ->

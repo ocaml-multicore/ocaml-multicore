@@ -45,9 +45,10 @@ exception Exit
 
 (** {6 Transactional Memory} *)
 
-exception Aborted
-external xbegin : exn -> unit = "%xbegin"
+exception Aborted of int
+val xbegin : unit -> unit
 external xend : unit -> unit = "%xend"
+external xabort : int -> unit = "%xabort"
 
 (** {6 Effects} *)
 

@@ -55,6 +55,7 @@ type primitive =
   (* TM *)
   | Pxbegin
   | Pxend
+  | Pxabort
   (* Exceptions *)
   | Praise of raise_kind
   (* Boolean operations *)

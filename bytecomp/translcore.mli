@@ -28,6 +28,7 @@ val check_recursive_lambda: Ident.t list -> lambda -> bool
 type error =
     Illegal_letrec_pat
   | Illegal_letrec_expr
+  | Illegal_xabort
   | Free_super_var
   | Unknown_builtin_primitive of string
 

@@ -609,6 +609,8 @@ let rec comp_expr env exp sz cont =
       comp_expr env arg sz (Kraise Raise_regular :: discard_dead_code cont)
   | Lprim(Pxend, [arg]) ->
       cont
+  | Lprim(Pxabort, [arg]) ->
+      cont
   | Lprim(Praise k, [arg]) ->
       comp_expr env arg sz (Kraise k :: discard_dead_code cont)
   | Lprim(Paddint, [arg; Lconst(Const_base(Const_int n))])

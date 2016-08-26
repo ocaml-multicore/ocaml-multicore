@@ -32,9 +32,12 @@ let invalid_arg s = raise(Invalid_argument s)
 
 exception Exit
 
-exception Aborted
-external xbegin : exn -> unit = "%xbegin"
+exception Aborted of int
+external xbegin : (int -> exn) -> unit = "%xbegin"
+let abort x = raise (Aborted x)
+let xbegin () = xbegin abort
 external xend : unit -> unit = "%xend"
+external xabort : int -> unit = "%xabort"
 
 (* Effects *)
 
