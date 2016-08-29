@@ -618,7 +618,8 @@ let emit_instr fallthrough i =
         (* Abort *)
         `	salq	%rax\n`;
         `	addq	$1,%rax\n`;
-        `	jmpq	*(%rdx)\n`;
+        `	call	*(%rdx)\n`;
+        record_frame i.live i.dbg;
         (* XBEGIN_SUCCESS *)
         `{emit_label txn_begin}:\n`;
     | Lop(Ispecific Ixend) ->

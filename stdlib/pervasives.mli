@@ -45,10 +45,9 @@ exception Exit
 
 (** {6 Transactional Memory} *)
 
-exception Aborted of int
-val xbegin : unit -> unit
-external xend : unit -> unit = "%xend"
-external xabort : int -> unit = "%xabort"
+external xabort : int -> 'a = "%xabort"
+
+val atomically : (unit -> 'a) -> (int -> 'a) -> 'a
 
 (** {6 Effects} *)
 
