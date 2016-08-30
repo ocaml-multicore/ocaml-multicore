@@ -647,6 +647,7 @@ let rec comp_expr env exp sz cont =
           (Kresumeterm(sz + nargs) :: discard_dead_code cont)
       else
         comp_args env args sz (Kresume :: cont)
+  | Lprim(Ppause, args) -> cont
   | Lprim(Preperform, args) ->
       let nargs = List.length args - 1 in
       assert (nargs = 1);

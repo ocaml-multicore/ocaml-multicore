@@ -50,6 +50,7 @@ type primitive =
   | Pperform
   | Presume
   | Preperform
+  | Ppause
   (* External call *)
   | Pccall of Primitive.description
   (* TM *)
