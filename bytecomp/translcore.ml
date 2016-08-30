@@ -210,6 +210,7 @@ let primitives_table = create_hashtable 57 [
   "%lazy_force", Plazyforce;
   "%perform", Pperform;
   "%resume", Presume;
+  "%pause", Ppause;
   "%nativeint_of_int", Pbintofint Pnativeint;
   "%nativeint_to_int", Pintofbint Pnativeint;
   "%nativeint_neg", Pnegbint Pnativeint;
