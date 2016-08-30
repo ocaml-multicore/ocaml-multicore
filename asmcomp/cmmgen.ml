@@ -1611,6 +1611,7 @@ and transl_prim_1 p arg dbg =
      Cop(Cadda, [transl arg; Cconst_int (-1)])
   | Pxbegin -> return_unit @@ Cop(Cxbegin, [transl arg])
   | Pxend -> return_unit @@ Cop(Cxend, [])
+  | Ppause -> return_unit @@ Cop(Cpause, [])
   | Pxabort ->
       begin match transl arg with
       | Cconst_int i -> return_unit @@ Cop(Cxabort i, [])

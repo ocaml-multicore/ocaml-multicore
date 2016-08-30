@@ -626,6 +626,8 @@ let emit_instr fallthrough i =
         `	xend\n`
     | Lop(Ispecific (Ixabort i)) ->
         `	xabort	${emit_int i}\n`
+    | Lop(Ispecific Ipause) ->
+        `	pause\n`
     | Lreloadretaddr ->
         ()
     | Lreturn ->

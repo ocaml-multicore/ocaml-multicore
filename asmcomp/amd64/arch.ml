@@ -45,6 +45,7 @@ type specific_operation =
   | Ixbegin
   | Ixend
   | Ixabort of int
+  | Ipause
 and float_operation =
     Ifloatadd | Ifloatsub | Ifloatmul | Ifloatdiv
 
@@ -134,3 +135,4 @@ let print_specific_operation printreg op ppf arg =
   | Ixbegin -> fprintf ppf "xbegin"
   | Ixend -> fprintf ppf "xend"
   | Ixabort i -> fprintf ppf "xabort %d" i
+  | Ipause -> fprintf ppf "pause"

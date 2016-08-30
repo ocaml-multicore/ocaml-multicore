@@ -85,6 +85,7 @@ let operation = function
   | Craise (k, d) -> Lambda.raise_kind k ^ Debuginfo.to_string d
   | Cxbegin -> "xbegin"
   | Cxend -> "xend"
+  | Cpause -> "pause"
   | Cxabort i -> Printf.sprintf "xabort %d" i
   | Ccheckbound d -> "checkbound" ^ Debuginfo.to_string d
 

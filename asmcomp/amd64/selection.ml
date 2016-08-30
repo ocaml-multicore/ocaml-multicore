@@ -217,6 +217,7 @@ method! select_operation op args =
       (Iintop Imulh, args)
   | Cxbegin -> (Ispecific Ixbegin, args)
   | Cxend -> (Ispecific Ixend, args)
+  | Cpause -> (Ispecific Ipause, args)
   | Cxabort i -> (Ispecific (Ixabort i), args)
   | _ -> super#select_operation op args
 
