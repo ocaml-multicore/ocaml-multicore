@@ -331,6 +331,7 @@ let op_shapes = [
   opSETFIELD2, Nothing;
   opSETFIELD3, Nothing;
   opSETFIELD, Uint;
+  opSETIMMUTABLEFIELD, Uint;
   opSETFLOATFIELD, Uint;
   opVECTLENGTH, Nothing;
   opGETVECTITEM, Nothing;

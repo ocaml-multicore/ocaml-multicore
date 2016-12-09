@@ -39,6 +39,12 @@ type primitive =
   | Psetglobal of Ident.t
   (* Operations on heap blocks *)
   | Pmakeblock of int * mutable_flag
+  (* Any field which is ever modified with Psetfield(_, _, Mutable)
+     must never be read with Pfield(_, _, Immutable). It is always
+     safe to use Psetfield(_, _, Immutable) or Pfield(_, _, Mutable).
+
+     (The odd-sounding Psetfield(_, _, Immutable) is used to
+     initialise recursive values and the like) *)
   | Pfield of int * bool * mutable_flag
   | Psetfield of int * bool * mutable_flag
   | Pfloatfield of int

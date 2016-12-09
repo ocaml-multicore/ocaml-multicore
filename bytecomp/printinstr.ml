@@ -48,6 +48,7 @@ let instruction ppf = function
   | Kgetfield n -> fprintf ppf "\tgetfield %i" n
   | Kgetmutablefield n -> fprintf ppf "\tgetmutablefield %i" n
   | Ksetfield n -> fprintf ppf "\tsetfield %i" n
+  | Ksetimmutablefield n -> fprintf ppf "\tsetimmutablefield %i" n
   | Kgetfloatfield n -> fprintf ppf "\tgetfloatfield %i" n
   | Ksetfloatfield n -> fprintf ppf "\tsetfloatfield %i" n
   | Kvectlength -> fprintf ppf "\tvectlength"

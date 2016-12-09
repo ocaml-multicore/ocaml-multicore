@@ -90,6 +90,7 @@ type instruction =
   | Kgetfield of int
   | Kgetmutablefield of int
   | Ksetfield of int
+  | Ksetimmutablefield of int
   | Kgetfloatfield of int
   | Ksetfloatfield of int
   | Kvectlength

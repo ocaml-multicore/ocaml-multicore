@@ -812,6 +812,14 @@ value caml_interprete(code_t prog, asize_t prog_size)
       accu = Val_unit;
       pc++;
       Next;
+    Instruct(SETIMMUTABLEFIELD): {
+      value v = *sp++;
+      Setup_for_c_call;
+      caml_modify_??
+      Restore_after_c_call;
+      pc++;
+      Next;
+    }
     Instruct(SETFLOATFIELD):
       Store_double_field(accu, *pc, Double_val(*sp));
       accu = Val_unit;

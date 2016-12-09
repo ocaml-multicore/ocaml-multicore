@@ -230,6 +230,8 @@ let emit_instr = function
       if n < 4 then out(opGETMUTABLEFIELD0 + n) else (out opGETMUTABLEFIELD; out_int n)
   | Ksetfield n ->
       if n < 4 then out(opSETFIELD0 + n) else (out opSETFIELD; out_int n)
+  | Ksetimmutablefield n ->
+      out opSETIMMUTABLEFIELD; out_int n
   | Kmakefloatblock(n) ->
       if n = 0 then out opATOM0 else (out opMAKEFLOATBLOCK; out_int n)
   | Kgetfloatfield n -> out opGETFLOATFIELD; out_int n
