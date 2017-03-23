@@ -37,8 +37,6 @@
 #include "caml/backtrace.h"
 #include "caml/fail.h"
 
-static __thread char * caml_cds_file = NULL;
-
 #define BACKTRACE_BUFFER_SIZE 1024
 
 /* Location of fields in the Instruct.debug_event record */
@@ -59,16 +57,6 @@ enum {
   POS_BOL = 2,
   POS_CNUM = 3
 };
-
-/* Called by bytecode's caml_startup_code */
-void backtrace_cds_file_init()
-{
-  char * cds_file;
-  cds_file = getenv("CAML_DEBUG_FILE");
-  if (cds_file != NULL) {
-    caml_cds_file = caml_strdup(cds_file);
-  }
-}
 
 /* Start or stop the backtrace machinery */
 
@@ -294,7 +282,7 @@ static void read_debug_info()
 {
   CAMLparam0();
   CAMLlocal1(events_heap);
-  char * exec_name;
+  const char * exec_name;
   int fd;
   struct exec_trailer trail;
   struct channel * chan;
@@ -305,10 +293,10 @@ static void read_debug_info()
   if(events != NULL)
     CAMLreturn0;
 
-  if (caml_cds_file != NULL) {
-    exec_name = caml_cds_file;
+  if (caml_params->cds_file != NULL) {
+    exec_name = caml_params->cds_file;
   } else {
-    exec_name = caml_startup_params.exe_name;
+    exec_name = caml_params->exe_name;
   }
   fd = caml_attempt_open(&exec_name, &trail, 1);
   if (fd < 0){

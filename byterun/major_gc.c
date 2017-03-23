@@ -21,12 +21,6 @@
 
 typedef enum { Phase_idle, Phase_marking } gc_phase_t;
 
-/* Phase of the current domain's GC. Phases are not necessarily
-   synchronised between domains. */
-static __thread gc_phase_t gc_phase = Phase_idle;
-
-static __thread uintnat stat_blocks_marked = 0;
-
 uintnat caml_percent_free = Percent_free_def;
 
 static uintnat default_slice_budget() {
@@ -87,7 +81,7 @@ static void mark_stack_push(value v) {
 }
 
 /* to fit scanning_action */
-static void mark_stack_push_act(value v, value* ignored) {
+static void mark_stack_push_act(void* state, value v, value* ignored) {
   mark_stack_push(v);
 }
 
@@ -96,7 +90,7 @@ static int mark_stack_pop(value* ret) {
   if (domain_state->mark_stack_count == 0) {
     struct pool* p = find_pool_to_rescan();
     if (p) {
-      caml_redarken_pool(p, &mark_stack_push_act);
+      caml_redarken_pool(p, &mark_stack_push_act, 0);
     } else {
       return 0;
     }
@@ -132,14 +126,14 @@ static intnat mark(value initial, intnat budget) {
     Assert(Is_markable(v));
     Assert(v == mark_normalise(v));
 
-    stat_blocks_marked++;
+    CAML_DOMAIN_STATE->stat_blocks_marked++;
     /* mark the current object */
     hd_v = Hd_val(v);
     // caml_gc_log ("mark: v=0x%lx hd=0x%lx tag=%d sz=%lu",
     //             v, hd_v, Tag_val(v), Wosize_val(v));
     if (Tag_hd (hd_v) == Stack_tag) {
       // caml_gc_log ("mark: stack=%p", (value*)v);
-      caml_scan_stack(&caml_darken, v);
+      caml_scan_stack(&caml_darken, 0, v);
     } else if (Tag_hd (hd_v) < No_scan_tag) {
       int i;
       for (i = 0; i < Wosize_hd(hd_v); i++) {
@@ -174,7 +168,7 @@ static intnat mark(value initial, intnat budget) {
   return budget;
 }
 
-void caml_darken(value v, value* ignored) {
+void caml_darken(void* state, value v, value* ignored) {
 
   /* Assert (Is_markable(v)); */
   if (!Is_markable (v)) return; /* foreign stack, at least */
@@ -188,7 +182,7 @@ intnat caml_major_collection_slice(intnat howmuch)
   intnat computed_work = howmuch ? howmuch : default_slice_budget();
   intnat budget = computed_work;
   intnat sweep_work, mark_work;
-  uintnat blocks_marked_before = stat_blocks_marked;
+  uintnat blocks_marked_before = CAML_DOMAIN_STATE->stat_blocks_marked;
   value v;
 
   caml_save_stack_gc();
@@ -197,10 +191,10 @@ intnat caml_major_collection_slice(intnat howmuch)
   budget = caml_sweep(caml_domain_self()->shared_heap, budget);
   sweep_work -= budget;
 
-  if (gc_phase == Phase_idle) {
-    caml_do_local_roots(&caml_darken, caml_domain_self());
-    caml_scan_global_roots(&caml_darken);
-    gc_phase = Phase_marking;
+  if (CAML_DOMAIN_STATE->gc_phase == Phase_idle) {
+    caml_do_local_roots(&caml_darken, 0, caml_domain_self());
+    caml_scan_global_roots(&caml_darken, 0);
+    CAML_DOMAIN_STATE->gc_phase = Phase_marking;
   }
 
   mark_work = budget;
@@ -211,7 +205,7 @@ intnat caml_major_collection_slice(intnat howmuch)
   caml_gc_log("Major slice: %lu alloc, %ld work, %ld sweep, %ld mark (%lu blocks)",
               (unsigned long)CAML_DOMAIN_STATE->allocated_words,
               (long)computed_work, (long)sweep_work, (long)mark_work,
-              (unsigned long)(stat_blocks_marked - blocks_marked_before));
+              (unsigned long)(CAML_DOMAIN_STATE->stat_blocks_marked - blocks_marked_before));
   CAML_DOMAIN_STATE->stat_major_words += CAML_DOMAIN_STATE->allocated_words;
   CAML_DOMAIN_STATE->allocated_words = 0;
   caml_restore_stack_gc();
@@ -230,16 +224,17 @@ void caml_empty_mark_stack () {
 
   while (mark_stack_pop(&v)) mark(v, 10000000);
 
-  if (stat_blocks_marked)
-    caml_gc_log("Finished marking major heap. Marked %u blocks", (unsigned)stat_blocks_marked);
-  stat_blocks_marked = 0;
+  if (CAML_DOMAIN_STATE->stat_blocks_marked)
+    caml_gc_log("Finished marking major heap. Marked %u blocks",
+                (unsigned)CAML_DOMAIN_STATE->stat_blocks_marked);
+  CAML_DOMAIN_STATE->stat_blocks_marked = 0;
 }
 
 void caml_finish_marking () {
   //caml_gc_log ("caml_finish_marking(0)");
   caml_save_stack_gc();
-  caml_do_local_roots(&caml_darken, caml_domain_self());
-  caml_scan_global_roots(&caml_darken);
+  caml_do_local_roots(&caml_darken, 0, caml_domain_self());
+  caml_scan_global_roots(&caml_darken, 0);
   caml_empty_mark_stack();
   CAML_DOMAIN_STATE->stat_major_words += CAML_DOMAIN_STATE->allocated_words;
   CAML_DOMAIN_STATE->allocated_words = 0;
@@ -262,7 +257,7 @@ void caml_finish_marking_domain (struct domain* domain) {
   struct caml_domain_state* domain_state = CAML_DOMAIN_STATE;
   //caml_gc_log("caml_finish_marking_domain(0): domain=%d", domain->id);
   caml_save_stack_gc();
-  caml_do_local_roots(&caml_darken, domain);
+  caml_do_local_roots(&caml_darken, 0, domain);
   caml_empty_mark_stack_domain(domain);
   /* Previous step might have pushed values into our mark stack. Hence,
    * empty our mark stack */

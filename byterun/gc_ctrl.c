@@ -114,10 +114,10 @@ CAMLprim value caml_gc_get(value v)
   CAMLlocal1 (res);
 
   res = caml_alloc_tuple (7);
-  Store_field (res, 0, Val_long (Wsize_bsize (caml_minor_heap_size)));  /* s */
+  Store_field (res, 0, Val_long (Wsize_bsize (CAML_DOMAIN_STATE->minor_heap_size)));  /* s */
   Store_field (res, 1, Val_long (caml_major_heap_increment));           /* i */
   Store_field (res, 2, Val_long (caml_percent_free));                   /* o */
-  Store_field (res, 3, Val_long (caml_startup_params.verb_gc));         /* v */
+  Store_field (res, 3, Val_long (caml_params->verb_gc));         /* v */
   Store_field (res, 4, Val_long (caml_percent_max));                    /* O */
 #ifndef NATIVE_CODE
   Store_field (res, 5, Val_long (caml_max_stack_size));                 /* l */
@@ -150,7 +150,7 @@ CAMLprim value caml_gc_set(value v)
   asize_t newminsize;
   uintnat oldpolicy;
 
-  caml_startup_params.verb_gc = Long_field (v, 3);
+  caml_params->verb_gc = Long_field (v, 3);
 
 #ifndef NATIVE_CODE
   caml_change_max_stack_size (Long_field (v, 5));
@@ -189,7 +189,7 @@ CAMLprim value caml_gc_set(value v)
     /* Minor heap size comes last because it will trigger a minor collection
        (thus invalidating [v]) and it can raise [Out_of_memory]. */
   newminsize = caml_norm_minor_heap_size (Long_field (v, 0));
-  if (newminsize != caml_minor_heap_size){
+  if (newminsize != CAML_DOMAIN_STATE->minor_heap_size){
     caml_gc_message (0x20, "New minor heap size: %luk bytes\n",
                      newminsize/1024);
     caml_set_minor_heap_size (newminsize);
@@ -249,15 +249,15 @@ uintnat caml_normalize_heap_increment (uintnat i)
 void caml_init_gc ()
 {
 /*  uintnat major_heap_size =
-      Bsize_wsize (caml_normalize_heap_increment (caml_startup_params.heap_size_init)); */
+      Bsize_wsize (caml_normalize_heap_increment (caml_params->heap_size_init)); */
 
-  caml_max_stack_size = caml_startup_params.max_stack_init;
-  caml_fiber_wsz = caml_startup_params.fiber_wsz_init;
-  caml_percent_free = norm_pfree (caml_startup_params.percent_free_init);
+  caml_max_stack_size = caml_params->max_stack_init;
+  caml_fiber_wsz = caml_params->fiber_wsz_init;
+  caml_percent_free = norm_pfree (caml_params->percent_free_init);
   caml_gc_log ("Initial stack limit: %luk bytes",
                caml_max_stack_size / 1024 * sizeof (value));
 
-  caml_init_domains(caml_startup_params.minor_heap_init);
+  caml_init_domains(caml_params->minor_heap_init);
   #ifdef NATIVE_CODE
   caml_init_frame_descriptors();
   #endif
@@ -267,7 +267,7 @@ void caml_init_gc ()
   caml_percent_max = norm_pmax (percent_m);
   caml_init_major_heap (major_heap_size);
   caml_gc_message (0x20, "Initial minor heap size: %luk bytes\n",
-                   caml_minor_heap_size / 1024);
+                   CAML_DOMAIN_STATE->minor_heap_size / 1024);
   caml_gc_message (0x20, "Initial major heap size: %luk bytes\n",
                    major_heap_size / 1024);
   caml_gc_message (0x20, "Initial space overhead: %lu%%\n", caml_percent_free);

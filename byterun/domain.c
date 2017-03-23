@@ -138,7 +138,7 @@ void caml_reallocate_minor_heap(asize_t size)
   }
 #endif
 
-  caml_minor_heap_size = size;
+  CAML_DOMAIN_STATE->minor_heap_size = size;
   domain_state->young_start = (char*)domain_self->minor_heap_area;
   domain_state->young_end = (char*)(domain_self->minor_heap_area + size);
   domain_state->young_ptr = domain_state->young_end;
@@ -277,7 +277,7 @@ static void* domain_thread_func(void* v) {
   struct domain_startup_params* p = v;
   caml_root callback = p->callback;
 
-  create_domain(caml_startup_params.minor_heap_init);
+  create_domain(caml_params->minor_heap_init);
   p->newdom = domain_self;
   caml_plat_event_trigger(&p->ev);
   /* cannot access p below here */
@@ -586,15 +586,18 @@ static void stw_phase () {
   /* If the heap is to be verified, do it before the domains continue
      running OCaml code. */
 #ifdef CAML_VERIFY_HEAP
+  struct heap_verify_state* ver = caml_verify_begin();
   for (i = 0; i < Max_domains; i++) {
     dom_internal* d = &all_domains[i];
     if (d == domain_self || domain_is_locked(d)) {
       if (d->state.state)
-        caml_do_local_roots(&caml_verify_root, &d->state);
+        caml_do_local_roots(&caml_verify_root, ver, &d->state);
     }
   }
-  caml_scan_global_roots(&caml_verify_root);
-  caml_verify_heap();
+  caml_scan_global_roots(&caml_verify_root, ver);
+  caml_verify_heap(ver);
+
+  /* synchronise, ensuring no domain continues before all domains verify */
   caml_plat_lock(&verify_lock);
   unsigned gen = verify_gen;
   caml_gc_log("Heap verified after cycle %u", gen);
