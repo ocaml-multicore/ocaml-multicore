@@ -1205,7 +1205,7 @@ let transl_extension_constructor env type_path type_params
         let targs, tret_type, args, ret_type =
           make_constructor env type_path typext_params sargs sret_type
         in
-          args, ret_type, Text_decl(targs, tret_type)
+          args, ret_type, Text_decl(targs, tret_type, None)
     | Pext_rebind lid ->
         transl_extension_rebind env type_path
           type_params typext_params priv lid
@@ -1336,6 +1336,12 @@ let transl_exception env sext =
   let newenv = Env.add_extension ~check:true ext.ext_id ext.ext_type env in
     ext, newenv
 
+(* Auxiliary type for extension kinds with untranslated defaults *)
+type ukind =
+  | Default of
+      core_type list * core_type option * Parsetree.effect_handler
+  | NoDefault of extension_constructor_kind
+
 (* Translate an effect declaration *)
 let transl_effect env seff =
   reset_type_variables();
@@ -1348,16 +1354,25 @@ let transl_effect env seff =
   in
   let typext_param = Ctype.new_global_var () in
   let id = Ident.create seff.peff_name.txt in
-  let args, ret_type, kind =
+  let args, ret_type, ukind =
     match seff.peff_kind with
-    | Peff_decl(sargs, sret) ->
+    | Peff_decl(sargs, sret, shandler) ->
         let targs, tret_type, args, ret_type =
           make_effect_constructor env type_param sargs sret
         in
-          args, ret_type, Text_decl(targs, tret_type)
+        let ukind =
+          match shandler with
+          | None          -> NoDefault (Text_decl(targs, tret_type, None))
+          | Some shandler -> Default (targs, tret_type, shandler)
+        in
+        args, ret_type, ukind
     | Peff_rebind lid ->
-        transl_extension_rebind env Predef.path_eff
+       let args, ret_type, kind =
+         transl_extension_rebind env Predef.path_eff
           type_decl.type_params [typext_param] Asttypes.Public lid
+       in
+       let ukind = NoDefault kind in
+       args, ret_type, ukind
   in
   let ext =
     { ext_type_path = Predef.path_eff;
@@ -1367,14 +1382,6 @@ let transl_effect env seff =
       ext_private = Asttypes.Public;
       Types.ext_loc = seff.peff_loc;
       Types.ext_attributes = seff.peff_attributes; }
-  in
-  let text =
-    { ext_id = id;
-      ext_name = seff.peff_name;
-      ext_type = ext;
-      ext_kind = kind;
-      Typedtree.ext_loc = seff.peff_loc;
-      Typedtree.ext_attributes = seff.peff_attributes; }
   in
   Ctype.end_def();
   (* Generalize types *)
@@ -1386,8 +1393,25 @@ let transl_effect env seff =
       raise (Error(ext.ext_loc, Unbound_type_var_ext(ty, ext)))
   | None -> ()
   end;
-  let newenv = Env.add_extension ~check:true text.ext_id ext env in
-    text, newenv
+  let newenv = Env.add_extension ~check:true id ext env in
+  let kind =
+    match ukind with
+    | NoDefault kind -> kind
+    | Default (targs, tret_type, shandler) ->
+       let default_handler =
+         Typecore.type_default_effect_handler newenv seff.peff_name.txt shandler
+       in
+       Text_decl (targs, tret_type, Some default_handler)
+  in
+  let text =
+    { ext_id = id;
+      ext_name = seff.peff_name;
+      ext_type = ext;
+      ext_kind = kind;
+      Typedtree.ext_loc = seff.peff_loc;
+      Typedtree.ext_attributes = seff.peff_attributes; }
+  in
+  text, newenv
 
 (* Translate a value declaration *)
 let transl_value_decl env loc valdecl =

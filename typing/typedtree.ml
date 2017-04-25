@@ -439,8 +439,16 @@ and extension_constructor =
   }
 
 and extension_constructor_kind =
-    Text_decl of core_type list * core_type option
+    Text_decl of core_type list * core_type option * extension_default option
   | Text_rebind of Path.t * Longident.t loc
+
+and extension_default =
+  {
+    edef_cases: case list;
+    edef_partial: partial;
+    edef_env: Env.t;
+    edef_loc: Location.t;
+  }
 
 and class_type =
     {

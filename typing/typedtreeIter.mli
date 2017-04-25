@@ -19,6 +19,7 @@ module type IteratorArgument = sig
     val enter_value_description : value_description -> unit
     val enter_type_extension : type_extension -> unit
     val enter_extension_constructor : extension_constructor -> unit
+    val enter_extension_default : extension_default -> unit
     val enter_pattern : pattern -> unit
     val enter_expression : expression -> unit
     val enter_package_type : package_type -> unit
@@ -45,6 +46,7 @@ module type IteratorArgument = sig
     val leave_value_description : value_description -> unit
     val leave_type_extension : type_extension -> unit
     val leave_extension_constructor : extension_constructor -> unit
+    val leave_extension_default : extension_default -> unit
     val leave_pattern : pattern -> unit
     val leave_expression : expression -> unit
     val leave_package_type : package_type -> unit

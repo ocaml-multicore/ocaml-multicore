@@ -69,6 +69,8 @@ type error =
   | Exception_pattern_below_toplevel
   | Effect_pattern_below_toplevel
   | Invalid_continuation_pattern
+  | Unexpected_default_effect_label of string * string
+  | Unexpected_default_effect_pattern of string
 
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error
@@ -3860,6 +3862,55 @@ let type_expression env sexp =
       {exp with exp_type = desc.val_type}
   | _ -> exp
 
+(* Typing of default effect handlers *)
+let type_default_effect_handler env cname shandler =
+  Typetexp.reset_type_variables ();
+  let loc = shandler.peh_loc in
+  let ty  = newvar () in
+  begin_def ();
+  (* Create a fake abstract type declaration for the return type. *)
+  let level = get_current_level () in
+  let decl = {
+      type_params = [];
+      type_arity = 0;
+      type_kind = Type_abstract;
+      type_private = Public;
+      type_manifest = None;
+      type_variance = [];
+      type_newtype_level = Some (level, level);
+      type_loc = loc;
+      type_attributes = [];
+    }
+  in
+  Ident.set_current_time ty.level;
+  let tname = Ctype.get_new_abstract_name "effect" in
+  let (id, env) = Env.enter_type tname decl env in
+  Ctype.init_def (Ident.current_time ());
+  let ty_res = newgenty (Tconstr (Path.Pident id, [], ref Mnil)) in
+  let ty_arg = Predef.type_eff ty_res in
+  let check_case pcase =
+    let ppat = pcase.pc_lhs in
+    match ppat.ppat_desc with
+    | Ppat_construct ({ txt = Longident.Lident name; _ } as lid, arg) ->
+       if name <> cname then
+         raise (Error(loc, env,
+                      Unexpected_default_effect_label (name, cname)))
+       else
+         { pcase with pc_lhs =
+              { ppat with ppat_desc =
+                  Ppat_construct (lid, arg) } }
+    | _ ->
+       raise (Error (loc, env,
+                     Unexpected_default_effect_pattern cname))
+  in
+  let caselist = List.map check_case shandler.peh_cases in
+  let cases, partial = type_cases env ty_arg ty_res true loc caselist in
+  end_def();
+  { edef_cases = cases;
+    edef_partial = partial;
+    edef_env = env;
+    edef_loc = loc; }
+
 (* Error report *)
 
 open Format
@@ -4079,7 +4130,16 @@ let report_error env ppf = function
         "@[Effect patterns must be at the top level of a match case.@]"
   | Invalid_continuation_pattern ->
       fprintf ppf
-        "@[Invalid continuation pattern: only variables and _ are allowed .@]"
+              "@[Invalid continuation pattern: only variables and _ are allowed .@]"
+  | Unexpected_default_effect_label (unexpected, expected) ->
+     fprintf ppf
+             "@[Unexpected effect name %s. This default handler only handles %s.@]"
+             unexpected expected
+
+  | Unexpected_default_effect_pattern cname ->
+     fprintf ppf
+             "@[Expected definition of the form:@ %s@ ... -> ...@]"
+             cname
 
 let report_error env ppf err =
   wrap_printing_env env (fun () -> report_error env ppf err)

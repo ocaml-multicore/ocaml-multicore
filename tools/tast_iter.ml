@@ -66,7 +66,7 @@ let type_extension sub te =
 
 let extension_constructor sub ext =
   match ext.ext_kind with
-    Text_decl(ctl, cto) ->
+    Text_decl(ctl, cto, _) ->
       List.iter (sub # core_type) ctl;
       opt (sub # core_type) cto
   | Text_rebind _ -> ()

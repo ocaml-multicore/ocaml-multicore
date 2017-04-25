@@ -25,6 +25,7 @@ module type IteratorArgument = sig
     val enter_value_description : value_description -> unit
     val enter_type_extension : type_extension -> unit
     val enter_extension_constructor : extension_constructor -> unit
+    val enter_extension_default : extension_default -> unit
     val enter_pattern : pattern -> unit
     val enter_expression : expression -> unit
     val enter_package_type : package_type -> unit
@@ -51,6 +52,7 @@ module type IteratorArgument = sig
     val leave_value_description : value_description -> unit
     val leave_type_extension : type_extension -> unit
     val leave_extension_constructor : extension_constructor -> unit
+    val leave_extension_default : extension_default -> unit
     val leave_pattern : pattern -> unit
     val leave_expression : expression -> unit
     val leave_package_type : package_type -> unit
@@ -210,12 +212,21 @@ module MakeIterator(Iter : IteratorArgument) : sig
     and iter_extension_constructor ext =
       Iter.enter_extension_constructor ext;
       begin match ext.ext_kind with
-          Text_decl(args, ret) ->
+          Text_decl(args, ret, def) ->
             List.iter iter_core_type args;
-            option iter_core_type ret
+            option iter_core_type ret;
+            begin match def with
+            | None -> ()
+            | Some def -> iter_extension_default def
+            end
         | Text_rebind _ -> ()
       end;
       Iter.leave_extension_constructor ext;
+
+    and iter_extension_default edef =
+      Iter.enter_extension_default edef;
+      List.iter iter_case edef.edef_cases;
+      Iter.leave_extension_default edef
 
     and iter_type_extension tyext =
       Iter.enter_type_extension tyext;
@@ -615,6 +626,7 @@ module DefaultIteratorArgument = struct
       let enter_value_description _ = ()
       let enter_type_extension _ = ()
       let enter_extension_constructor _ = ()
+      let enter_extension_default _ = ()
       let enter_pattern _ = ()
       let enter_expression _ = ()
       let enter_package_type _ = ()
@@ -642,6 +654,7 @@ module DefaultIteratorArgument = struct
       let leave_value_description _ = ()
       let leave_type_extension _ = ()
       let leave_extension_constructor _ = ()
+      let leave_extension_default _ = ()
       let leave_pattern _ = ()
       let leave_expression _ = ()
       let leave_package_type _ = ()

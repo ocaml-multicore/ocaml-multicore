@@ -19,6 +19,7 @@ module type MapArgument = sig
   val enter_type_extension : type_extension -> type_extension
   val enter_extension_constructor :
     extension_constructor -> extension_constructor
+  val enter_extension_default : extension_default -> extension_default
   val enter_pattern : pattern -> pattern
   val enter_expression : expression -> expression
   val enter_package_type : package_type -> package_type
@@ -47,6 +48,7 @@ module type MapArgument = sig
   val leave_type_extension : type_extension -> type_extension
   val leave_extension_constructor :
     extension_constructor -> extension_constructor
+  val leave_extension_default : extension_default -> extension_default
   val leave_pattern : pattern -> pattern
   val leave_expression : expression -> expression
   val leave_package_type : package_type -> package_type
@@ -210,13 +212,19 @@ module MakeMap(Map : MapArgument) = struct
   and map_extension_constructor ext =
     let ext = Map.enter_extension_constructor ext in
     let ext_kind = match ext.ext_kind with
-        Text_decl(args, ret) ->
+        Text_decl(args, ret, def) ->
           let args = List.map map_core_type args in
           let ret = may_map map_core_type ret in
-            Text_decl(args, ret)
+          let def = may_map map_extension_default def in
+            Text_decl(args, ret, def)
       | Text_rebind(p, lid) -> Text_rebind(p, lid)
     in
     Map.leave_extension_constructor {ext with ext_kind = ext_kind}
+
+  and map_extension_default edef =
+    let edef = Map.enter_extension_default edef in
+    let edef_cases = List.map map_case edef.edef_cases in
+    Map.leave_extension_default {edef with edef_cases = edef_cases}
 
   and map_pattern pat =
     let pat = Map.enter_pattern pat in
@@ -657,6 +665,7 @@ module DefaultMapArgument = struct
   let enter_type_declaration t = t
   let enter_type_extension t = t
   let enter_extension_constructor t = t
+  let enter_extension_default t = t
   let enter_pattern t = t
   let enter_expression t = t
   let enter_package_type t = t
@@ -684,6 +693,7 @@ module DefaultMapArgument = struct
   let leave_type_declaration t = t
   let leave_type_extension t = t
   let leave_extension_constructor t = t
+  let leave_extension_default t = t
   let leave_pattern t = t
   let leave_expression t = t
   let leave_package_type t = t
