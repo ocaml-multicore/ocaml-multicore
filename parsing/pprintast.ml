@@ -1373,11 +1373,20 @@ class printer  ()= object(self:'self)
                  | l -> pp f "%a@;->@;%a"
                            (self#list self#core_type1 ~sep:"*@;") l
                            self#core_type1 r)
-          l
+          l;
+        begin match x.peff_handler with
+        | None -> ()
+        | Some handler ->
+           pp f "\n@;%s\n%a" "with function"
+              self#effect_handler handler
+        end
     | Peff_rebind li ->
         pp f "%s%a@;=@;%a" x.peff_name.txt
           self#attributes x.peff_attributes
           self#longident_loc li
+
+  method effect_handler f x =
+    self#case_list f x.peh_cases
 
   method case_list f l : unit =
     let aux f {pc_lhs; pc_guard; pc_rhs} =

@@ -183,10 +183,10 @@ module Te:
     val rebind: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?info:info ->
       str -> lid -> extension_constructor
 
-    val effect_constructor: ?loc:loc -> ?attrs:attrs -> str -> effect_constructor_kind -> effect_constructor
-    val effect_decl: ?loc:loc -> ?attrs:attrs -> ?args:core_type list -> str -> core_type -> effect_constructor
+    val effect_constructor: ?loc:loc -> ?attrs:attrs -> ?handler:effect_handler option -> str -> effect_constructor_kind -> effect_constructor
+    val effect_decl: ?loc:loc -> ?attrs:attrs -> ?args:core_type list -> ?handler:effect_handler option -> str -> core_type -> effect_constructor
     val effect_rebind: ?loc:loc -> ?attrs:attrs -> str -> lid -> effect_constructor
-
+    val effect_handler: ?loc:loc -> case list -> effect_handler
   end
 
 (** {2 Module language} *)
