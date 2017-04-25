@@ -449,11 +449,10 @@ and effect_constructor =
      peff_kind : effect_constructor_kind;
      peff_loc : Location.t;
      peff_attributes: attributes; (* C [@id1] [@id2] of ... *)
-     peff_handler: effect_handler option;
     }
 
 and effect_constructor_kind =
-    Peff_decl of core_type list * core_type
+    Peff_decl of core_type list * core_type * effect_handler option
       (*
          | C of T1 * ... * Tn     ([T1; ...; Tn], None)
          | C: T0                  ([], Some T0)

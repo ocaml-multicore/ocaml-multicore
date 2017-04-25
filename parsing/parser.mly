@@ -1859,9 +1859,10 @@ effect_constructor_rebind:
 ;
 
 default_handler:
-| /* empty */ { None }
+| /* empty */
+      { None }
 | WITH FUNCTION opt_bar default_handler_cases
-      {  Some (Te.effect_handler ~loc:(symbol_rloc()) $4) }
+      { Some (Te.effect_handler ~loc:(symbol_rloc()) $4) }
 ;
 
 default_handler_cases:
