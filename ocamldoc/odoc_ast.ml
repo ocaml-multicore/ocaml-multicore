@@ -1325,7 +1325,7 @@ module Analyser =
                     let ext_loc_end =  tt_ext.ext_loc.Location.loc_end.Lexing.pos_cnum in
                     let new_xt =
                       match tt_ext.ext_kind with
-                          Text_decl(args, ret_type) ->
+                          Text_decl(args, ret_type, _) ->
                             {
                               xt_name = complete_name;
                               xt_args =
@@ -1380,7 +1380,7 @@ module Analyser =
           let new_env = Odoc_env.add_extension env complete_name in
           let new_ext =
             match tt_ext.ext_kind with
-              Text_decl(tt_args, tt_ret_type) ->
+              Text_decl(tt_args, tt_ret_type, _) ->
                 let loc_start = loc.Location.loc_start.Lexing.pos_cnum in
                 let loc_end =  loc.Location.loc_end.Lexing.pos_cnum in
                 {
