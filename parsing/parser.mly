@@ -1862,7 +1862,7 @@ default_handler:
 | /* empty */
       { None }
 | WITH FUNCTION opt_bar default_handler_cases
-      { Some (Te.effect_handler ~loc:(symbol_rloc()) $4) }
+      { Some (Te.effect_handler ~loc:(symbol_rloc()) (List.rev $4)) }
 ;
 
 default_handler_cases:
@@ -1879,10 +1879,9 @@ default_handler_case:
 
 default_handler_pattern:
   | simple_pattern
-      { mkpat(Ppat_effect($1, mkpat Ppat_any)) } /* Continuation pattern is _ */
-  | constr_longident simple_pattern
-      { let peff = mkpat(Ppat_construct(mkrhs $1 1, Some $2)) in
-        mkpat(Ppat_effect(peff, mkpat Ppat_any)) } /* Continuation pattern is _ */
+      { $1 } /* Continuation pattern is _ */
+ | constr_longident simple_pattern
+      { mkpat(Ppat_construct(mkrhs $1 1, Some $2)) }
 ;
 
 generalized_constructor_arguments:
