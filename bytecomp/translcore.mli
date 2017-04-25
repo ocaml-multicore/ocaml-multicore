@@ -22,6 +22,7 @@ val transl_apply: lambda -> (label * expression option * optional) list
                   -> Location.t -> lambda
 val transl_let: rec_flag -> value_binding list -> lambda -> lambda
 val transl_primitive: Location.t -> Primitive.description -> lambda
+val transl_default_effect_handler : extension_default -> lambda
 
 val check_recursive_lambda: Ident.t list -> lambda -> bool
 
