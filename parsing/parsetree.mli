@@ -449,6 +449,7 @@ and effect_constructor =
      peff_kind : effect_constructor_kind;
      peff_loc : Location.t;
      peff_attributes: attributes; (* C [@id1] [@id2] of ... *)
+     peff_handler: effect_handler option;
     }
 
 and effect_constructor_kind =
@@ -462,6 +463,12 @@ and effect_constructor_kind =
       (*
          | C = D
        *)
+
+and effect_handler =
+  {
+    peh_cases: case list;
+    peh_loc: Location.t;
+  }
 
 (** {2 Class language} *)
 
