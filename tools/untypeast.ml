@@ -189,7 +189,7 @@ and untype_effect_constructor ext =
             | Ptyp_constr(_, [ret]) -> ret
             | _ -> assert false
           in
-            Peff_decl (List.map untype_core_type args, uret)
+            Peff_decl (List.map untype_core_type args, uret, None)
       | Text_rebind (_p, lid) -> Peff_rebind lid
     );
     peff_loc = ext.ext_loc;

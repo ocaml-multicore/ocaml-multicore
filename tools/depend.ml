@@ -89,7 +89,7 @@ let add_extension_constructor bv ext =
 
 let add_effect_constructor bv eff =
   match eff.peff_kind with
-      Peff_decl(args, rty) ->
+      Peff_decl(args, rty, _handler) ->
         List.iter (add_type bv) args; add_type bv rty
     | Peff_rebind lid -> add bv lid
 

@@ -456,15 +456,14 @@ and effect_constructor i ppf x =
   line i ppf "peff_name = \"%s\"\n" x.peff_name.txt;
   line i ppf "peff_kind =\n";
   effect_constructor_kind (i + 1) ppf x.peff_kind;
-  line i ppf "peff_handler=\n";
-  option (i + 1) effect_handler ppf x.peff_handler
 
 and effect_constructor_kind i ppf x =
   match x with
-      Peff_decl(a, r) ->
+      Peff_decl(a, r, h) ->
         line i ppf "Peff_decl\n";
         list (i+1) core_type ppf a;
         core_type (i + 1) ppf r;
+        option (i + 1) effect_handler ppf h
     | Peff_rebind li ->
         line i ppf "Peff_rebind\n";
         line (i+1) ppf "%a\n" fmt_longident_loc li;
@@ -472,8 +471,8 @@ and effect_constructor_kind i ppf x =
 and effect_handler i ppf x =
   line i ppf "effect_handler %a\n" fmt_location x.peh_loc;
   let i = i + 1 in
-  line i ppf "peh_cases=\n";
-  list i case ppf x.peh_cases
+  line i ppf "peh_cases =\n";
+  list (i + 1) case ppf x.peh_cases;
 
 and class_type i ppf x =
   line i ppf "class_type %a\n" fmt_location x.pcty_loc;

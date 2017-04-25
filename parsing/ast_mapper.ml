@@ -168,9 +168,18 @@ module T = struct
       ~loc:(sub.location sub pext_loc)
       ~attrs:(sub.attributes sub pext_attributes)
 
+  let map_effect_handler sub
+      {peh_loc;
+       peh_cases} =
+    Te.effect_handler
+      (sub.cases sub peh_cases)
+      ~loc:(sub.location sub peh_loc)
+
   let map_effect_constructor_kind sub = function
-      Peff_decl(ctl, cto) ->
-        Peff_decl(List.map (sub.typ sub) ctl, sub.typ sub cto)
+      Peff_decl(ctl, cto, handler) ->
+      Peff_decl(List.map (sub.typ sub) ctl,
+                sub.typ sub cto,
+                map_opt (map_effect_handler sub) handler)
     | Peff_rebind li ->
         Peff_rebind (map_loc sub li)
 
@@ -184,7 +193,6 @@ module T = struct
       (map_effect_constructor_kind sub peff_kind)
       ~loc:(sub.location sub peff_loc)
       ~attrs:(sub.attributes sub peff_attributes)
-
 end
 
 module CT = struct
