@@ -57,7 +57,7 @@ let transl_extension_constructor env path ext =
     | Some p -> Path.name p
   in
   match ext.ext_kind with
-    Text_decl(args, ret) ->
+    Text_decl(args, ret, _def) ->
       Lprim(prim_set_oo_id,
             [Lprim(Pmakeblock(Obj.object_tag, Mutable),
                    [Lconst(Const_base(Const_string (name,None)));
