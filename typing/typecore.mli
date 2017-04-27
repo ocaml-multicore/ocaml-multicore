@@ -32,7 +32,7 @@ val type_expression:
         Env.t -> Parsetree.expression -> Typedtree.expression
 val type_default_effect_handler :
         Env.t -> string -> Parsetree.effect_handler ->
-        Typedtree.extension_default
+        Typedtree.extension_default_impl
 val type_class_arg_pattern:
         string -> Env.t -> Env.t -> label -> Parsetree.pattern ->
         Typedtree.pattern * (Ident.t * string loc * Ident.t * type_expr) list *

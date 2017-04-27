@@ -57,7 +57,7 @@ let transl_extension_constructor env path ext =
     | Some p -> Path.name p
   in
   match ext.ext_kind with
-  | Text_decl(args, ret, None) ->
+  | Text_decl(args, ret, Tdef_impl_none) ->
      let extn =
        Lprim(prim_set_oo_id,
             [Lprim(Pmakeblock(Obj.object_tag, Mutable),
@@ -65,7 +65,9 @@ let transl_extension_constructor env path ext =
                     Lconst(Const_base(Const_int 0))])])
      in
      extn, None
-  | Text_decl(args, ret, Some edef) ->
+  (* | Text_decl(args, ret, (Tdef_impl_generated as edef)) *)
+(* | Text_decl(args, ret, (Tdef_impl_provided _ as edef)) -> *)
+  | Text_decl(args, ret, edef) ->
      let def_id = Ident.create "default" in
      let def = transl_default_effect_handler edef in
      let extn =

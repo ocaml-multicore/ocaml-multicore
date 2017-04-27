@@ -215,17 +215,18 @@ module MakeIterator(Iter : IteratorArgument) : sig
           Text_decl(args, ret, def) ->
             List.iter iter_core_type args;
             option iter_core_type ret;
-            begin match def with
-            | None -> ()
-            | Some def -> iter_extension_default def
-            end
+            iter_extension_default def
         | Text_rebind _ -> ()
       end;
       Iter.leave_extension_constructor ext;
 
     and iter_extension_default edef =
       Iter.enter_extension_default edef;
-      List.iter iter_case edef.edef_cases;
+      begin match edef with
+      | Tdef_impl_provided edef ->
+        List.iter iter_case edef.edef_cases
+      | _ -> ()
+      end;
       Iter.leave_extension_default edef
 
     and iter_type_extension tyext =

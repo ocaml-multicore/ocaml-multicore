@@ -1205,7 +1205,7 @@ let transl_extension_constructor env type_path type_params
         let targs, tret_type, args, ret_type =
           make_constructor env type_path typext_params sargs sret_type
         in
-          args, ret_type, Text_decl(targs, tret_type, None)
+          args, ret_type, Text_decl(targs, tret_type, Tdef_impl_none)
     | Pext_rebind lid ->
         transl_extension_rebind env type_path
           type_params typext_params priv lid
@@ -1362,7 +1362,7 @@ let transl_effect env seff =
         in
         let ukind =
           match shandler with
-          | None          -> NoDefault (Text_decl(targs, tret_type, None))
+          | None          -> NoDefault (Text_decl(targs, tret_type, Tdef_impl_generated))
           | Some shandler -> Default (targs, tret_type, shandler)
         in
         args, ret_type, ukind
@@ -1401,7 +1401,7 @@ let transl_effect env seff =
        let default_handler =
          Typecore.type_default_effect_handler newenv seff.peff_name.txt shandler
        in
-       Text_decl (targs, tret_type, Some default_handler)
+       Text_decl (targs, tret_type,  Tdef_impl_provided default_handler)
   in
   let text =
     { ext_id = id;
