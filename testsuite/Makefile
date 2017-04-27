@@ -21,6 +21,7 @@ include ../config/Makefile
 default:
 	@echo "Available targets:"
 	@echo "  all             launch all tests"
+	@echo "  all-enabled		 launch all tests except ones known to fail"
 	@echo "  list FILE=f     launch the tests listed in f (one per line)"
 	@echo "  one DIR=p       launch the tests located in path p"
 	@echo "  promote DIR=p   promote the reference files for the tests in p"
