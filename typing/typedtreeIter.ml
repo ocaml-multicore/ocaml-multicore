@@ -215,7 +215,10 @@ module MakeIterator(Iter : IteratorArgument) : sig
           Text_decl(args, ret, def) ->
             List.iter iter_core_type args;
             option iter_core_type ret;
-            iter_extension_default def
+            begin match def with
+            | None -> ()
+            | Some def -> iter_extension_default def
+            end;
         | Text_rebind _ -> ()
       end;
       Iter.leave_extension_constructor ext;

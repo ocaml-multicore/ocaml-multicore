@@ -1246,7 +1246,6 @@ let transl_default_effect_handler = function
                              [transl_normal_path Predef.path_unhandled])])
      in
      Lfunction (Curried, [], body)
-  | Tdef_impl_none -> assert false
 
 (* Wrapper for class compilation *)
 

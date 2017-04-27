@@ -435,7 +435,10 @@ and extension_constructor_kind i ppf x =
         line i ppf "Pext_decl\n";
         list (i+1) core_type ppf a;
         option (i+1) core_type ppf r;
-        extension_default (i + 1) ppf d;
+        begin match d with
+        | None -> ()
+        | Some edef -> extension_default (i + 1) ppf edef
+        end;
     | Text_rebind(p, _) ->
         line i ppf "Pext_rebind\n";
         line (i+1) ppf "%a\n" fmt_path p;

@@ -215,7 +215,7 @@ module MakeMap(Map : MapArgument) = struct
         Text_decl(args, ret, def) ->
           let args = List.map map_core_type args in
           let ret = may_map map_core_type ret in
-          let def = map_extension_default def in
+          let def = may_map map_extension_default def in
             Text_decl(args, ret, def)
       | Text_rebind(p, lid) -> Text_rebind(p, lid)
     in
