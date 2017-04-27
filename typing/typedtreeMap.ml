@@ -215,7 +215,7 @@ module MakeMap(Map : MapArgument) = struct
         Text_decl(args, ret, def) ->
           let args = List.map map_core_type args in
           let ret = may_map map_core_type ret in
-          let def = may_map map_extension_default def in
+          let def = map_extension_default def in
             Text_decl(args, ret, def)
       | Text_rebind(p, lid) -> Text_rebind(p, lid)
     in
@@ -223,8 +223,13 @@ module MakeMap(Map : MapArgument) = struct
 
   and map_extension_default edef =
     let edef = Map.enter_extension_default edef in
-    let edef_cases = List.map map_case edef.edef_cases in
-    Map.leave_extension_default {edef with edef_cases = edef_cases}
+    let edef = match edef with
+      | Tdef_impl_provided edef ->
+         let edef_cases = List.map map_case edef.edef_cases in
+         Tdef_impl_provided {edef with edef_cases = edef_cases}
+      | _ -> edef
+    in
+    Map.leave_extension_default edef
 
   and map_pattern pat =
     let pat = Map.enter_pattern pat in

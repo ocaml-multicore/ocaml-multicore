@@ -439,10 +439,15 @@ and extension_constructor =
   }
 
 and extension_constructor_kind =
-    Text_decl of core_type list * core_type option * extension_default option
+    Text_decl of core_type list * core_type option * extension_default
   | Text_rebind of Path.t * Longident.t loc
 
 and extension_default =
+     Tdef_impl_none
+   | Tdef_impl_generated
+   | Tdef_impl_provided of extension_default_impl
+
+and extension_default_impl =
   {
     edef_cases: case list;
     edef_partial: partial;

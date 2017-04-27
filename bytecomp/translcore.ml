@@ -1231,14 +1231,22 @@ and transl_handler e body val_caselist exn_caselist eff_caselist =
     Lprim(Presume e.exp_loc, [Lprim(prim_alloc_stack, [val_fun; exn_fun; eff_fun]);
                               body_fun; arg])
 
-let transl_default_effect_handler edef =
-  let ((kind, params), body) =
-    event_function edef.edef_loc edef.edef_env
-       (fun repr ->
-         transl_function edef.edef_loc
-           !Clflags.native_code repr edef.edef_partial edef.edef_cases)
-  in
-  Lfunction (kind, params, body)
+let transl_default_effect_handler = function
+  | Tdef_impl_provided edef ->
+     let ((kind, params), body) =
+       event_function edef.edef_loc edef.edef_env
+         (fun repr ->
+           transl_function edef.edef_loc
+              !Clflags.native_code repr edef.edef_partial edef.edef_cases)
+     in
+     Lfunction (kind, params, body)
+  | Tdef_impl_generated ->
+     let body = Lprim(Praise Raise_regular,
+                      [Lprim(Pmakeblock(0, Immutable),
+                             [transl_normal_path Predef.path_unhandled])])
+     in
+     Lfunction (Curried, [], body)
+  | Tdef_impl_none -> assert false
 
 (* Wrapper for class compilation *)
 

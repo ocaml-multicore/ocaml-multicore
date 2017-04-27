@@ -191,8 +191,9 @@ and untype_effect_constructor ext =
           in
           let default_handler =
             match edef with
-            | None -> None
-            | Some { edef_cases; edef_loc } ->
+            | Tdef_impl_none
+            | Tdef_impl_generated -> None
+            | Tdef_impl_provided { edef_cases; edef_loc } ->
                Some { peh_cases = List.map untype_case edef_cases;
                       peh_loc   = edef_loc }
           in
