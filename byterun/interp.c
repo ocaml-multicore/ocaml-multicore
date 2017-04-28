@@ -210,7 +210,6 @@ static __thread intnat caml_bcodcount;
 #endif
 
 static caml_root raise_unhandled;
-static caml_root default_resume_value; // default handlers
 
 /* The interpreter itself */
 value caml_interprete(code_t prog, asize_t prog_size)
@@ -252,23 +251,16 @@ value caml_interprete(code_t prog, asize_t prog_size)
 
   if (prog == NULL) {           /* Interpreter is initializing */
     static opcode_t raise_unhandled_code[] = { ACC, 0, RAISE };
-    static opcode_t default_resume_value_code[] = { ACC, 0, RETURN, 1 }; // default handlers
 #ifdef THREADED_CODE
     caml_instr_table = (char **) jumptable;
     caml_instr_base = Jumptbl_base;
     caml_thread_code(raise_unhandled_code,
                      sizeof(raise_unhandled_code));
-    caml_thread_code(default_resume_value_code,
-                     sizeof(default_resume_value_code));  // default handlers
 #endif
     value raise_unhandled_closure =
       caml_alloc_1(Closure_tag,
                    Val_bytecode(raise_unhandled_code));
     raise_unhandled = caml_create_root(raise_unhandled_closure);
-    value default_resume_value_closure =
-      caml_alloc_1(Closure_tag,
-                   Val_bytecode(default_resume_value_code));  // default handlers
-    default_resume_value = caml_create_root(default_resume_value_closure);
     caml_global_data = caml_create_root(Val_unit);
     caml_init_callbacks();
     return Val_unit;
@@ -1293,21 +1285,8 @@ do_resume:
       value heff = Stack_handle_effect(domain_state->current_stack);
 
       if (parent_stack == Val_long(0)) {
-        if (Wosize_val(eff) > 2) { // default handlers
-          sp -= 4;
-          sp[0] = eff;
-          sp[1] = Val_pc(pc);
-          sp[2] = env;
-          sp[3] = Val_long(extra_args);
-          accu = Field_imm(eff, 2);
-          pc = Code_val(accu);
-          env = accu;
-          extra_args = 0;
-          goto check_stacks;
-        } else {
-          accu = Field_imm(caml_read_root(caml_global_data), UNHANDLED_EXN);
-          goto raise_exception;
-        }
+        accu = Field_imm(caml_read_root(caml_global_data), UNHANDLED_EXN);
+        goto raise_exception;
       }
 
       sp -= 4;
@@ -1343,33 +1322,10 @@ do_resume:
       sp[1] = Val_long(extra_args);
 
       if (parent == Val_long(0)) {
-        if (Wosize_val(eff) > 2) { // default handlers
-          value res;
-          sp -= 2;
-          sp[0] = performer;
-          sp[1] = env;
-          domain_state->extern_sp = sp;
-          res = caml_callback_exn(Field_imm(eff, 2), eff);
-          sp = domain_state->extern_sp;
-          env = sp[1];
-          performer = sp[0];
-          sp += 2;
-          if (Is_exception_result(res)) {
-            accu = performer;
-            resume_fn = caml_read_root(raise_unhandled);
-            resume_arg = Extract_exception(res);
-          } else {
-            accu = performer;
-            resume_fn = caml_read_root(default_resume_value);
-            resume_arg = res;
-          }
-          goto do_resume;
-        } else {
-          accu = performer;
-          resume_fn = caml_read_root(raise_unhandled);
-          resume_arg = Field_imm(caml_read_root(caml_global_data), UNHANDLED_EXN);
-          goto do_resume;
-        }
+        accu = performer;
+        resume_fn = caml_read_root(raise_unhandled);
+        resume_arg = Field_imm(caml_read_root(caml_global_data), UNHANDLED_EXN);
+        goto do_resume;
       }
 
       Stack_parent(self) = performer;
