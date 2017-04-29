@@ -1294,28 +1294,23 @@ do_resume:
       value heff = Stack_handle_effect(domain_state->current_stack);
 
       if (parent_stack == Val_long(0)) {
-        /**
-         * No parent handler; invoke default handler.
-         *
-         * Ought to be safe to remove this check since every effectful
-         * operation by construction have a default handler.
-         */
-        if (Wosize_val(eff) == 3) {
-          value defh;
-          sp -= 4;
-          sp[0] = eff;
-          sp[1] = Val_pc(pc);
-          sp[2] = env;
-          sp[3] = Val_long(extra_args);
+        // No parent handler; invoke default handler.
+        value defh;
+        if (Tag_val(eff) == Object_tag) { // Hurray, the operation is unboxed
           defh = Field_imm(eff, 2);
-          pc = Code_val(defh);
-          env = defh;
-          accu = defh;
-          extra_args = 0;
-          goto check_stacks;
-        } else {
-          caml_fatal_error("Fatal error: unhandled effect.\n");
+        } else {                          // ... but in case it isn't
+          defh = Field_imm(Field_imm(eff, 0), 2);
         }
+        sp -= 4;
+        sp[0] = eff;
+        sp[1] = Val_pc(pc);
+        sp[2] = env;
+        sp[3] = Val_long(extra_args);
+        pc = Code_val(defh);
+        env = defh;
+        accu = defh;
+        extra_args = 0;
+        goto check_stacks;
       }
 
       sp -= 4;
@@ -1351,32 +1346,34 @@ do_resume:
       sp[1] = Val_long(extra_args);
 
       if (parent == Val_long(0)) {
-        if (Wosize_val(eff) > 2) {
-          value res;
-          value defh;
-          sp -= 2;
-          sp[0] = performer;
-          sp[1] = env;
-          domain_state->extern_sp = sp;
+        // No parent handler; invoke default handler.
+        value defh;
+        if (Tag_val(eff) == Object_tag) { // Hurray, the operation is unboxed
           defh = Field_imm(eff, 2);
-          res = caml_callback_exn(defh, eff);
-          sp = domain_state->extern_sp;
-          performer = sp[0];
-          env = sp[1];
-          sp += 2;
-          if (Is_exception_result(res)) {
-            accu = performer;
-            resume_fn = caml_read_root(raise_unhandled);
-            resume_arg = Extract_exception(res);
-          } else {
-            accu = performer;
-            resume_fn = caml_read_root(resume_value);
-            resume_arg = res;
-          }
-          goto do_resume;
-        } else {
-          caml_fatal_error("Fatal error: unhandled (delegated) effect.\n");
+        } else {                          // ... but in case it isn't
+          defh = Field_imm(Field_imm(eff, 0), 2);
         }
+
+        value res;
+        sp -= 2;
+        sp[0] = performer;
+        sp[1] = env;
+        domain_state->extern_sp = sp;
+        res = caml_callback_exn(defh, eff);
+        sp = domain_state->extern_sp;
+        performer = sp[0];
+        env = sp[1];
+        sp += 2;
+        if (Is_exception_result(res)) {
+          accu = performer;
+          resume_fn = caml_read_root(raise_unhandled);
+          resume_arg = Extract_exception(res);
+        } else {
+          accu = performer;
+          resume_fn = caml_read_root(resume_value);
+          resume_arg = res;
+        }
+        goto do_resume;
       }
 
       Stack_parent(self) = performer;
