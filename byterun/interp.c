@@ -1296,9 +1296,9 @@ do_resume:
       if (parent_stack == Val_long(0)) {
         // No parent handler; invoke default handler.
         value defh;
-        if (Tag_val(eff) == Object_tag) { // Hurray, the operation is unboxed
+        if (Tag_val(eff) == Object_tag) { // the operation is unboxed
           defh = Field_imm(eff, 2);
-        } else {                          // ... but in case it isn't
+        } else {                          // ... but in case it's boxed
           defh = Field_imm(Field_imm(eff, 0), 2);
         }
         sp -= 4;
@@ -1348,7 +1348,7 @@ do_resume:
       if (parent == Val_long(0)) {
         // No parent handler; invoke default handler.
         value defh;
-        if (Tag_val(eff) == Object_tag) { // Hurray, the operation is unboxed
+        if (Tag_val(eff) == Object_tag) { // the operation is unboxed
           defh = Field_imm(eff, 2);
         } else {                          // ... but in case it isn't
           defh = Field_imm(Field_imm(eff, 0), 2);

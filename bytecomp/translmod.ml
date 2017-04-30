@@ -65,8 +65,6 @@ let transl_extension_constructor env path ext =
                     Lconst(Const_base(Const_int 0))])])
      in
      extn, None
-  (* | Text_decl(args, ret, (Tdef_impl_generated as edef)) *)
-(* | Text_decl(args, ret, (Tdef_impl_provided _ as edef)) -> *)
   | Text_decl(args, ret, Some edef) ->
      let def_id = Ident.create "default" in
      let def = transl_default_effect_handler edef in

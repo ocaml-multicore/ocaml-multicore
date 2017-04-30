@@ -1242,8 +1242,7 @@ let transl_default_effect_handler = function
      Lfunction (kind, params, body)
   | Tdef_impl_generated ->
      let body = Lprim(Praise Raise_regular,
-                      [Lprim(Pmakeblock(0, Immutable),
-                             [transl_normal_path Predef.path_unhandled])])
+                      [transl_normal_path Predef.path_unhandled])
      in
      Lfunction (Curried, [], body)
 
