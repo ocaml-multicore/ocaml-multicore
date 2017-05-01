@@ -66,16 +66,19 @@ let transl_extension_constructor env path ext =
      in
      extn, None
   | Text_decl(args, ret, Some edef) ->
-     let def_id = Ident.create "default" in
-     let def = transl_default_effect_handler edef in
+     let handler_id = Ident.create "default" in
+     let reperformer_id = Ident.create "reperformer" in
+     let handler = transl_default_effect_handler edef in
+     let reperformer = transl_default_reperform_handler handler_id in
      let extn =
        Lprim(prim_set_oo_id,
              [Lprim(Pmakeblock(Obj.object_tag, Mutable),
                     [Lconst(Const_base(Const_string (name, None)));
                      Lconst(Const_base(Const_int 0));
-                     Lvar def_id])])
+                     Lvar handler_id;
+                     Lvar reperformer_id])])
      in
-     extn, Some (def_id, def)
+     extn, Some ((handler_id, handler), (reperformer_id, reperformer))
   | Text_rebind(path, lid) ->
       transl_path ~loc:ext.ext_loc env path, None
 
@@ -91,7 +94,7 @@ let transl_type_extension env rootpath tyext body =
         let acc =
           match def with
           | None -> acc
-          | Some (id, lam) -> (id, lam) :: acc
+          | Some (handler, reperformer) -> reperformer :: handler :: acc
         in
         acc)
       [] tyext.tyext_constructors
@@ -111,8 +114,11 @@ let transl_extension_constructor env path ext body =
   match def with
   | None ->
      Llet (Strict, ext.ext_id, extn, body)
-  | Some (def_id, def) ->
-     Lletrec ([ext.ext_id, extn; def_id, def], body)
+  | Some ((handler_id, handler), (reperformer_id, reperformer)) ->
+     Lletrec ([ext.ext_id, extn;
+               handler_id, handler;
+               reperformer_id, reperformer],
+              body)
 
 (* Compile a coercion *)
 

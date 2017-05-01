@@ -1247,6 +1247,38 @@ let transl_default_effect_handler = function
      in
      Lfunction (Curried, [dummy_param], body)
 
+let transl_default_reperform_handler default_handler_id =
+  let eff_id  = Ident.create "eff" in
+  let cont_id = Ident.create "k" in
+  let exn_id  = Ident.create "exn" in
+  let val_id  = Ident.create "v" in
+  let resume cont f v =
+    Lprim(Presume Location.none, [cont; f; v])
+  in
+  let continue cont_id val_id =
+    let arg_id = Ident.create "x" in
+    let f = Lfunction (Curried, [arg_id], Lvar arg_id) in
+    resume (Lvar cont_id) f (Lvar val_id)
+  in
+  let discontinue cont_id exn_id =
+    let arg_id = Ident.create "x" in
+    let f = Lfunction (Curried, [arg_id], Lprim(Praise Raise_regular, [Lvar arg_id])) in
+    resume (Lvar cont_id) f (Lvar exn_id)
+  in
+  let static_exception_id = next_negative_raise_count () in
+  let body =
+    Lstaticcatch
+      (Ltrywith
+         (Lstaticraise (static_exception_id,
+                        [Lapply(Lvar default_handler_id,
+                                [Lvar eff_id],
+                                Location.none)]),
+          exn_id, discontinue cont_id exn_id),
+       (static_exception_id, [val_id]),
+       continue cont_id val_id)
+  in
+  Lfunction (Curried, [eff_id; cont_id], body)
+
 (* Wrapper for class compilation *)
 
 (*
