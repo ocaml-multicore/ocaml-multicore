@@ -901,10 +901,7 @@ CFI_STARTPROC
         LEA_VAR(caml_apply2, %rsi)
         jmp     *%rsi
 LBL(112):
-    /* No parent stack. Raise Unhandled. */
-    /*    LEA_VAR(caml_exn_Unhandled, %rax)
-        jmp LBL(caml_raise_exn)*/
-        /* No parent stack; invoke default handler. */
+    /* No parent stack; invoke default handler. */
         movq    %rax, %rbx          /* copy the effect object */
         movzbq  -8(%rax), %rdi      /* get tag */
         cmpq    $248, %rdi          /* check whether the operation is unboxed */
@@ -936,9 +933,6 @@ CFI_STARTPROC
         LEA_VAR(caml_apply2, %rsi)
         jmp     *%rsi
 LBL(113):
-    /* No parent stack. Raise Unhandled. */
-    /*    LEA_VAR(caml_exn_Unhandled, %rax)
-        jmp LBL(caml_raise_exn)*/
     /* No parent stack; invoke default (reperformer) handler. */
         movq    %r12, %rax      /* copy the effect into %rax (expected by handler) */
         movzbq  -8(%rax), %rcx  /* get tag */

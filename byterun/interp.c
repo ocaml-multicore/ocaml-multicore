@@ -209,8 +209,8 @@ sp is a local copy of the global variable caml_extern_sp. */
 static __thread intnat caml_bcodcount;
 #endif
 
-static caml_root raise_unhandled;
-static caml_root resume_value;
+/* static caml_root raise_unhandled; */
+/* static caml_root resume_value; */
 
 /* The interpreter itself */
 value caml_interprete(code_t prog, asize_t prog_size)
@@ -251,25 +251,25 @@ value caml_interprete(code_t prog, asize_t prog_size)
 #endif
 
   if (prog == NULL) {           /* Interpreter is initializing */
-    static opcode_t raise_unhandled_code[] = { ACC, 0, RAISE };
-    static opcode_t resume_value_code[] = { ACC, 0, RETURN, 1 };
+    /* static opcode_t raise_unhandled_code[] = { ACC, 0, RAISE }; */
+    /* static opcode_t resume_value_code[] = { ACC, 0, RETURN, 1 }; */
 #ifdef THREADED_CODE
     caml_instr_table = (char **) jumptable;
     caml_instr_base = Jumptbl_base;
-    caml_thread_code(raise_unhandled_code,
-                     sizeof(raise_unhandled_code));
-    caml_thread_code(resume_value_code,
-                     sizeof(resume_value_code));
+    /* caml_thread_code(raise_unhandled_code, */
+    /*                  sizeof(raise_unhandled_code)); */
+    /* caml_thread_code(resume_value_code, */
+    /*                  sizeof(resume_value_code)); */
 #endif
-    value raise_unhandled_closure =
-      caml_alloc_1(Closure_tag,
-                   Val_bytecode(raise_unhandled_code));
-    value resume_value_closure =
-      caml_alloc_1(Closure_tag,
-                   Val_bytecode(resume_value_code));
+    /* value raise_unhandled_closure = */
+    /*   caml_alloc_1(Closure_tag, */
+    /*                Val_bytecode(raise_unhandled_code)); */
+    /* value resume_value_closure = */
+    /*   caml_alloc_1(Closure_tag, */
+    /*                Val_bytecode(resume_value_code)); */
 
-    raise_unhandled = caml_create_root(raise_unhandled_closure);
-    resume_value = caml_create_root(resume_value_closure);
+    /* raise_unhandled = caml_create_root(raise_unhandled_closure); */
+    /* resume_value = caml_create_root(resume_value_closure); */
     caml_global_data = caml_create_root(Val_unit);
     caml_init_callbacks();
     return Val_unit;
@@ -1341,40 +1341,28 @@ do_resume:
       value self = domain_state->current_stack;
       value parent = Stack_parent(domain_state->current_stack);
 
+      if (parent == Val_long(0)) {
+        // No parent handler; invoke default handler.
+        value reperformer;
+        if (Tag_val(eff) == Object_tag) { // the operation is unboxed
+          reperformer = Field_imm(eff, 3);
+        } else {                          // ... but in case it isn't
+          reperformer = Field_imm(Field_imm(eff, 0), 3);
+        }
+
+        sp = sp + *pc - 2;
+        sp[0] = eff;
+        sp[1] = performer;
+        accu = reperformer;
+        pc = Code_val(reperformer);
+        env = reperformer;
+        extra_args += 1;
+        goto check_stacks;
+      }
+
       sp = sp + *pc - 2;
       sp[0] = Val_long(domain_state->trap_sp_off);
       sp[1] = Val_long(extra_args);
-
-      if (parent == Val_long(0)) {
-        // No parent handler; invoke default handler.
-        value defh;
-        if (Tag_val(eff) == Object_tag) { // the operation is unboxed
-          defh = Field_imm(eff, 2);
-        } else {                          // ... but in case it isn't
-          defh = Field_imm(Field_imm(eff, 0), 2);
-        }
-
-        value res;
-        sp -= 2;
-        sp[0] = performer;
-        sp[1] = env;
-        domain_state->extern_sp = sp;
-        res = caml_callback_exn(defh, eff);
-        sp = domain_state->extern_sp;
-        performer = sp[0];
-        env = sp[1];
-        sp += 2;
-        if (Is_exception_result(res)) {
-          accu = performer;
-          resume_fn = caml_read_root(raise_unhandled);
-          resume_arg = Extract_exception(res);
-        } else {
-          accu = performer;
-          resume_fn = caml_read_root(resume_value);
-          resume_arg = res;
-        }
-        goto do_resume;
-      }
 
       Stack_parent(self) = performer;
 
