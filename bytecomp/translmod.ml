@@ -84,8 +84,8 @@ let transl_extension_constructor env path ext =
 
 let transl_type_extension env rootpath tyext body =
   let bindings =
-    List.fold_left
-      (fun acc ext ->
+    List.fold_right
+      (fun ext acc ->
         let extn, def =
           transl_extension_constructor env
             (field_path rootpath ext.ext_id) ext
@@ -97,17 +97,9 @@ let transl_type_extension env rootpath tyext body =
           | Some (handler, reperformer) -> reperformer :: handler :: acc
         in
         acc)
-      [] tyext.tyext_constructors
+      tyext.tyext_constructors []
   in
-  Lletrec (List.rev bindings, body)
-  (*List.fold_right
-    (fun ext body ->
-      let lam =
-        transl_extension_constructor env (field_path rootpath ext.ext_id) ext
-      in
-      Llet(Strict, ext.ext_id, lam, body))
-    tyext.tyext_constructors
-    body*)
+  Lletrec (bindings, body)
 
 let transl_extension_constructor env path ext body =
   let extn, def = transl_extension_constructor env path ext in

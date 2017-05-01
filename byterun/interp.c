@@ -209,9 +209,6 @@ sp is a local copy of the global variable caml_extern_sp. */
 static __thread intnat caml_bcodcount;
 #endif
 
-/* static caml_root raise_unhandled; */
-/* static caml_root resume_value; */
-
 /* The interpreter itself */
 value caml_interprete(code_t prog, asize_t prog_size)
 {
@@ -251,25 +248,10 @@ value caml_interprete(code_t prog, asize_t prog_size)
 #endif
 
   if (prog == NULL) {           /* Interpreter is initializing */
-    /* static opcode_t raise_unhandled_code[] = { ACC, 0, RAISE }; */
-    /* static opcode_t resume_value_code[] = { ACC, 0, RETURN, 1 }; */
 #ifdef THREADED_CODE
     caml_instr_table = (char **) jumptable;
     caml_instr_base = Jumptbl_base;
-    /* caml_thread_code(raise_unhandled_code, */
-    /*                  sizeof(raise_unhandled_code)); */
-    /* caml_thread_code(resume_value_code, */
-    /*                  sizeof(resume_value_code)); */
 #endif
-    /* value raise_unhandled_closure = */
-    /*   caml_alloc_1(Closure_tag, */
-    /*                Val_bytecode(raise_unhandled_code)); */
-    /* value resume_value_closure = */
-    /*   caml_alloc_1(Closure_tag, */
-    /*                Val_bytecode(resume_value_code)); */
-
-    /* raise_unhandled = caml_create_root(raise_unhandled_closure); */
-    /* resume_value = caml_create_root(resume_value_closure); */
     caml_global_data = caml_create_root(Val_unit);
     caml_init_callbacks();
     return Val_unit;
