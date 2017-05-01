@@ -4133,7 +4133,7 @@ let report_error env ppf = function
               "@[Invalid continuation pattern: only variables and _ are allowed .@]"
   | Unexpected_default_effect_label (unexpected, expected) ->
      fprintf ppf
-             "@[Unexpected effect name %s. This default handler only handles %s.@]"
+             "@[This pattern matches effect %s, but the expected effect was %s.@]"
              unexpected expected
 
   | Unexpected_default_effect_pattern cname ->
