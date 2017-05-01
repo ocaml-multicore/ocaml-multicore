@@ -937,8 +937,22 @@ CFI_STARTPROC
         jmp     *%rsi
 LBL(113):
     /* No parent stack. Raise Unhandled. */
-        LEA_VAR(caml_exn_Unhandled, %rax)
-        jmp LBL(caml_raise_exn)
+    /*    LEA_VAR(caml_exn_Unhandled, %rax)
+        jmp LBL(caml_raise_exn)*/
+    /* No parent stack; invoke default (reperformer) handler. */
+        movq    %r12, %rax      /* copy the effect into %rax (expected by handler) */
+        movzbq  -8(%rax), %rcx  /* get tag */
+        cmpq    $248, %rcx      /* test whether the operation is unboxed */
+        je      LBL(119)
+        movq    (%rax), %rdi    /* unbox operation */
+        movq    24(%rdi), %rdi  /* project field 3 (the reperformer handler) */
+        /* call the handler */
+        LEA_VAR(caml_apply2, %rsi)
+        jmp     *%rsi
+LBL(119):
+        movq    24(%rax), %rdi  /* project field 3 (the reperformer handler) */
+        LEA_VAR(caml_apply2, %rsi)
+        jmp     *%rsi
 CFI_ENDPROC
 
 FUNCTION(G(caml_resume))
