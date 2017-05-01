@@ -1241,10 +1241,11 @@ let transl_default_effect_handler = function
      in
      Lfunction (kind, params, body)
   | Tdef_impl_generated ->
+     let dummy_param = Ident.create "param" in
      let body = Lprim(Praise Raise_regular,
                       [transl_normal_path Predef.path_unhandled])
      in
-     Lfunction (Curried, [], body)
+     Lfunction (Curried, [dummy_param], body)
 
 (* Wrapper for class compilation *)
 
