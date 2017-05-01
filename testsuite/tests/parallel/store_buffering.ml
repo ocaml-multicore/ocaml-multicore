@@ -81,7 +81,7 @@ let main () =
   Domain.spawn (fun () -> domain1 num_iters);
   Domain.spawn (fun () -> domain2 num_iters);
   loop num_iters;
-  Printf.printf "tt=%d tf=%d ft=%d ff=%d\n" r.tt r.tf r.ft r.ff
-(*   if r.tt = 0 then print_endline "ok" else print_endline "fail" *)
+(*   Printf.printf "tt=%d tf=%d ft=%d ff=%d\n" r.tt r.tf r.ft r.ff *)
+  if r.tt = 0 then print_endline "ok" else print_endline "fail"
 
 let _ = main ()
