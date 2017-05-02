@@ -231,9 +231,10 @@ let rec eq_pattern_desc : (pattern_desc * pattern_desc) -> 'result =
   | (Ppat_constant a0, Ppat_constant b0) ->
       Asttypes.eq_constant (a0, b0)
   | (Ppat_tuple a0, Ppat_tuple b0) -> eq_list eq_pattern (a0, b0)
-  | (Ppat_construct (a0, a1), Ppat_construct (b0, b1)) ->
-      ((Asttypes.eq_loc Longident.eq_t (a0, b0)) &&
-         (eq_option eq_pattern (a1, b1)))
+  | (Ppat_construct (a0, a1, a2), Ppat_construct (b0, b1, b2)) ->
+     ((Asttypes.eq_loc Longident.eq_t (a0, b0)) &&
+      (eq_bool (a1, b1)) &&
+      (eq_option eq_pattern (a2, b2)))
   | (Ppat_variant (a0, a1), Ppat_variant (b0, b1)) ->
       (Asttypes.eq_label (a0, b0)) && (eq_option eq_pattern (a1, b1))
   | (Ppat_record (a0, a1), Ppat_record (b0, b1)) ->

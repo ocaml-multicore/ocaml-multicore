@@ -239,8 +239,8 @@ module MakeMap(Map : MapArgument) = struct
           let pat1 = map_pattern pat1 in
           Tpat_alias (pat1, p, text)
         | Tpat_tuple list -> Tpat_tuple (List.map map_pattern list)
-        | Tpat_construct (lid, cstr_decl, args) ->
-          Tpat_construct (lid, cstr_decl,
+        | Tpat_construct (lid, b, cstr_decl, args) ->
+          Tpat_construct (lid, b, cstr_decl,
                           List.map map_pattern args)
         | Tpat_variant (label, pato, rowo) ->
           let pato = match pato with

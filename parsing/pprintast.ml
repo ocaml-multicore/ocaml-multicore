@@ -349,7 +349,7 @@ class printer  ()= object(self:'self)
     let rec pattern_list_helper f  =  function
       | {ppat_desc =
          Ppat_construct
-           ({ txt = Lident("::") ;_},
+           ({ txt = Lident("::") ;_},_,
             Some ({ppat_desc = Ppat_tuple([pat1; pat2]);_})); _}
             ->
               pp f "%a::%a"  self#simple_pattern  pat1  pattern_list_helper pat2 (*RA*)
@@ -357,8 +357,8 @@ class printer  ()= object(self:'self)
     if x.ppat_attributes <> [] then self#pattern f x
     else match x.ppat_desc with
     | Ppat_variant (l, Some p) ->  pp f "@[<2>`%s@;%a@]" l self#simple_pattern p
-    | Ppat_construct (({txt=Lident("()"|"[]");_}), _) -> self#simple_pattern f x
-    | Ppat_construct (({txt;_} as li), po) -> (* FIXME The third field always false *)
+    | Ppat_construct (({txt=Lident("()"|"[]");_}), _, _) -> self#simple_pattern f x
+    | Ppat_construct (({txt;_} as li), _, po) -> (* FIXME The third field always false *)
         if txt = Lident "::" then
           pp f "%a" pattern_list_helper x
         else
@@ -370,7 +370,7 @@ class printer  ()= object(self:'self)
   method simple_pattern (f:Format.formatter) (x:pattern) :unit =
     if x.ppat_attributes <> [] then self#pattern f x
     else match x.ppat_desc with
-    | Ppat_construct (({txt=Lident ("()"|"[]" as x);_}), _) -> pp f  "%s" x
+    | Ppat_construct (({txt=Lident ("()"|"[]" as x);_}),_, _) -> pp f  "%s" x
     | Ppat_any -> pp f "_";
     | Ppat_var ({txt = txt;_}) -> protect_ident f txt
     | Ppat_array l ->

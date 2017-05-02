@@ -229,8 +229,8 @@ and untype_pattern pat =
     | Tpat_constant cst -> Ppat_constant cst
     | Tpat_tuple list ->
         Ppat_tuple (List.map untype_pattern list)
-    | Tpat_construct (lid, _, args) ->
-        Ppat_construct (lid,
+    | Tpat_construct (lid, total, _, args) ->
+        Ppat_construct (lid, total,
           (match args with
               [] -> None
             | [arg] -> Some (untype_pattern arg)

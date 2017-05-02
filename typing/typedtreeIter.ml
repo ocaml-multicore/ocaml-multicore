@@ -252,7 +252,7 @@ module MakeIterator(Iter : IteratorArgument) : sig
         | Tpat_constant cst -> ()
         | Tpat_tuple list ->
             List.iter iter_pattern list
-        | Tpat_construct (_, _, args) ->
+        | Tpat_construct (_, _, _, args) ->
             List.iter iter_pattern args
         | Tpat_variant (label, pato, _) ->
             begin match pato with

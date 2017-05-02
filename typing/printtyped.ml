@@ -224,7 +224,7 @@ and pattern i ppf x =
   | Tpat_tuple (l) ->
       line i ppf "Ppat_tuple\n";
       list i pattern ppf l;
-  | Tpat_construct (li, _, po) ->
+  | Tpat_construct (li, _, _, po) ->
       line i ppf "Ppat_construct %a\n" fmt_longident li;
       list i pattern ppf po;
   | Tpat_variant (l, po, _) ->
