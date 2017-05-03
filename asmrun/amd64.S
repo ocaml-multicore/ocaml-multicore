@@ -933,18 +933,18 @@ CFI_STARTPROC
         LEA_VAR(caml_apply2, %rsi)
         jmp     *%rsi
 LBL(113):
-    /* No parent stack; invoke default (reperformer) handler. */
+    /* No parent stack; invoke default delegate handler. */
         movq    %r12, %rax      /* copy the effect into %rax (expected by handler) */
         movzbq  -8(%rax), %rcx  /* get tag */
         cmpq    $248, %rcx      /* test whether the operation is unboxed */
         je      LBL(119)
         movq    (%rax), %rdi    /* unbox operation */
-        movq    24(%rdi), %rdi  /* project field 3 (the reperformer handler) */
+        movq    24(%rdi), %rdi  /* project field 3 (the delegate handler) */
         /* call the handler */
         LEA_VAR(caml_apply2, %rsi)
         jmp     *%rsi
 LBL(119):
-        movq    24(%rax), %rdi  /* project field 3 (the reperformer handler) */
+        movq    24(%rax), %rdi  /* project field 3 (the delegate handler) */
         LEA_VAR(caml_apply2, %rsi)
         jmp     *%rsi
 CFI_ENDPROC

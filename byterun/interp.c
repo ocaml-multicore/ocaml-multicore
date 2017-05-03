@@ -41,7 +41,7 @@
         caml_trapsp pointer to the current trap frame
         extra_args number of extra arguments provided by the caller
 
-sp is a local copy of the global variable caml_extern_sp. */
+sp is a local copy of the domain global variable extern_sp. */
 
 /* Instruction decoding */
 
@@ -1324,20 +1324,20 @@ do_resume:
       value parent = Stack_parent(domain_state->current_stack);
 
       if (parent == Val_long(0)) {
-        // No parent handler; invoke default handler.
-        value reperformer;
+        // No parent handler; invoke default delegate handler.
+        value delegate;
         if (Tag_val(eff) == Object_tag) { // the operation is unboxed
-          reperformer = Field_imm(eff, 3);
+          delegate = Field_imm(eff, 3);
         } else {                          // ... but in case it isn't
-          reperformer = Field_imm(Field_imm(eff, 0), 3);
+          delegate = Field_imm(Field_imm(eff, 0), 3);
         }
 
         sp = sp + *pc - 2;
         sp[0] = eff;
         sp[1] = performer;
-        accu = reperformer;
-        pc = Code_val(reperformer);
-        env = reperformer;
+        accu = delegate;
+        pc = Code_val(delegate);
+        env = delegate;
         extra_args += 1;
         goto check_stacks;
       }
