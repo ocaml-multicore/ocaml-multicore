@@ -67,18 +67,18 @@ let transl_extension_constructor env path ext =
      extn, None
   | Text_decl(args, ret, Some edef) ->
      let handler_id = Ident.create "default" in
-     let reperformer_id = Ident.create "reperformer" in
+     let delegate_id = Ident.create "delegate" in
      let handler = transl_default_effect_handler edef in
-     let reperformer = transl_default_reperform_handler handler_id in
+     let delegate = transl_default_delegate_handler handler_id in
      let extn =
        Lprim(prim_set_oo_id,
              [Lprim(Pmakeblock(Obj.object_tag, Mutable),
                     [Lconst(Const_base(Const_string (name, None)));
                      Lconst(Const_base(Const_int 0));
                      Lvar handler_id;
-                     Lvar reperformer_id])])
+                     Lvar delegate_id])])
      in
-     extn, Some ((handler_id, handler), (reperformer_id, reperformer))
+     extn, Some ((handler_id, handler), (delegate_id, delegate))
   | Text_rebind(path, lid) ->
       transl_path ~loc:ext.ext_loc env path, None
 
@@ -106,10 +106,10 @@ let transl_extension_constructor env path ext body =
   match def with
   | None ->
      Llet (Strict, ext.ext_id, extn, body)
-  | Some ((handler_id, handler), (reperformer_id, reperformer)) ->
+  | Some ((handler_id, handler), (delegate_id, delegate)) ->
      Lletrec ([ext.ext_id, extn;
                handler_id, handler;
-               reperformer_id, reperformer],
+               delegate_id, delegate],
               body)
 
 (* Compile a coercion *)

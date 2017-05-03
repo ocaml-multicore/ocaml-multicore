@@ -1247,7 +1247,7 @@ let transl_default_effect_handler = function
      in
      Lfunction (Curried, [dummy_param], body)
 
-let transl_default_reperform_handler default_handler_id =
+let transl_default_delegate_handler default_handler_id =
   let eff_id  = Ident.create "eff" in
   let cont_id = Ident.create "k" in
   let exn_id  = Ident.create "exn" in
