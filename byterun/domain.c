@@ -271,7 +271,6 @@ static void domain_terminate() {
   /* FIXME: proper domain termination and reuse */
   /* interrupt_word_address must not go away */
   caml_teardown_eventlog();
-  pause();
 }
 
 struct domain_startup_params {
@@ -300,19 +299,32 @@ static void* domain_thread_func(void* v) {
   return 0;
 }
 
+CAMLexport const struct custom_operations domain_ops = {
+    "domain",
+    custom_finalize_default,
+    custom_compare_default,
+    custom_hash_default,
+    custom_serialize_default,
+    custom_deserialize_default,
+    custom_compare_ext_default
+};
 
 CAMLprim value caml_domain_spawn(value callback)
 {
   CAMLparam1 (callback);
+  CAMLlocal1 (th_val);
   struct domain_startup_params p;
-  pthread_t th;
   int err;
+  pthread_t *th;
+  
+  th_val = caml_alloc_custom(&domain_ops, sizeof(pthread_t), 0, 1);
+  th = (pthread_t*)Data_custom_val(th_val);
 
   caml_plat_event_init(&p.ev);
 
   p.callback = caml_create_root(caml_promote(&domain_self->state, callback));
 
-  err = pthread_create(&th, 0, domain_thread_func, (void*)&p);
+  err = pthread_create(th, 0, domain_thread_func, (void*)&p);
   if (err) {
     caml_failwith("failed to create domain thread");
   }
@@ -324,16 +336,31 @@ CAMLprim value caml_domain_spawn(value callback)
   if (p.newdom) {
     /* successfully created a domain.
        p.callback is now owned by that domain */
-    pthread_detach(th);
   } else {
     /* failed */
     void* r;
-    pthread_join(th, &r);
+    pthread_join(*th, &r);
     caml_delete_root(p.callback);
     caml_failwith("failed to allocate domain");
   }
 
-  CAMLreturn (Val_unit);
+  CAMLreturn (th_val);
+}
+
+CAMLprim value caml_ml_domain_join(value domain)
+{
+    CAMLparam1 (domain);
+    pthread_t *th = (pthread_t*) Data_custom_val(domain);
+    int err;
+
+    if (!th)
+        caml_invalid_argument("No thread");
+    caml_gc_log("Domain joining");
+    err = pthread_join(*th, NULL);
+    if (err)
+        caml_invalid_argument("cannot join thread");
+
+    CAMLreturn (Val_unit);
 }
 
 struct domain* caml_domain_self()
