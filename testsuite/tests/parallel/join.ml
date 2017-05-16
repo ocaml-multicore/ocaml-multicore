@@ -14,8 +14,22 @@ let rec other_join cnt n domain =
   else
     Domain.join domain
 
+let join2 () =
+  let r = ref false in
+  let t = Domain.spawn (fun () -> r := true) in
+  Domain.join t;
+  assert !r;
+  try
+    Domain.join t;
+    assert false
+  with Invalid_argument _ ->
+    assert !r
+
 let () =
   main_join 100;
   let cnt = ref 0 in
   other_join cnt 100 (Domain.spawn ignore);
-  assert (!cnt = 100)
+  assert (!cnt = 100);
+  join2 ();
+  Gc.full_major ();
+  Gc.full_major ()

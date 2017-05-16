@@ -299,9 +299,33 @@ static void* domain_thread_func(void* v) {
   return 0;
 }
 
+struct domain_thread {
+    caml_plat_mutex m;
+    pthread_t th;
+    int joinable;
+};
+
+#define Domainthreadptr_val(val) ((struct domain_thread**)Data_custom_val(val))
+
+static void domain_finalize(value v)
+{
+    struct domain_thread** dtp = Domainthreadptr_val(v);
+    struct domain_thread* dt;
+    Assert(dtp);
+    dt = *dtp;
+    Assert(dt);
+    caml_plat_mutex_free(&dt->m);
+    if (dt->joinable) {
+        caml_gc_log("Detaching thread");
+        pthread_detach(dt->th);
+    }
+    free(dt);
+    *dtp = NULL;
+}
+
 CAMLexport const struct custom_operations domain_ops = {
     "domain",
-    custom_finalize_default,
+    domain_finalize,
     custom_compare_default,
     custom_hash_default,
     custom_serialize_default,
@@ -309,22 +333,29 @@ CAMLexport const struct custom_operations domain_ops = {
     custom_compare_ext_default
 };
 
+CAMLprim value caml_ml_domain_join(value domain);
 CAMLprim value caml_domain_spawn(value callback)
 {
   CAMLparam1 (callback);
   CAMLlocal1 (th_val);
   struct domain_startup_params p;
+  struct domain_thread **dp;
+  struct domain_thread *d;
   int err;
-  pthread_t *th;
   
-  th_val = caml_alloc_custom(&domain_ops, sizeof(pthread_t), 0, 1);
-  th = (pthread_t*)Data_custom_val(th_val);
+  th_val = caml_alloc_custom(&domain_ops, sizeof(*dp), 0, 1);
+  dp = Domainthreadptr_val(th_val);
+  *dp = d = malloc(sizeof(*d));
+  if (!d)
+      caml_raise_out_of_memory();
+  caml_plat_mutex_init(&d->m);
+  d->joinable = 1;
 
   caml_plat_event_init(&p.ev);
 
   p.callback = caml_create_root(caml_promote(&domain_self->state, callback));
 
-  err = pthread_create(th, 0, domain_thread_func, (void*)&p);
+  err = pthread_create(&d->th, 0, domain_thread_func, (void*)&p);
   if (err) {
     caml_failwith("failed to create domain thread");
   }
@@ -338,8 +369,7 @@ CAMLprim value caml_domain_spawn(value callback)
        p.callback is now owned by that domain */
   } else {
     /* failed */
-    void* r;
-    pthread_join(*th, &r);
+    caml_ml_domain_join(th_val);
     caml_delete_root(p.callback);
     caml_failwith("failed to allocate domain");
   }
@@ -350,13 +380,26 @@ CAMLprim value caml_domain_spawn(value callback)
 CAMLprim value caml_ml_domain_join(value domain)
 {
     CAMLparam1 (domain);
-    pthread_t *th = (pthread_t*) Data_custom_val(domain);
-    int err;
+    struct domain_thread **dp = Domainthreadptr_val(domain);
+    struct domain_thread *d;
+    int err = 0;
+    pthread_t th;
 
-    if (!th)
-        caml_invalid_argument("No thread");
+    Assert(dp);
+    d = *dp;
+    Assert(d);
+    th = d->th;
     caml_gc_log("Domain joining");
-    err = pthread_join(*th, NULL);
+    With_mutex(&d->m) {
+        if (!d->joinable)
+            err = 1;
+        d->joinable = 0;
+    }
+    if (err)
+        caml_invalid_argument("Domain was already joined");
+    caml_enter_blocking_section();
+    err = pthread_join(th, NULL);
+    caml_leave_blocking_section();
     if (err)
         caml_invalid_argument("cannot join thread");
 
