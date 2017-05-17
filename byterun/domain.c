@@ -319,7 +319,7 @@ static void domain_finalize(value v)
         caml_gc_log("Detaching thread");
         pthread_detach(dt->th);
     }
-    free(dt);
+    caml_stat_free(dt);
     *dtp = NULL;
 }
 
@@ -345,9 +345,7 @@ CAMLprim value caml_domain_spawn(value callback)
   
   th_val = caml_alloc_custom(&domain_ops, sizeof(*dp), 0, 1);
   dp = Domainthreadptr_val(th_val);
-  *dp = d = malloc(sizeof(*d));
-  if (!d)
-      caml_raise_out_of_memory();
+  *dp = d = caml_stat_alloc(sizeof(*d));
   caml_plat_mutex_init(&d->m);
   d->joinable = 1;
 
@@ -390,11 +388,11 @@ CAMLprim value caml_ml_domain_join(value domain)
     Assert(d);
     th = d->th;
     caml_gc_log("Domain joining");
-    With_mutex(&d->m) {
-        if (!d->joinable)
-            err = 1;
-        d->joinable = 0;
-    }
+    caml_plat_lock(&d->m);
+    if (!d->joinable)
+        err = 1;
+    d->joinable = 0;
+    caml_plat_unlock(&d->m);
     if (err)
         caml_invalid_argument("Domain was already joined");
     caml_enter_blocking_section();
