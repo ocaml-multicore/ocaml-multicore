@@ -346,8 +346,8 @@ CAMLprim value caml_domain_spawn(value callback)
   th_val = caml_alloc_custom(&domain_ops, sizeof(*dp), 0, 1);
   dp = Domainthreadptr_val(th_val);
   *dp = d = caml_stat_alloc(sizeof(*d));
+  d->joinable = 0;
   caml_plat_mutex_init(&d->m);
-  d->joinable = 1;
 
   caml_plat_event_init(&p.ev);
 
@@ -357,6 +357,7 @@ CAMLprim value caml_domain_spawn(value callback)
   if (err) {
     caml_failwith("failed to create domain thread");
   }
+  d->joinable = 1;
 
   caml_enter_blocking_section();
   caml_plat_event_wait(&p.ev);
