@@ -301,8 +301,8 @@ static void* domain_thread_func(void* v) {
 
 struct domain_thread {
     caml_plat_mutex m;
-    pthread_t th;
-    int joinable;
+    pthread_t th; /* immutable once initialised */
+    int joinable; /* access protected by mutex m */
 };
 
 #define Domainthreadptr_val(val) ((struct domain_thread**)Data_custom_val(val))
