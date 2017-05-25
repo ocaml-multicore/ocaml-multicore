@@ -81,6 +81,7 @@ BYTECOMP=bytecomp/meta.cmo bytecomp/instruct.cmo bytecomp/bytegen.cmo \
 
 ASMCOMP=asmcomp/arch.cmo asmcomp/debuginfo.cmo \
   asmcomp/cmm.cmo asmcomp/printcmm.cmo \
+	asmcomp/afl_instrument.cmo \
   asmcomp/reg.cmo asmcomp/mach.cmo asmcomp/proc.cmo \
   asmcomp/clambda.cmo asmcomp/printclambda.cmo asmcomp/compilenv.cmo \
   asmcomp/closure.cmo asmcomp/strmatch.cmo asmcomp/cmmgen.cmo \
@@ -470,6 +471,7 @@ utils/config.ml: utils/config.mlp config/Makefile
 	    -e 's|%%MKMAINDLL%%|$(MKMAINDLL)|' \
 	    -e 's|%%HOST%%|$(HOST)|' \
 	    -e 's|%%TARGET%%|$(TARGET)|' \
+		  -e 's|%%AFL_INSTRUMENT%%|$(AFL_INSTRUMENT)|' \
 	    utils/config.mlp > utils/config.ml
 
 utils/domainstate.ml: utils/domainstate.ml.c byterun/caml/domain_state.tbl

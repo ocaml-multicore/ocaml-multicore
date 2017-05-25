@@ -479,6 +479,16 @@ let mk_strict_formats f =
   \      to detect and fix invalid formats.)"
 ;;
 
+let mk_afl_instrument f =
+  "-afl-instrument", Arg.Unit f, "Enable instrumentation for afl-fuzz"
+;;
+
+let mk_afl_inst_ratio f =
+  "-afl-inst-ratio", Arg.Int f,
+  "Configure percentage of branches instrumented\n\
+  \     (advanced, see afl-fuzz docs for AFL_INST_RATIO)"
+;;
+
 let mk__ f =
   "-", Arg.String f,
   "<file>  Treat <file> as a file name (even if it starts with `-')"
@@ -616,6 +626,8 @@ module type Optcomp_options = sig
   val _stack_slop : int -> unit
   val _shared : unit -> unit
   val _opaque :  unit -> unit
+  val _afl_instrument : unit -> unit
+  val _afl_inst_ratio : int -> unit
 end;;
 
 module type Opttop_options = sig
@@ -777,6 +789,8 @@ struct
   let list = [
     mk_a F._a;
     mk_absname F._absname;
+    mk_afl_instrument F._afl_instrument;
+    mk_afl_inst_ratio F._afl_inst_ratio;
     mk_annot F._annot;
     mk_binannot F._binannot;
     mk_c F._c;

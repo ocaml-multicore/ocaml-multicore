@@ -107,6 +107,7 @@
 /asmrun/minor_gc.c
 /asmrun/memory.c
 /asmrun/alloc.c
+/asmrun/afl.c
 /asmrun/array.c
 /asmrun/compare.c
 /asmrun/ints.c

@@ -146,6 +146,8 @@ module type Optcomp_options = sig
   val _stack_slop : int -> unit
   val _shared : unit -> unit
   val _opaque :  unit -> unit
+  val _afl_instrument : unit -> unit
+  val _afl_inst_ratio : int -> unit
 end;;
 
 module type Opttop_options = sig

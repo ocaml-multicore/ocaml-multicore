@@ -47,6 +47,7 @@ with_frame_pointers=false
 no_naked_pointers=false
 TOOLPREF=""
 with_cfi=true
+afl_instrument=false
 
 # Try to turn internationalization off, can cause config.guess to malfunction!
 unset LANG
@@ -154,6 +155,8 @@ while : ; do
         no_naked_pointers=true;;
     -no-cfi|--no-cfi)
         with_cfi=false;;
+		-afl-instrument)
+				afl_instrument=true;;
     *) if echo "$1" | grep -q -e '^--\?[a-zA-Z0-9-]\+='; then
          err "configure expects arguments of the form '-prefix /foo/bar'," \
              "not '-prefix=/foo/bar' (note the '=')."
@@ -1784,6 +1787,7 @@ echo "ASM_CFI_SUPPORTED=$asm_cfi_supported" >> Makefile
 echo "WITH_FRAME_POINTERS=$with_frame_pointers" >> Makefile
 echo "TARGET=$target" >> Makefile
 echo "HOST=$host" >> Makefile
+echo "AFL_INSTRUMENT=$afl_instrument" >> Makefile
 if [ "$ostype" = Cygwin ]; then
   echo "DIFF=diff -q --strip-trailing-cr" >>Makefile
 fi
@@ -1859,6 +1863,11 @@ else
   else
   inf "        profiling with gprof ..... not supported"
   fi
+	if test "$afl_instrument" = "true"; then
+	inf "        afl-fuzz always enabled .. yes"
+	else
+	inf "        afl-fuzz always enabled .. no"
+	fi
 fi
 
 if test "$with_debugger" = "ocamldebugger"; then

@@ -2258,9 +2258,15 @@ and transl_letrec bindings cont =
 (* Translate a function definition *)
 
 let transl_function f =
+  let cmm_body =
+    if !Clflags.afl_instrument then
+      Afl_instrument.instrument_function (transl f.body)
+    else
+      transl f.body
+  in
   Cfunction {fun_name = f.label;
              fun_args = List.map (fun id -> (id, typ_addr)) f.params;
-             fun_body = transl f.body;
+             fun_body = cmm_body;
              fun_fast = !Clflags.optimize_for_speed;
              fun_dbg  = f.dbg; }
 
@@ -2405,7 +2411,12 @@ let emit_all_constants cont =
 
 let compunit size ulam =
   let glob = Compilenv.make_symbol None in
-  let init_code = transl ulam in
+  let init_code =
+    if !Clflags.afl_instrument then
+      Afl_instrument.instrument_initialiser (transl ulam)
+    else
+      transl ulam
+  in
   let c1 = [Cfunction {fun_name = Compilenv.make_symbol (Some "entry");
                        fun_args = [];
                        fun_body = init_code; fun_fast = false;

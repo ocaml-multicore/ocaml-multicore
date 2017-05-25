@@ -141,6 +141,14 @@ let setter ppf f name options s =
    because they are not understood by some versions of OCaml. *)
 let can_discard = ref []
 
+let int_setter ppf name option s =
+  try
+    option := int_of_string s
+  with _ ->
+    Location.print_warning Location.none ppf
+      (Warnings.Bad_env_variable
+         ("OCAMLPARAM", Printf.sprintf "non-integer parameter for \"%s\"" name))
+
 let read_OCAMLPARAM ppf position =
   try
     let s = Sys.getenv "OCAMLPARAM" in
@@ -159,6 +167,8 @@ let read_OCAMLPARAM ppf position =
       | "g" -> set "g" [ Clflags.debug ] v
       | "p" -> set "p" [ Clflags.gprofile ] v
       | "bin-annot" -> set "bin-annot" [ Clflags.binary_annotations ] v
+      | "afl-instrument" -> set "afl-instrument" [ Clflags.afl_instrument ] v
+      | "afl-inst-ratio" -> int_setter ppf "afl-inst-ratio" afl_inst_ratio v
       | "annot" -> set "annot" [ Clflags.annotations ] v
       | "absname" -> set "absname" [ Location.absname ] v
       | "compat-32" -> set "compat-32" [ bytecode_compatible_32 ] v
