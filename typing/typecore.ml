@@ -908,7 +908,28 @@ let type_continuation_pat env expected_ty sp =
           Types.val_loc = loc; val_attributes = []; }
       in
         Some (id, desc)
-  | Ppat_extension ext ->
+  | Ppat_constraint ({ppat_desc=Ppat_var name; ppat_loc=lloc},
+                     sty) ->
+      let id = Ident.create name.txt in
+      let separate = true in
+      if separate then begin_def();
+      let cty, force = Typetexp.transl_simple_type_delayed env sty in
+      let ty = cty.ctyp_type in
+      let ty, expected_ty' =
+        if separate then begin
+          end_def();
+          generalize_structure ty;
+          instance env ty, instance env ty
+        end else ty, ty
+      in
+      unify_pat_types lloc env ty expected_ty;
+      pattern_force := force :: !pattern_force;
+      let desc =
+        { val_type = expected_ty; val_kind = Val_reg;
+          Types.val_loc = loc; val_attributes = [] }
+      in
+        Some (id, desc)
+ | Ppat_extension ext ->
       raise (Error_forward (Typetexp.error_of_extension ext))
   | _ -> raise (Error (loc, env, Invalid_continuation_pattern))
 
