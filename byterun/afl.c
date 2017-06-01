@@ -25,6 +25,7 @@ CAMLprim value caml_reset_afl_instrumentation(value unused)
 #include <string.h>
 #include "caml/misc.h"
 #include "caml/mlvalues.h"
+#include "caml/signals.h"
 
 static int afl_initialised = 0;
 
@@ -89,11 +90,12 @@ CAMLprim value caml_setup_afl(value unit)
        afl-tmin uses this mode. */
     return Val_unit;
   }
-  afl_write(0);
   afl_read();
 
   while (1) {
+    caml_enter_blocking_section();
     int child_pid = fork();
+    caml_leave_blocking_section();
     if (child_pid < 0) caml_fatal_error("afl-fuzz: could not fork");
     else if (child_pid == 0) {
       /* Run the program */
