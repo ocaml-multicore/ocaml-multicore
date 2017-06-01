@@ -3563,34 +3563,11 @@ and type_cases ?in_function env ty_arg ty_res ?conts partial_flag loc caselist =
   let pat_env_cont_list =
     match conts with
     | None -> List.map (fun (pat, env) -> (pat, env, None)) pat_env_list
-    | Some conts ->
-        let ty = newvar () in
-        (* remember original level *)
-        (* Create a fake abstract type declaration for effect type. *)
-        let level = get_current_level () in
-        let decl = {
-          type_params = [];
-          type_arity = 0;
-          type_kind = Type_abstract;
-          type_private = Public;
-          type_manifest = None;
-          type_variance = [];
-          type_newtype_level = Some (level, level);
-          type_loc = loc;
-          type_attributes = [];
-        }
-        in
-        Ident.set_current_time ty.level;
-        let name = Ctype.get_new_abstract_name "effect" in
-        let (id, new_env) = Env.enter_type name decl env in
-        Ctype.init_def(Ident.current_time());
-        let ty_eff = newgenty (Tconstr (Path.Pident id,[],ref Mnil)) in
-        let ty_cont = Predef.type_continuation ty_eff ty_res in
-        let pat_env_cont_listt = List.map2
+    | Some (conts, ty_cont) ->
+        List.map2
             (fun (pat, env) cont -> let (envv, _) = env in
               (pat, env, type_continuation_pat envv ty_cont cont))
-          pat_env_list conts in
-        pat_env_cont_listt
+          pat_env_list conts
   in
   let cases =
     List.map2
@@ -3681,9 +3658,9 @@ and type_effect_cases env ty_res loc caselist conts =
   Ctype.init_def(Ident.current_time());
   let ty_eff = newgenty (Tconstr (Path.Pident id,[],ref Mnil)) in
   let ty_arg = Predef.type_eff ty_eff in
-  (* let ty_cont = Predef.type_continuation ty_eff ty_res in *)
+  let ty_cont = Predef.type_continuation ty_eff ty_res in
   (* let conts = List.map (type_continuation_pat env ty_cont) conts in *)
-  let cases, _ = type_cases new_env ty_arg ty_res ~conts false loc caselist in
+  let cases, _ = type_cases new_env ty_arg ty_res ~conts:(conts, ty_cont) false loc caselist in
   end_def ();
   cases
 
