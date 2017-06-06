@@ -908,9 +908,8 @@ let type_continuation_pat env expected_ty sp =
           Types.val_loc = loc; val_attributes = []; }
       in
         Some (id, desc)
-  | Ppat_constraint ({ppat_desc=Ppat_var name; ppat_loc=lloc},
+  | Ppat_constraint ({ppat_desc=ddesc; ppat_loc=lloc},
                      sty) ->
-      let id = Ident.create name.txt in
       let separate = true in
       if separate then begin_def();
       let cty, force = Typetexp.transl_simple_type_delayed env sty in
@@ -924,12 +923,17 @@ let type_continuation_pat env expected_ty sp =
       in
       unify_pat_types lloc env ty expected_ty;
       pattern_force := force :: !pattern_force;
-      let desc =
-        { val_type = expected_ty; val_kind = Val_reg;
-          Types.val_loc = loc; val_attributes = [] }
-      in
+      (match ddesc with
+      | Ppat_any -> None
+      | Ppat_var name ->
+        let id = Ident.create name.txt in
+        let desc =
+          { val_type = expected_ty; val_kind = Val_reg;
+            Types.val_loc = loc; val_attributes = [] }
+        in
         Some (id, desc)
- | Ppat_extension ext ->
+      | _ -> raise (Error (loc, env, Invalid_continuation_pattern)))
+  | Ppat_extension ext ->
       raise (Error_forward (Typetexp.error_of_extension ext))
   | _ -> raise (Error (loc, env, Invalid_continuation_pattern))
 
@@ -3659,7 +3663,7 @@ and type_effect_cases env ty_res loc caselist conts =
   let ty_eff = newgenty (Tconstr (Path.Pident id,[],ref Mnil)) in
   let ty_arg = Predef.type_eff ty_eff in
   let ty_cont = Predef.type_continuation ty_eff ty_res in
-  (* let conts = List.map (type_continuation_pat env ty_cont) conts in *)
+  (* Format.printf "%a@" Printtyp.raw_type_expr ty_res; *)
   let cases, _ = type_cases new_env ty_arg ty_res ~conts:(conts, ty_cont) false loc caselist in
   end_def ();
   cases
