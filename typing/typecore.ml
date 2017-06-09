@@ -897,7 +897,7 @@ let unify_head_only loc env ty constr =
 (* Typing of patterns *)
 
 (* Simplified patterns for effect continuations *)
-let type_continuation_pat env expected_ty sp =
+let rec type_continuation_pat env expected_ty sp =
   let loc = sp.ppat_loc in
   match sp.ppat_desc with
   | Ppat_any -> None
@@ -908,8 +908,7 @@ let type_continuation_pat env expected_ty sp =
           Types.val_loc = loc; val_attributes = []; }
       in
         Some (id, desc)
-  | Ppat_constraint ({ppat_desc=ddesc; ppat_loc=lloc},
-                     sty) ->
+  | Ppat_constraint (sp, sty) ->
       let separate = true in
       if separate then begin_def();
       let cty, force = Typetexp.transl_simple_type_delayed env sty in
@@ -921,18 +920,9 @@ let type_continuation_pat env expected_ty sp =
           instance env ty, instance env ty
         end else ty, ty
       in
-      unify_pat_types lloc env ty expected_ty;
+      unify_pat_types sp.ppat_loc env ty expected_ty;
       pattern_force := force :: !pattern_force;
-      (match ddesc with
-      | Ppat_any -> None
-      | Ppat_var name ->
-        let id = Ident.create name.txt in
-        let desc =
-          { val_type = expected_ty; val_kind = Val_reg;
-            Types.val_loc = loc; val_attributes = [] }
-        in
-        Some (id, desc)
-      | _ -> raise (Error (loc, env, Invalid_continuation_pattern)))
+      type_continuation_pat env expected_ty sp
   | Ppat_extension ext ->
       raise (Error_forward (Typetexp.error_of_extension ext))
   | _ -> raise (Error (loc, env, Invalid_continuation_pattern))
