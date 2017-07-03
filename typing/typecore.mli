@@ -114,6 +114,7 @@ type error =
   | Exception_pattern_below_toplevel
   | Effect_pattern_below_toplevel
   | Invalid_continuation_pattern
+  | Invalid_continuation_constraint
 
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error

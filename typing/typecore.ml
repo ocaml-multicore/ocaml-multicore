@@ -69,6 +69,7 @@ type error =
   | Exception_pattern_below_toplevel
   | Effect_pattern_below_toplevel
   | Invalid_continuation_pattern
+  | Invalid_continuation_constraint
 
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error
@@ -897,17 +898,34 @@ let unify_head_only loc env ty constr =
 (* Typing of patterns *)
 
 (* Simplified patterns for effect continuations *)
+let type_continuation_for_var name var_ty loc =
+  let id = Ident.create name.txt in
+  let desc =
+    { val_type = var_ty; val_kind = Val_reg;
+      Types.val_loc = loc; val_attributes = []; }
+  in
+  Some (id, desc)
+
+let type_continuation_constraint env expected_ty core_ty =
+  let loc = core_ty.ptyp_loc in
+  match core_ty.ptyp_desc with
+  | Ptyp_constr ({txt=Longident.Lident "continuation"; _}, [tin; tout]) ->
+     let ttin = Typetexp.transl_simple_type env false tin in
+     let ttout = Typetexp.transl_simple_type env false tout in
+     Predef.type_continuation ttin.ctyp_type ttout.ctyp_type
+  | _ ->
+     raise (Error (loc, env, Invalid_continuation_constraint))
+
 let type_continuation_pat env expected_ty sp =
   let loc = sp.ppat_loc in
   match sp.ppat_desc with
   | Ppat_any -> None
   | Ppat_var name ->
-      let id = Ident.create name.txt in
-      let desc =
-        { val_type = expected_ty; val_kind = Val_reg;
-          Types.val_loc = loc; val_attributes = []; }
-      in
-        Some (id, desc)
+     type_continuation_for_var name expected_ty loc
+  | Ppat_constraint ({ppat_desc=Ppat_var name; _},
+                     core_ty) ->
+     let var_ty = type_continuation_constraint env expected_ty core_ty in
+     type_continuation_for_var name var_ty loc
   | Ppat_extension ext ->
       raise (Error_forward (Typetexp.error_of_extension ext))
   | _ -> raise (Error (loc, env, Invalid_continuation_pattern))
@@ -4079,7 +4097,10 @@ let report_error env ppf = function
         "@[Effect patterns must be at the top level of a match case.@]"
   | Invalid_continuation_pattern ->
       fprintf ppf
-        "@[Invalid continuation pattern: only variables and _ are allowed .@]"
+              "@[Invalid continuation pattern: only variables and _ are allowed .@]"
+  | Invalid_continuation_constraint ->
+      fprintf ppf
+        "@[Invalid continuation constraint: continuation constraint must be of type 'a constraint .@]"
 
 let report_error env ppf err =
   wrap_printing_env env (fun () -> report_error env ppf err)
