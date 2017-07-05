@@ -24,6 +24,7 @@ open Lambda
 type error =
     Illegal_letrec_pat
   | Illegal_letrec_expr
+  | Illegal_xabort
   | Free_super_var
   | Unknown_builtin_primitive of string
 
@@ -146,6 +147,9 @@ let primitives_table = create_hashtable 57 [
   "%setfield0", Psetfield(0, true, Mutable);
   "%makeblock", Pmakeblock(0, Immutable);
   "%makemutable", Pmakeblock(0, Mutable);
+  "%xbegin", Pxbegin;
+  "%xend", Pxend;
+  "%xabort", Pxabort;
   "%raise", Praise Raise_regular;
   "%reraise", Praise Raise_reraise;
   "%raise_notrace", Praise Raise_notrace;
@@ -208,6 +212,7 @@ let primitives_table = create_hashtable 57 [
   "%obj_set_field", Parraysetu Pgenarray;
   "%obj_is_int", Pisint;
   "%lazy_force", Plazyforce;
+  "%pause", Ppause;
   "%nativeint_of_int", Pbintofint Pnativeint;
   "%nativeint_to_int", Pintofbint Pnativeint;
   "%nativeint_neg", Pnegbint Pnativeint;
@@ -334,7 +339,7 @@ let find_primitive loc prim_name =
     | "%loc_LINE" -> Ploc Loc_LINE
     | "%loc_POS" -> Ploc Loc_POS
     | "%loc_MODULE" -> Ploc Loc_MODULE
-    | "%perform" -> Pperform loc 
+    | "%perform" -> Pperform loc
     | "%resume"-> Presume loc
     | name -> Hashtbl.find primitives_table name
 
@@ -723,6 +728,12 @@ and transl_exp0 e =
         | (Ploc _, _) -> assert false
         | (_, _) ->
             begin match (prim, argl) with
+            | (Pxabort, [Lconst (Const_base (Const_int i))]) ->
+                if i < 0 || i >= 128 then
+                  raise(Error(e.exp_loc, Illegal_xabort))
+                else wrap0 (Lprim(prim, argl))
+            | (Pxabort, _) ->
+                raise(Error(e.exp_loc, Illegal_xabort))
             | (Plazyforce, [a]) ->
                 wrap (Matching.inline_lazy_force a e.exp_loc)
             | (Plazyforce, _) -> assert false
@@ -1228,7 +1239,7 @@ and transl_handler e body val_caselist exn_caselist eff_caselist =
        (fn, arg)
     | body ->
        let param = Ident.create "param" in
-       (Lfunction (Curried, [param], body), 
+       (Lfunction (Curried, [param], body),
         Lconst(Const_base(Const_int 0)))
   in
     Lprim(Presume e.exp_loc, [Lprim(prim_alloc_stack, [val_fun; exn_fun; eff_fun]);
@@ -1261,6 +1272,9 @@ let report_error ppf = function
   | Free_super_var ->
       fprintf ppf
         "Ancestor names can only be used to select inherited methods"
+  | Illegal_xabort ->
+      fprintf ppf
+        "Argument of xbort must be an immediate int between 0 and 127."
   | Unknown_builtin_primitive prim_name ->
     fprintf ppf  "Unknown builtin primitive \"%s\"" prim_name
 

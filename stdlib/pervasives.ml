@@ -34,7 +34,6 @@ exception Exit
 
 (* Effects *)
 
-
 type ('a, 'b) stack
 external take_cont : ('a, 'b) continuation -> ('a, 'b) stack = "caml_bvar_take"
 external resume : ('a, 'b) stack -> ('c -> 'a) -> 'c -> 'b = "%resume"
@@ -489,6 +488,23 @@ external format_of_string :
 let (^^) (Format (fmt1, str1)) (Format (fmt2, str2)) =
   Format (CamlinternalFormatBasics.concat_fmt fmt1 fmt2,
           str1 ^ "%," ^ str2)
+
+(* TM *)
+
+external xbegin : (int -> exn) -> unit = "%xbegin"
+exception Aborted of int
+let fallback x = raise (Aborted x)
+
+external xend : unit -> unit = "%xend"
+external xabort : int -> 'a = "%xabort"
+
+let atomically opt pes =
+  try
+    xbegin fallback;
+    let res = opt () in
+    xend ();
+    res
+  with Aborted s -> pes s
 
 (* Miscellaneous *)
 

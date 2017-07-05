@@ -84,6 +84,10 @@ let operation = function
   | Cintoffloat -> "intoffloat"
   | Ccmpf c -> Printf.sprintf "%sf" (comparison c)
   | Craise (k, d) -> Lambda.raise_kind k ^ Debuginfo.to_string d
+  | Cxbegin -> "xbegin"
+  | Cxend -> "xend"
+  | Cpause -> "pause"
+  | Cxabort i -> Printf.sprintf "xabort %d" i
   | Ccheckbound d -> "checkbound" ^ Debuginfo.to_string d
 
 let rec expr ppf = function

@@ -43,6 +43,11 @@ exception Exit
 (** The [Exit] exception is not raised by any library function.  It is
     provided for use in your programs. *)
 
+(** {6 Transactional Memory} *)
+
+external xabort : int -> 'a = "%xabort"
+
+val atomically : (unit -> 'a) -> (int -> 'a) -> 'a
 
 (** {6 Effects} *)
 

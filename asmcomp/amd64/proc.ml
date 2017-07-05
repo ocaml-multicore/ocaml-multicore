@@ -271,6 +271,7 @@ let destroyed_at_oper = function
         -> [| rax |]
   | Iswitch(_, _) -> [| rax; rdx |]
   | Iop Iloadmut -> [| rax; rdx |]
+  | Iop(Ispecific Ixbegin) | Iop (Ispecific (Ixabort _)) -> all_phys_regs
   | _ ->
     if fp then
 (* prevent any use of the frame pointer ! *)

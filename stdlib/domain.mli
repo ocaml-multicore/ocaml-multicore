@@ -2,6 +2,8 @@ val spawn : (unit -> unit) -> unit
 
 val self : unit -> int
 
+external pause : unit -> unit = "%pause"
+
 module BVar : sig
   (* A bvar is a reference, either empty or full,
      supporting atomic "take" and "put" operations.

@@ -50,8 +50,13 @@ type primitive =
   | Pperform of Location.t
   | Presume of Location.t
   | Preperform
+  | Ppause
   (* External call *)
   | Pccall of Primitive.description
+  (* TM *)
+  | Pxbegin
+  | Pxend
+  | Pxabort
   (* Exceptions *)
   | Praise of raise_kind
   (* Boolean operations *)

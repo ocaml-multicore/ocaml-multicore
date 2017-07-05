@@ -608,6 +608,12 @@ let rec comp_expr env exp sz cont =
           comp_expr env exp1 sz (Kstrictbranchif lbl ::
             comp_expr env exp2 sz cont1)
       end
+  | Lprim(Pxbegin, [arg]) ->
+      comp_expr env arg sz (Kraise Raise_regular :: discard_dead_code cont)
+  | Lprim(Pxend, [arg]) ->
+      cont
+  | Lprim(Pxabort, [arg]) ->
+      cont
   | Lprim(Praise k, [arg]) ->
       comp_expr env arg sz (Kraise k :: discard_dead_code cont)
   | Lprim(Paddint, [arg; Lconst(Const_base(Const_int n))])
@@ -644,6 +650,7 @@ let rec comp_expr env exp sz cont =
           (Kresumeterm(sz + nargs) :: discard_dead_code cont)
       else
         comp_args env args sz (Kresume :: cont)
+  | Lprim(Ppause, args) -> cont
   | Lprim(Preperform, args) ->
       let nargs = List.length args - 1 in
       assert (nargs = 1);

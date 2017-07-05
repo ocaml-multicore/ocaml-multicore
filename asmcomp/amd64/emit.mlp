@@ -654,6 +654,28 @@ let emit_instr fallthrough i =
         `	sqrtsd	{emit_reg i.arg.(0)}, {emit_reg i.res.(0)}\n`
     | Lop(Ispecific(Ifloatsqrtf addr)) ->
         `	sqrtsd	{emit_addressing addr i.arg 0}, {emit_reg i.res.(0)}\n`
+    | Lop(Ispecific Ixbegin) ->
+        let txn_test = new_label () in
+        let txn_begin = new_label () in
+        `	movq	{emit_reg i.arg.(0)}, %rdx\n`;
+        `	movq	$0x00000000ffffffff, %rax\n`;
+        `	xbegin	{emit_label txn_test}\n`;
+        `{emit_label txn_test}:\n`;
+        `	cmp	$0xffffffff, %eax\n`;
+        `	je	{emit_label txn_begin}\n`;
+        (* Abort *)
+        `	salq	%rax\n`;
+        `	addq	$1,%rax\n`;
+        `	call	*(%rdx)\n`;
+        record_frame i.live i.dbg;
+        (* XBEGIN_SUCCESS *)
+        `{emit_label txn_begin}:\n`;
+    | Lop(Ispecific Ixend) ->
+        `	xend\n`
+    | Lop(Ispecific (Ixabort i)) ->
+        `	xabort	${emit_int i}\n`
+    | Lop(Ispecific Ipause) ->
+        `	pause\n`
     | Lreloadretaddr ->
         ()
     | Lreturn ->
