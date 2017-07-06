@@ -4100,7 +4100,7 @@ let report_error env ppf = function
               "@[Invalid continuation pattern: only variables and _ are allowed .@]"
   | Invalid_continuation_constraint ->
       fprintf ppf
-        "@[Invalid continuation constraint: continuation constraint must be of type 'a constraint .@]"
+        "@[Invalid continuation constraint: continuation constraint must be of type ('in, 'out) constraint .@]"
 
 let report_error env ppf err =
   wrap_printing_env env (fun () -> report_error env ppf err)
