@@ -22,6 +22,7 @@ static __thread int stack_is_saved = 0;
 
 static void dirty_stack(value stack)
 {
+  uintnat status;
   /* There is no write barrier (caml_modify) on writes to the stack,
      so a just-run fiber's stack may contain untracked shared->young
      pointers or pointers to unmarked objects. We add the stack to a
@@ -31,10 +32,13 @@ static void dirty_stack(value stack)
            Stack_dirty_domain(stack) == FIBER_SCANNING ||
            Stack_dirty_domain(stack) == caml_domain_self());
     if (Stack_dirty_domain(stack) != caml_domain_self ()) {
-      do {
-        while (Stack_dirty_domain(stack) == FIBER_SCANNING);
-      } while (!__sync_bool_compare_and_swap(&Stack_dirty_domain(stack),
-                                             FIBER_CLEAN, caml_domain_self()));
+      SPIN_WAIT {
+        status = atomic_load_acq((atomic_uintnat*)&Stack_dirty_domain(stack));
+        if(status == (uintnat)FIBER_SCANNING) continue;
+        if(__sync_bool_compare_and_swap(&Stack_dirty_domain(stack),
+                                        FIBER_CLEAN, caml_domain_self()))
+          break;
+      }
       Ref_table_add(&Caml_state->remembered_set->fiber_ref, (value*)stack);
     }
   }
@@ -405,7 +409,8 @@ void caml_clean_stack_domain(value stack, struct domain* domain)
 {
   Assert(Tag_val(stack) == Stack_tag);
   if (Stack_dirty_domain(stack) == domain) {
-    Stack_dirty_domain(stack) = FIBER_CLEAN;
+    atomic_store_rel((atomic_uintnat*)&Stack_dirty_domain(stack),
+                     (uintnat)FIBER_CLEAN);
   }
 }
 

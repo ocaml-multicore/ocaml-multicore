@@ -13,3 +13,6 @@
 BASEDIR=../..
 include $(BASEDIR)/makefiles/Makefile.several
 include $(BASEDIR)/makefiles/Makefile.common
+COMPFLAGS=-I $(OTOPDIR)/otherlibs/unix
+CMA_FILES=unix.cma
+CMXA_FILES=unix.cmxa
