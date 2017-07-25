@@ -109,7 +109,9 @@ let std_include_dir () =
 let shared = ref false (* -shared *)
 let dlcode = ref true (* not -nodynlink *)
 
-let runtime_variant = ref "";;      (* -runtime-variant *)
+let runtime_variant = ref "";;         (* -runtime-variant *)
+
+let read_barrier = ref "";;            (* -read-barrier *)
 
 let keep_docs = ref false              (* -keep-docs *)
 let keep_locs = ref false              (* -keep-locs *)

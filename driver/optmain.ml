@@ -115,6 +115,7 @@ module Options = Main_args.Make_optcomp_options (struct
   let _principal = set principal
   let _rectypes = set recursive_types
   let _runtime_variant s = runtime_variant := s
+  let _read_barrier s = read_barrier := s
   let _safe_string = clear unsafe_string
   let _short_paths = clear real_paths
   let _strict_sequence = set strict_sequence

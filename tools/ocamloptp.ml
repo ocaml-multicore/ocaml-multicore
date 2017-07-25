@@ -84,6 +84,7 @@ module Options = Main_args.Make_optcomp_options (struct
   let _principal = option "-principal"
   let _rectypes = option "-rectypes"
   let _runtime_variant s = option_with_arg "-runtime-variant" s
+  let _read_barrier s = option_with_arg "-read-barrier" s
   let _S = option "-S"
   let _safe_string = option "-safe-string"
   let _stack_slop n = option_with_int "-stack-slop" n
