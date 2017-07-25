@@ -516,31 +516,7 @@ let emit_instr fallthrough i =
             `	movsd	{emit_addressing addr i.arg 0}, {emit_reg dest}\n`
         end
     | Lop Iloadmut ->
-        if !Clflags.read_barrier = "n" then
           `	movq	({emit_reg i.arg.(0)},{emit_reg i.arg.(1)},8), {emit_reg i.res.(0)}\n`
-        else begin
-          `	movq	({emit_reg i.arg.(0)},{emit_reg i.arg.(1)},8), {emit_reg i.res.(0)}\n`;
-          `	movq	{emit_reg i.res.(0)}, %rax\n`;
-          `	xorq	%r15, %rax\n`;
-          let s = Nativeint.(shift_left one Domainstate.minor_heap_align_bits) in
-          `	subq	${emit_nativeint s}, %rax\n`;
-          let bits = Domainstate.minor_heap_align_bits + Domainstate.minor_heap_sel_bits in
-          let minor_val_bitmask = Nativeint.(logor one (shift_left minus_one bits)) in
-          `	movabsq	${emit_nativeint minor_val_bitmask}, %rdx\n`;
-          `	testq	%rdx, %rax\n`;
-          let lbl_call_read_barrier = new_label () in
-          let lbl_return = new_label () in
-          let lbl_frame = record_frame_label i.live Debuginfo.none in
-          `	jz	{emit_label lbl_call_read_barrier}\n`;
-          `{emit_label lbl_return}:\n`;
-          read_barrier_call_sites :=
-            { rb_base = i.arg.(0);
-              rb_off = i.arg.(1);
-              rb_dest = i.res.(0);
-              rb_lbl = lbl_call_read_barrier;
-              rb_return_lbl = lbl_return;
-              rb_frame = lbl_frame } :: !read_barrier_call_sites
-        end
     | Lop(Istore(chunk, addr, _)) ->
         begin match chunk with
           | Word ->
