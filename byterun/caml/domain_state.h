@@ -24,11 +24,30 @@ typedef struct {
 #undef DOMAIN_STATE
 } caml_domain_state;
 
-/* Statically assert that each field of domain_state is at the right index */
-#define DOMAIN_STATE(idx, type, name) \
-    CAML_STATIC_ASSERT(offsetof(caml_domain_state, name) == idx * 8);
+enum {
+  Domain_state_num_fields =
+#define DOMAIN_STATE(idx, type, name) + 1
 #include "domain_state.tbl"
 #undef DOMAIN_STATE
+
+#ifndef NATIVE_CODE
+  ,
+  Byte_domain_state_num_fields =
+#define BYTE_DOMAIN_STATE(type, name) + 1
+#include "byte_domain_state.tbl"
+#undef BYTE_DOMAIN_STATE
+#endif
+};
+
+/* Check that the structure was laid out without padding,
+   since the runtime assumes this in computing offsets */
+CAML_STATIC_ASSERT(
+  sizeof(caml_domain_state) == 
+   (Domain_state_num_fields
+#ifndef NATIVE_CODE
+     + Byte_domain_state_num_fields
+#endif
+   ) * 8);
 
 #ifdef __APPLE__
   CAMLextern pthread_key_t caml_domain_state_key;

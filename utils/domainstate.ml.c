@@ -8,7 +8,16 @@ type t =
 #include "domain_state.tbl"
 #undef DOMAIN_STATE
 
-let idx_of_field = function
-#define DOMAIN_STATE(idx, type, name) | Domain_##name -> idx
+let idx_of_field =
+  let curr = 0 in
+#define DOMAIN_STATE(idx, type, name) \
+  let idx__##name = curr in \
+  let curr = curr + 1 in
+#include "domain_state.tbl"
+#undef DOMAIN_STATE
+  let _ = curr in
+  function
+#define DOMAIN_STATE(idx, type, name) \
+  | Domain_##name -> idx__##name
 #include "domain_state.tbl"
 #undef DOMAIN_STATE
