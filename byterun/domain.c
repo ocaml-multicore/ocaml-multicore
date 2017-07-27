@@ -19,6 +19,7 @@
 #include "caml/callback.h"
 #include "caml/minor_gc.h"
 #include "caml/eventlog.h"
+#include "caml/gc_ctrl.h"
 
 /* Since we support both heavyweight OS threads and lightweight
    userspace threads, the word "thread" is ambiguous. This file deals
@@ -342,7 +343,7 @@ CAMLprim value caml_domain_spawn(value callback)
   struct domain_thread **dp;
   struct domain_thread *d;
   int err;
-  
+
   th_val = caml_alloc_custom(&domain_ops, sizeof(*dp), 0, 1);
   dp = Domainthreadptr_val(th_val);
   *dp = d = caml_stat_alloc(sizeof(*d));
@@ -678,7 +679,7 @@ static void stw_phase () {
     }
     caml_scan_global_roots(&caml_verify_root, ver);
     caml_verify_heap(ver);
-  
+
     /* synchronise, ensuring no domain continues before all domains verify */
     caml_plat_lock(&verify_lock);
     unsigned gen = verify_gen;
@@ -735,6 +736,42 @@ void caml_sample_gc_stats(struct gc_stats* buf)
     buf->major_heap.large_words += h->large_words;
     buf->major_heap.large_max_words += h->large_max_words;
   }
+}
+
+void caml_print_stats () {
+  struct gc_stats s;
+  int i;
+#ifdef COLLECT_STATS
+  struct detailed_stats ds;
+  dom_internal* d;
+#endif
+
+  caml_gc_stat(Val_unit);
+  caml_sample_gc_stats(&s);
+  fprintf(stderr,"**** GC stats ****\n");
+  fprintf(stderr, "Minor words:\t\t%llu\n", s.minor_words);
+  fprintf(stderr, "Promoted words:\t\t%llu\n", s.promoted_words);
+  fprintf(stderr, "Major words:\t\t%llu\n", s.major_words);
+  fprintf(stderr, "Minor collections:\t%llu\n", s.minor_collections);
+  fprintf(stderr, "Major collections:\t%llu\n", (uint64) Caml_state->stat_major_collections);
+
+#ifdef COLLECT_STATS
+  memset(&ds,0,sizeof(struct detailed_stats));
+  for (i=0; i<Max_domains; i++) {
+    d = &all_domains[i];
+    if (d->state.state) {
+      ds.allocations += d->state.state->allocations;
+      ds.stores += d->state.state->stores;
+      ds.mutable_loads += d->state.state->mutable_loads;
+      ds.immutable_loads += d->state.state->immutable_loads;
+    }
+  }
+  fprintf(stderr, "**** Other stats ****\n");
+  fprintf(stderr, "Allocations:\t\t%llu\n", ds.allocations);
+  fprintf(stderr, "Stores:\t\t\t%llu\n", ds.stores);
+  fprintf(stderr, "Mutable loads:\t\t%llu\n", ds.mutable_loads);
+  fprintf(stderr, "Immutable loads:\t%llu\n", ds.immutable_loads);
+#endif
 }
 
 
@@ -845,6 +882,8 @@ CAMLexport void caml_domain_rpc(struct domain* domain,
   }
   caml_ev_resume();
 }
+
+
 
 /* Generate functions for accessing domain state variables in debug mode */
 #ifdef DEBUG

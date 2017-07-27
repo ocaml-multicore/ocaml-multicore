@@ -42,3 +42,9 @@ DOMAIN_STATE(32, asize_t, minor_heap_size)
 
 DOMAIN_STATE(33, struct caml_heap_state*, shared_heap)
 DOMAIN_STATE(34, int, id)
+
+/* Detailed stats */
+DOMAIN_STATE(35, uint64, mutable_loads)
+DOMAIN_STATE(36, uint64, immutable_loads)
+DOMAIN_STATE(37, uint64, allocations)
+DOMAIN_STATE(38, uint64, stores)

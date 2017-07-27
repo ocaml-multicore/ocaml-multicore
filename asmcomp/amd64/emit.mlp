@@ -495,6 +495,12 @@ let emit_instr fallthrough i =
         stack_offset := !stack_offset + n
     | Lop(Iload(chunk, addr)) ->
         let dest = i.res.(0) in
+        if Config.stats then begin
+          `	push	%r15\n`;
+          `	{locate_domain_state()}, %r15\n`;
+          `	incq	{domain_field Domainstate.Domain_immutable_loads}(%r15)\n`;
+          `	pop	%r15\n`;
+        end;
         begin match chunk with
           | Word ->
               `	movq	{emit_addressing addr i.arg 0}, {emit_reg dest}\n`
@@ -516,6 +522,11 @@ let emit_instr fallthrough i =
             `	movsd	{emit_addressing addr i.arg 0}, {emit_reg dest}\n`
         end
     | Lop Iloadmut ->
+        if Config.stats then begin
+          `	movq	%r15, %rax\n`;
+          `	{locate_domain_state()}, %rax\n`;
+          `	incq  {domain_field Domainstate.Domain_mutable_loads}(%rax)\n`;
+        end;
         `	movq	({emit_reg i.arg.(0)},{emit_reg i.arg.(1)},8), {emit_reg i.res.(0)}\n`;
         `	movq	{emit_reg i.res.(0)}, %rax\n`;
         `	xorq	%r15, %rax\n`;
@@ -537,7 +548,13 @@ let emit_instr fallthrough i =
             rb_lbl = lbl_call_read_barrier;
             rb_return_lbl = lbl_return;
             rb_frame = lbl_frame } :: !read_barrier_call_sites
-    | Lop(Istore(chunk, addr, _)) ->
+    | Lop(Istore(chunk, addr, is_assignment)) ->
+        if Config.stats && is_assignment then begin
+          `	push	%r15\n`;
+          `	{locate_domain_state()}, %r15\n`;
+          `	incq	{domain_field Domainstate.Domain_stores}(%r15)\n`;
+          `	pop	%r15\n`;
+        end;
         begin match chunk with
           | Word ->
             `	movq	{emit_reg i.arg.(0)}, {emit_addressing addr i.arg 1}\n`
@@ -554,6 +571,9 @@ let emit_instr fallthrough i =
             `	movsd	{emit_reg i.arg.(0)}, {emit_addressing addr i.arg 1}\n`
         end
     | Lop(Ialloc n) ->
+        `	movq	%r15, %rax\n`;
+        `	{locate_domain_state ()}, %rax\n`;
+        `	incq {domain_field Domainstate.Domain_allocations}(%rax)\n`;
         if !fastcode_flag then begin
           let lbl_redo = new_label() in
           `{emit_label lbl_redo}:	movq	%r15, %rax\n`;
