@@ -54,7 +54,8 @@ struct detailed_stats {
   uint64 allocations;
   uint64 mutable_loads;
   uint64 immutable_loads;
-  uint64 stores;
+  uint64 mutable_stores;
+  uint64 immutable_stores;
 };
 #endif
 

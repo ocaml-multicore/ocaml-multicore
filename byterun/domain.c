@@ -744,6 +744,7 @@ void caml_print_stats () {
 #ifdef COLLECT_STATS
   struct detailed_stats ds;
   dom_internal* d;
+  uint64 total;
 #endif
 
   caml_gc_stat(Val_unit);
@@ -761,16 +762,24 @@ void caml_print_stats () {
     d = &all_domains[i];
     if (d->state.state) {
       ds.allocations += d->state.state->allocations;
-      ds.stores += d->state.state->stores;
+      ds.mutable_stores += d->state.state->mutable_stores;
+      ds.immutable_stores += d->state.state->immutable_stores;
       ds.mutable_loads += d->state.state->mutable_loads;
       ds.immutable_loads += d->state.state->immutable_loads;
     }
   }
-  fprintf(stderr, "**** Other stats ****\n");
+  fprintf(stderr, "\n**** Other stats ****\n");
   fprintf(stderr, "Allocations:\t\t%llu\n", ds.allocations);
-  fprintf(stderr, "Stores:\t\t\t%llu\n", ds.stores);
-  fprintf(stderr, "Mutable loads:\t\t%llu\n", ds.mutable_loads);
-  fprintf(stderr, "Immutable loads:\t%llu\n", ds.immutable_loads);
+
+  total = ds.mutable_loads + ds.immutable_loads;
+  fprintf(stderr, "\nLoads:\t\t\t%llu\n", total);
+  fprintf(stderr, "Mutable:\t\t%llu (%lf%%)\n", ds.mutable_loads, (double)ds.mutable_loads * 100.0 / total);
+  fprintf(stderr, "Immutable:\t\t%llu (%lf%%)\n", ds.immutable_loads, (double)ds.immutable_loads * 100.0 / total);
+
+  total = ds.mutable_stores + ds.immutable_stores;
+  fprintf(stderr, "\nStores:\t\t\t%llu\n", total);
+  fprintf(stderr, "Mutable:\t\t%llu (%.2lf%%)\n", ds.mutable_stores, (double)ds.mutable_stores * 100.0 / total);
+  fprintf(stderr, "Immutable:\t\t%llu (%.2lf%%)\n", ds.immutable_stores, (double)ds.immutable_stores * 100.0 / total);
 #endif
 }
 

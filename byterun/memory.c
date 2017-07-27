@@ -52,7 +52,7 @@ CAMLexport void caml_modify_field (value obj, int field, value val)
 
   write_barrier(obj, field, Op_val(obj)[field], val);
 #ifdef COLLECT_STATS
-  Caml_state->stores++;
+  Caml_state->mutable_stores++;
 #endif
   Op_val(obj)[field] = val;
 }

@@ -552,7 +552,7 @@ let emit_instr fallthrough i =
         if Config.stats && is_assignment then begin
           `	push	%r15\n`;
           `	{locate_domain_state()}, %r15\n`;
-          `	incq	{domain_field Domainstate.Domain_stores}(%r15)\n`;
+          `	incq	{domain_field Domainstate.Domain_immutable_stores}(%r15)\n`;
           `	pop	%r15\n`;
         end;
         begin match chunk with
