@@ -82,7 +82,7 @@ color_t caml_allocation_color (void *hp);
 #ifdef COLLECT_STATS
 #define Count_alloc dom_st->allocations++
 #else
-#define Count_alloc while(0)
+#define Count_alloc
 #endif
 
 #define Alloc_small(result, wosize, tag, GC) do{CAMLassert ((wosize) >= 1); \
