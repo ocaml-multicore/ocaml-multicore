@@ -743,7 +743,7 @@ void caml_print_stats () {
   int i;
 #ifdef COLLECT_STATS
   struct detailed_stats ds;
-  dom_internal* d;
+  caml_domain_state* st;
   uint64 total;
 #endif
 
@@ -759,13 +759,26 @@ void caml_print_stats () {
 #ifdef COLLECT_STATS
   memset(&ds,0,sizeof(struct detailed_stats));
   for (i=0; i<Max_domains; i++) {
-    d = &all_domains[i];
-    if (d->state.state) {
-      ds.allocations += d->state.state->allocations;
-      ds.mutable_stores += d->state.state->mutable_stores;
-      ds.immutable_stores += d->state.state->immutable_stores;
-      ds.mutable_loads += d->state.state->mutable_loads;
-      ds.immutable_loads += d->state.state->immutable_loads;
+    st = all_domains[i].state.state;
+    if (st) {
+      ds.allocations += st->allocations;
+
+      ds.mutable_stores += st->mutable_stores;
+      ds.immutable_stores += st->immutable_stores;
+
+      ds.mutable_loads += st->mutable_loads;
+      ds.immutable_loads += st->immutable_loads;
+
+      ds.extcall_noalloc += st->extcall_noalloc;
+      ds.extcall_alloc += st->extcall_alloc;
+      ds.extcall_alloc_stackargs += st->extcall_alloc_stackargs;
+
+      ds.tailcall_imm += st->tailcall_imm;
+      ds.tailcall_ind += st->tailcall_ind;
+      ds.call_imm += st->call_imm;
+      ds.call_ind += st->call_ind;
+
+      ds.stackoverflow_checks += st->stackoverflow_checks;
     }
   }
   fprintf(stderr, "\n**** Other stats ****\n");
@@ -773,13 +786,29 @@ void caml_print_stats () {
 
   total = ds.mutable_loads + ds.immutable_loads;
   fprintf(stderr, "\nLoads:\t\t\t%llu\n", total);
-  fprintf(stderr, "Mutable:\t\t%llu (%lf%%)\n", ds.mutable_loads, (double)ds.mutable_loads * 100.0 / total);
-  fprintf(stderr, "Immutable:\t\t%llu (%lf%%)\n", ds.immutable_loads, (double)ds.immutable_loads * 100.0 / total);
+  fprintf(stderr, "Mutable:\t\t%llu (%.2lf%%)\n", ds.mutable_loads, (double)ds.mutable_loads * 100.0 / total);
+  fprintf(stderr, "Immutable:\t\t%llu (%.2lf%%)\n", ds.immutable_loads, (double)ds.immutable_loads * 100.0 / total);
 
   total = ds.mutable_stores + ds.immutable_stores;
   fprintf(stderr, "\nStores:\t\t\t%llu\n", total);
   fprintf(stderr, "Mutable:\t\t%llu (%.2lf%%)\n", ds.mutable_stores, (double)ds.mutable_stores * 100.0 / total);
   fprintf(stderr, "Immutable:\t\t%llu (%.2lf%%)\n", ds.immutable_stores, (double)ds.immutable_stores * 100.0 / total);
+
+  total = ds.extcall_noalloc + ds.extcall_alloc + ds.extcall_alloc_stackargs;
+  fprintf(stderr, "\nExternal calls:\t\t%llu\n", total);
+  fprintf(stderr, "NoAlloc:\t\t%llu (%.2lf%%)\n", ds.extcall_noalloc, (double)ds.extcall_noalloc * 100.0 / total);
+  fprintf(stderr, "Alloc:\t\t\t%llu (%.2lf%%)\n", ds.extcall_alloc, (double)ds.extcall_alloc * 100.0 / total);
+  fprintf(stderr, "Alloc + stack args:\t%llu (%.2lf%%)\n", ds.extcall_alloc_stackargs, (double)ds.extcall_alloc_stackargs * 100.0 / total);
+
+  total = ds.tailcall_imm + ds.tailcall_ind + ds.call_imm + ds.call_ind;
+  fprintf(stderr, "\nCalls:\t\t\t%llu\n", total);
+  fprintf(stderr, "Imm tail:\t\t%llu (%.2lf%%)\n", ds.tailcall_imm, (double)ds.tailcall_imm * 100.0 / total);
+  fprintf(stderr, "Ind tail:\t\t%llu (%.2lf%%)\n", ds.tailcall_ind, (double)ds.tailcall_ind * 100.0 / total);
+  fprintf(stderr, "Imm non-tail:\t\t%llu (%.2lf%%)\n", ds.call_imm, (double)ds.call_imm * 100.0 / total);
+  fprintf(stderr, "Ind non-tail:\t\t%llu (%.2lf%%)\n", ds.call_ind, (double)ds.call_ind * 100.0 / total);
+
+  fprintf(stderr, "\nStackoverflow checks:\t%llu (%.2lf%%)\n", ds.stackoverflow_checks, (double)ds.stackoverflow_checks * 100.0 / total);
+
 #endif
 }
 
@@ -896,7 +925,7 @@ CAMLexport void caml_domain_rpc(struct domain* domain,
 
 /* Generate functions for accessing domain state variables in debug mode */
 #ifdef DEBUG
-  #define DOMAIN_STATE(idx, type, name) \
+  #define DOMAIN_STATE(type, name) \
     type get_##name() { return Caml_state->name; }
   #include "caml/domain_state.tbl"
   #undef DOMAIN_STATE

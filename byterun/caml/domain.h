@@ -52,10 +52,23 @@ struct gc_stats {
 #ifdef COLLECT_STATS
 struct detailed_stats {
   uint64 allocations;
+
   uint64 mutable_loads;
   uint64 immutable_loads;
+
   uint64 mutable_stores;
   uint64 immutable_stores;
+
+  uint64 extcall_noalloc;
+  uint64 extcall_alloc;
+  uint64 extcall_alloc_stackargs;
+
+  uint64 tailcall_imm;
+  uint64 tailcall_ind;
+  uint64 call_imm;
+  uint64 call_ind;
+
+  uint64 stackoverflow_checks;
 };
 #endif
 
