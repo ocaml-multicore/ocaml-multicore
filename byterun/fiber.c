@@ -9,8 +9,10 @@
 #include "caml/platform.h"
 #include "caml/fix_code.h"
 #include "caml/minor_gc.h"
+#include "caml/major_gc.h"
 #include "caml/shared_heap.h"
 #include "caml/memory.h"
+#include "caml/params.h"
 #ifdef NATIVE_CODE
 #include "stack.h"
 #include "frame_descriptors.h"
@@ -20,16 +22,29 @@ static __thread int stack_is_saved = 0;
 
 static void dirty_stack(value stack)
 {
+  uintnat status;
   /* There is no write barrier (caml_modify) on writes to the stack,
      so a just-run fiber's stack may contain untracked shared->young
      pointers or pointers to unmarked objects. We add the stack to a
      ref table so that the GC can find these pointers. */
   if (!Is_minor(stack)) {
-    Assert(Stack_dirty_domain(stack) == 0 ||
+    Assert(Stack_dirty_domain(stack) == FIBER_CLEAN ||
+           Stack_dirty_domain(stack) == FIBER_SCANNING ||
            Stack_dirty_domain(stack) == caml_domain_self());
-    if (Stack_dirty_domain(stack) == 0) {
-      Stack_dirty_domain(stack) = caml_domain_self();
-      Ref_table_add(&CAML_DOMAIN_STATE->remembered_set->fiber_ref, (value*)stack);
+    if (Stack_dirty_domain(stack) != caml_domain_self ()) {
+      SPIN_WAIT {
+        status = atomic_load_acq((atomic_uintnat*)&Stack_dirty_domain(stack));
+        if(status == (uintnat)FIBER_SCANNING) continue;
+        if(__sync_bool_compare_and_swap(&Stack_dirty_domain(stack),
+                                        FIBER_CLEAN, caml_domain_self())) {
+          caml_darken(0, stack, 0);
+          /* XXX KC: Optimize. Since we cannot distinguish Grey from
+           * Black, we might scan the stacks multiple times. */
+          caml_scan_stack(&caml_darken, 0, stack);
+          break;
+        }
+      }
+      Ref_table_add(&Caml_state->remembered_set->fiber_ref, (value*)stack);
     }
   }
 }
@@ -38,19 +53,21 @@ static void dirty_stack(value stack)
 
 static value save_stack ()
 {
-  struct caml_domain_state* domain_state = CAML_DOMAIN_STATE;
+  caml_domain_state* domain_state = Caml_state;
   Assert (Hd_val(domain_state->current_stack) &&
           (Is_minor(domain_state->current_stack) || !is_garbage(domain_state->current_stack)));
   value old_stack = domain_state->current_stack;
-  dirty_stack(old_stack);
   return old_stack;
 }
 
 static void load_stack (value stack) {
-  struct caml_domain_state* domain_state = CAML_DOMAIN_STATE;
-  domain_state->stack_threshold = Stack_base(stack) + Stack_threshold / sizeof(value);
+  caml_domain_state* domain_state = Caml_state;
+  domain_state->stack_threshold = Stack_base(stack)
+    + caml_params->profile_slop_wsz + Stack_threshold / sizeof(value);
   domain_state->stack_high = Stack_high(stack);
   domain_state->current_stack = stack;
+  dirty_stack(stack);
+  /* XXX KC: Optimize this. Record minor cycle count. */
   if (domain_state->promoted_in_current_cycle)
     caml_scan_stack (forward_pointer, 0, stack);
 }
@@ -58,14 +75,16 @@ static void load_stack (value stack) {
 extern void caml_fiber_exn_handler (value) Noreturn;
 extern void caml_fiber_val_handler (value) Noreturn;
 
+#define INIT_FIBER_USED (3 + sizeof(struct caml_context) / sizeof(value))
+
 value caml_alloc_stack (value hval, value hexn, value heff) {
   CAMLparam3(hval, hexn, heff);
   CAMLlocal1(stack);
   char* sp;
   struct caml_context *ctxt;
 
-  stack = caml_alloc(caml_fiber_wsz, Stack_tag);
-  Stack_dirty_domain(stack) = 0;
+  stack = caml_alloc(caml_fiber_wsz + caml_params->profile_slop_wsz, Stack_tag);
+  Stack_dirty_domain(stack) = FIBER_CLEAN;
   Stack_handle_value(stack) = hval;
   Stack_handle_exception(stack) = hexn;
   Stack_handle_effect(stack) = heff;
@@ -75,9 +94,9 @@ value caml_alloc_stack (value hval, value hexn, value heff) {
   /* Fiber exception handler that returns to parent */
   sp -= sizeof(value);
   *(value**)sp = (value*)caml_fiber_exn_handler;
-  /* No previous exception frame */
+  /* No previous exception frame. Infact, this is the debugger slot. Initialize it. */
   sp -= sizeof(value);
-  *(uintnat*)sp = 0;
+  Stack_debugger_slot(stack) = Stack_debugger_slot_offset_to_parent_slot(stack);
   /* Value handler that returns to parent */
   sp -= sizeof(value);
   *(value**)sp = (value*)caml_fiber_val_handler;
@@ -87,7 +106,7 @@ value caml_alloc_stack (value hval, value hexn, value heff) {
   ctxt = (struct caml_context*)sp;
   ctxt->exception_ptr_offset = 2 * sizeof(value);
   ctxt->gc_regs = NULL;
-  Stack_sp(stack) = -(3 + sizeof(struct caml_context) / sizeof(value));
+  Stack_sp(stack) = -INIT_FIBER_USED;
 
   caml_gc_log ("Allocate stack=0x%lx of %lu words", stack, caml_fiber_wsz);
 
@@ -202,13 +221,14 @@ void caml_maybe_expand_stack (value* gc_regs)
   CAMLparamN(gc_regs, 5);
   uintnat stack_available;
 
-  Assert(Tag_val(CAML_DOMAIN_STATE->current_stack) == Stack_tag);
+  Assert(Tag_val(Caml_state->current_stack) == Stack_tag);
 
-  stack_available = Wosize_val(CAML_DOMAIN_STATE->current_stack)
+  stack_available = Wosize_val(Caml_state->current_stack)
                   /* Stack_sp() is a -ve value in words */
-                  + Stack_sp (CAML_DOMAIN_STATE->current_stack)
+                  + Stack_sp (Caml_state->current_stack)
                   - Stack_ctx_words;
-  if (stack_available < 2 * Stack_threshold / sizeof(value))
+  if (stack_available < caml_params->profile_slop_wsz
+                      + 2 * Stack_threshold / sizeof(value))
     caml_realloc_stack (0, 0, 0);
 
   CAMLreturn0;
@@ -217,9 +237,20 @@ void caml_maybe_expand_stack (value* gc_regs)
 void caml_update_gc_regs_slot (value* gc_regs)
 {
   struct caml_context *ctxt;
-  ctxt = (struct caml_context*) (Stack_high(CAML_DOMAIN_STATE->current_stack)
-                                 + Stack_sp(CAML_DOMAIN_STATE->current_stack));
+  ctxt = (struct caml_context*) (Stack_high(Caml_state->current_stack)
+                                 + Stack_sp(Caml_state->current_stack));
   ctxt->gc_regs = gc_regs;
+}
+
+/* Returns 1 if the target stack is a fresh stack to which control is switching
+ * to. */
+int caml_switch_stack(value stk)
+{
+  save_stack();
+  load_stack(stk);
+  if (Stack_sp(stk) == -INIT_FIBER_USED)
+    return 1;
+  return 0;
 }
 
 #else /* End NATIVE_CODE, begin BYTE_CODE */
@@ -228,31 +259,36 @@ caml_root caml_global_data;
 
 static value save_stack ()
 {
-  struct caml_domain_state* domain_state = CAML_DOMAIN_STATE;
+  caml_domain_state* domain_state = Caml_state;
   Assert (Hd_val(domain_state->current_stack) &&
           (Is_minor(domain_state->current_stack) || !is_garbage(domain_state->current_stack)));
   value old_stack = domain_state->current_stack;
   Stack_sp(old_stack) = domain_state->extern_sp - domain_state->stack_high;
-  Assert(domain_state->stack_threshold == Stack_base(old_stack) + Stack_threshold / sizeof(value));
+  Assert(domain_state->stack_threshold ==
+         Stack_base(old_stack) + caml_params->profile_slop_wsz + Stack_threshold / sizeof(value));
   Assert(domain_state->stack_high == Stack_high(old_stack));
   Assert(domain_state->extern_sp == domain_state->stack_high + Stack_sp(old_stack));
-  dirty_stack(old_stack);
   return old_stack;
 }
 
-static void load_stack(value newstack)
+static void load_stack(value new_stack)
 {
-  Assert (Hd_val(newstack) &&
-          (Is_minor(newstack) || !is_garbage(newstack)));
-  Assert(Tag_val(newstack) == Stack_tag);
-  struct caml_domain_state* domain_state = CAML_DOMAIN_STATE;
-  Assert(Stack_dirty_domain(newstack) == 0 || Stack_dirty_domain(newstack) == caml_domain_self());
-  domain_state->stack_threshold = Stack_base(newstack) + Stack_threshold / sizeof(value);
-  domain_state->stack_high = Stack_high(newstack);
-  domain_state->extern_sp = domain_state->stack_high + Stack_sp(newstack);
-  domain_state->current_stack = newstack;
+  Assert (Hd_val(new_stack) &&
+          (Is_minor(new_stack) || !is_garbage(new_stack)));
+  Assert(Tag_val(new_stack) == Stack_tag);
+  caml_domain_state* domain_state = Caml_state;
+  Assert(Stack_dirty_domain(new_stack) == FIBER_CLEAN
+         || Stack_dirty_domain(new_stack) == FIBER_SCANNING
+         || Stack_dirty_domain(new_stack) == caml_domain_self());
+  domain_state->stack_threshold =
+    Stack_base(new_stack) + caml_params->profile_slop_wsz + Stack_threshold / sizeof(value);
+  domain_state->stack_high = Stack_high(new_stack);
+  domain_state->extern_sp = domain_state->stack_high + Stack_sp(new_stack);
+  domain_state->current_stack = new_stack;
+  dirty_stack(new_stack);
+  /* XXX KC: Optimize this. Record minor cycle count. */
   if (domain_state->promoted_in_current_cycle)
-    caml_scan_stack (forward_pointer, 0, newstack);
+    caml_scan_stack (forward_pointer, 0, new_stack);
 }
 
 CAMLprim value caml_alloc_stack(value hval, value hexn, value heff)
@@ -270,7 +306,7 @@ CAMLprim value caml_alloc_stack(value hval, value hexn, value heff)
   sp[0] = Val_long(1); /* trapsp ?? */
 
   Stack_sp(stack) = sp - high;
-  Stack_dirty_domain(stack) = 0;
+  Stack_dirty_domain(stack) = FIBER_CLEAN;
   Stack_handle_value(stack) = hval;
   Stack_handle_exception(stack) = hexn;
   Stack_handle_effect(stack) = heff;
@@ -289,7 +325,7 @@ CAMLprim value caml_alloc_stack(value hval, value hexn, value heff)
 */
 value caml_find_performer(value stack)
 {
-  struct caml_domain_state* domain_state = CAML_DOMAIN_STATE;
+  caml_domain_state* domain_state = Caml_state;
   value parent = domain_state->current_stack;
   Assert (Hd_val(parent) && (Is_minor(parent) || !is_garbage(parent)));
   do {
@@ -304,14 +340,15 @@ value caml_find_performer(value stack)
 CAMLprim value caml_ensure_stack_capacity(value required_space)
 {
   asize_t req = Long_val(required_space);
-  if (CAML_DOMAIN_STATE->extern_sp - req < Stack_base(CAML_DOMAIN_STATE->current_stack))
+  if (Caml_state->extern_sp - req < Stack_base(Caml_state->current_stack))
     caml_realloc_stack(req, 0, 0);
   return Val_unit;
 }
 
 void caml_change_max_stack_size (uintnat new_max_size)
 {
-  asize_t size = CAML_DOMAIN_STATE->stack_high - CAML_DOMAIN_STATE->extern_sp
+  asize_t size = Caml_state->stack_high - Caml_state->extern_sp
+                 + caml_params->profile_slop_wsz
                  + Stack_threshold / sizeof (value);
 
   if (new_max_size < size) new_max_size = size;
@@ -345,6 +382,13 @@ void caml_scan_stack(scanning_action f, void* fdata, value stack)
   }
 }
 
+value caml_switch_stack(value stk)
+{
+  value s = save_stack();
+  load_stack(stk);
+  return s;
+}
+
 #endif /* end BYTE_CODE */
 
 void caml_save_stack_gc()
@@ -361,7 +405,7 @@ int caml_stack_is_saved ()
 
 void caml_restore_stack_gc()
 {
-  struct caml_domain_state* domain_state = CAML_DOMAIN_STATE;
+  caml_domain_state* domain_state = Caml_state;
   Assert(stack_is_saved);
   Assert(Tag_val(domain_state->current_stack) == Stack_tag);
   load_stack(domain_state->current_stack);
@@ -372,7 +416,8 @@ void caml_clean_stack_domain(value stack, struct domain* domain)
 {
   Assert(Tag_val(stack) == Stack_tag);
   if (Stack_dirty_domain(stack) == domain) {
-    Stack_dirty_domain(stack) = 0;
+    atomic_store_rel((atomic_uintnat*)&Stack_dirty_domain(stack),
+                     (uintnat)FIBER_CLEAN);
   }
 }
 
@@ -385,11 +430,26 @@ void caml_scan_dirty_stack_domain(scanning_action f, void* fdata, value stack,
   }
 }
 
+void caml_darken_stack(value stack)
+{
+  Assert(Tag_val(stack) == Stack_tag);
+  if (Stack_dirty_domain(stack) == FIBER_CLEAN &&
+      __sync_bool_compare_and_swap (&Stack_dirty_domain(stack),
+                                    FIBER_CLEAN, FIBER_SCANNING)) {
+    caml_darken(0, stack, 0);
+    /* XXX KC: Optimize. Since we cannot distinguish Grey from Black,
+     * we might scan the stacks multiple times. */
+    caml_scan_stack(&caml_darken, 0, stack);
+    atomic_store_rel((atomic_uintnat*)&Stack_dirty_domain(stack),
+                    (uintnat)FIBER_CLEAN);
+  }
+}
+
 void caml_clean_stack(value stack)
 {
   Assert(Tag_val(stack) == Stack_tag);
   if (Stack_dirty_domain(stack) == caml_domain_self()) {
-    Stack_dirty_domain(stack) = 0;
+    Stack_dirty_domain(stack) = FIBER_CLEAN;
   }
 }
 
@@ -401,7 +461,7 @@ void caml_clean_stack(value stack)
 
 int caml_on_current_stack(value* p)
 {
-  return Stack_base(CAML_DOMAIN_STATE->current_stack) <= p && p < CAML_DOMAIN_STATE->stack_high;
+  return Stack_base(Caml_state->current_stack) <= p && p < Caml_state->stack_high;
 }
 
 void caml_realloc_stack(asize_t required_space, value* saved_vals, int nsaved)
@@ -433,9 +493,13 @@ void caml_realloc_stack(asize_t required_space, value* saved_vals, int nsaved)
   Stack_handle_exception(new_stack) = Stack_handle_exception(old_stack);
   Stack_handle_effect(new_stack) = Stack_handle_effect(old_stack);
   Stack_parent(new_stack) = Stack_parent(old_stack);
+#ifdef NATIVE_CODE
+  Stack_debugger_slot(new_stack) =
+    Stack_debugger_slot_offset_to_parent_slot(new_stack);
+#endif
 
-  Stack_dirty_domain(new_stack) = 0;
-  if (Stack_dirty_domain(old_stack)) {
+  Stack_dirty_domain(new_stack) = FIBER_CLEAN;
+  if (Stack_dirty_domain(old_stack) != FIBER_CLEAN) {
     Assert (Stack_dirty_domain(old_stack) == caml_domain_self());
     dirty_stack(new_stack);
   }
@@ -444,7 +508,7 @@ void caml_realloc_stack(asize_t required_space, value* saved_vals, int nsaved)
 
   /* Reset old stack */
   Stack_sp(old_stack) = 0;
-  Stack_dirty_domain(old_stack) = 0;
+  Stack_dirty_domain(old_stack) = FIBER_CLEAN;
   Stack_handle_value(old_stack) = Val_long(0);
   Stack_handle_exception(old_stack) = Val_long(0);
   Stack_handle_effect(old_stack) = Val_long(0);
@@ -463,7 +527,7 @@ value caml_alloc_main_stack (uintnat init_size)
      which cannot trigger it */
   stack = caml_alloc_shr(init_size, Stack_tag);
   Stack_sp(stack) = 0;
-  Stack_dirty_domain(stack) = 0;
+  Stack_dirty_domain(stack) = FIBER_CLEAN;
   Stack_handle_value(stack) = Val_long(0);
   Stack_handle_exception(stack) = Val_long(0);
   Stack_handle_effect(stack) = Val_long(0);
@@ -475,16 +539,9 @@ value caml_alloc_main_stack (uintnat init_size)
 void caml_init_main_stack ()
 {
   value stack;
-
-  stack = caml_alloc_main_stack (Stack_size/sizeof(value));
+  stack = caml_alloc_main_stack (caml_params->profile_slop_wsz +
+                            Stack_size/sizeof(value));
   load_stack(stack);
-}
-
-value caml_switch_stack(value stk)
-{
-  value s = save_stack();
-  load_stack(stk);
-  return s;
 }
 
 CAMLprim value caml_clone_continuation (value cont)
@@ -528,8 +585,8 @@ CAMLprim value caml_clone_continuation (value cont)
 
 void caml_restore_stack()
 {
-  Assert(Tag_val(CAML_DOMAIN_STATE->current_stack) == Stack_tag);
-  load_stack(CAML_DOMAIN_STATE->current_stack);
+  Assert(Tag_val(Caml_state->current_stack) == Stack_tag);
+  load_stack(Caml_state->current_stack);
 }
 
 value caml_reverse_fiber_stack (value stack)

@@ -80,7 +80,7 @@ void caml_plat_wait(caml_plat_cond* cond)
   check_err("wait", pthread_cond_wait(&cond->cond, cond->mutex));
 }
 
-void caml_plat_signal(caml_plat_cond* cond)
+void caml_plat_broadcast(caml_plat_cond* cond)
 {
   caml_plat_assert_locked(cond->mutex);
   check_err("signal", pthread_cond_broadcast(&cond->cond));
@@ -167,18 +167,29 @@ void* caml_mem_map(uintnat size, uintnat alignment, int reserve_only)
   return (void*)aligned_start;
 }
 
-static void map_fixed(void* mem, uintnat size, int prot)
+static void* map_fixed(void* mem, uintnat size, int prot)
 {
   if (mmap((void*)mem, size, prot,
            MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
            -1, 0) == MAP_FAILED) {
-    caml_raise_out_of_memory();
+    return 0;
+  } else {
+    return mem;
   }
 }
 
-void caml_mem_commit(void* mem, uintnat size)
+void* caml_mem_commit(void* mem, uintnat size)
 {
-  map_fixed(mem, size, PROT_READ | PROT_WRITE);
+  void* p = map_fixed(mem, size, PROT_READ | PROT_WRITE);
+  /*
+    FIXME: On Linux, with overcommit, you stand a better
+    chance of getting good error messages in OOM conditions
+    by forcing the kernel to allocate actual memory by touching
+    all the pages. Not sure whether this is a good idea, though.
+
+      if (p) memset(p, 0, size);
+  */
+  return p;
 }
 
 void caml_mem_decommit(void* mem, uintnat size)

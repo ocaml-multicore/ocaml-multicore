@@ -189,17 +189,17 @@ bits  63    10 9     8 7   0
    Since the minor heap is allocated in one aligned block, this can be tested
    via bitmasking. */
 #define Is_young(val) \
-  ((((uintnat)(val) ^ (uintnat)CAML_DOMAIN_STATE) & Young_val_bitmask) == 0)
+  ((((uintnat)(val) ^ (uintnat)Caml_state) & Young_val_bitmask) == 0)
 
 /* Is_minor(val) is true iff val is a block in any domain's minor heap. */
 #define Is_minor(val) \
-  ((((uintnat)(val) ^ (uintnat)CAML_DOMAIN_STATE) & Minor_val_bitmask) == 0)
+  ((((uintnat)(val) ^ (uintnat)Caml_state) & Minor_val_bitmask) == 0)
 
 /* Is_foreign(val) is true iff val is a block in another domain's minor heap.
    Since all minor heaps lie in one aligned block, this can be tested via
    more bitmasking. */
 #define Is_foreign(val) \
-  (((((uintnat)(val) ^ (uintnat)CAML_DOMAIN_STATE) - (1 << Minor_heap_align_bits)) & \
+  (((((uintnat)(val) ^ (uintnat)Caml_state) - (1 << Minor_heap_align_bits)) & \
     Minor_val_bitmask) == 0)
 
 
@@ -218,7 +218,11 @@ static inline void caml_read_field(value x, int i, value* ret) {
   *ret = Is_foreign(v) ? caml_read_barrier(x, i) : v;
 }
 
-#define Field_imm(x, i) (Op_val(x)[i] + 0)
+static inline value Field_imm(value x, int i) {
+  value v = (Op_val(x)[i] + 0);
+  Assert (!Is_foreign(v));
+  return v;
+}
 
 #define Int_field(x, i) Int_val(Op_val(x)[i])
 #define Long_field(x, i) Long_val(Op_val(x)[i])

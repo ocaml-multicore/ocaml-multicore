@@ -169,7 +169,7 @@ typedef struct { pthread_cond_t cond; caml_plat_mutex* mutex; } caml_plat_cond;
 #define CAML_PLAT_COND_INITIALIZER(m) { PTHREAD_COND_INITIALIZER, m }
 void caml_plat_cond_init(caml_plat_cond*, caml_plat_mutex*);
 void caml_plat_wait(caml_plat_cond*);
-void caml_plat_signal(caml_plat_cond*);
+void caml_plat_broadcast(caml_plat_cond*);
 void caml_plat_cond_free(caml_plat_cond*);
 
 struct caml__mutex_unwind {
@@ -250,7 +250,7 @@ INLINE void* shared_stack_pop(shared_stack* stk) {
 
 uintnat caml_mem_round_up_pages(uintnat size);
 void* caml_mem_map(uintnat size, uintnat alignment, int reserve_only);
-void caml_mem_commit(void* mem, uintnat size);
+void* caml_mem_commit(void* mem, uintnat size);
 void caml_mem_decommit(void* mem, uintnat size);
 void caml_mem_unmap(void* mem, uintnat size);
 

@@ -11,6 +11,9 @@
 #include "caml/fiber.h"
 #include "caml/addrmap.h"
 #include "caml/platform.h"
+#include "caml/params.h"
+#include "caml/eventlog.h"
+#include <string.h>
 
 /*
   FIXME: This is far too small. A better policy would be to match
@@ -18,8 +21,6 @@
   leaving it small for now means the overflow code gets more testing.
 */
 #define MARK_STACK_SIZE (1 << 14)
-
-typedef enum { Phase_idle, Phase_marking } gc_phase_t;
 
 uintnat caml_percent_free = Percent_free_def;
 
@@ -36,8 +37,8 @@ static uintnat default_slice_budget() {
      (still assuming steady state).
 
      Proportion of G consumed since the previous slice:
-                 PH = CAML_DOMAIN_STATE->allocated_words / G
-                    = CAML_DOMAIN_STATE->allocated_words * 3 * (100 + caml_percent_free)
+                 PH = Caml_state->allocated_words / G
+                    = Caml_state->allocated_words * 3 * (100 + caml_percent_free)
                       / (2 * caml_stat_heap_size * caml_percent_free)
      Proportion of extra-heap resources consumed since the previous slice:
                  PE = caml_extra_heap_resources
@@ -54,9 +55,9 @@ static uintnat default_slice_budget() {
      Amount of work to do for this slice:
                  W = P * TW
   */
-  uintnat heap_size = caml_heap_size(caml_domain_self()->shared_heap);
+  uintnat heap_size = caml_heap_size(Caml_state->shared_heap);
   double heap_words = (double)Wsize_bsize(heap_size);
-  double p = (double) CAML_DOMAIN_STATE->allocated_words * 3.0 * (100 + caml_percent_free)
+  double p = (double) Caml_state->allocated_words * 3.0 * (100 + caml_percent_free)
       / heap_words / caml_percent_free / 2.0;
 
   double total_work =
@@ -70,11 +71,9 @@ static uintnat default_slice_budget() {
 static void mark_stack_prune();
 static struct pool* find_pool_to_rescan();
 
-#define Is_markable(v) (Is_block(v) && !Is_minor(v))
-
 static void mark_stack_push(value v) {
   Assert(Is_block(v));
-  struct caml_domain_state* domain_state = CAML_DOMAIN_STATE;
+  caml_domain_state* domain_state = Caml_state;
   if (domain_state->mark_stack_count >= MARK_STACK_SIZE)
     mark_stack_prune();
   domain_state->mark_stack[domain_state->mark_stack_count++] = v;
@@ -86,7 +85,7 @@ static void mark_stack_push_act(void* state, value v, value* ignored) {
 }
 
 static int mark_stack_pop(value* ret) {
-  struct caml_domain_state* domain_state = CAML_DOMAIN_STATE;
+  caml_domain_state* domain_state = Caml_state;
   if (domain_state->mark_stack_count == 0) {
     struct pool* p = find_pool_to_rescan();
     if (p) {
@@ -126,14 +125,14 @@ static intnat mark(value initial, intnat budget) {
     Assert(Is_markable(v));
     Assert(v == mark_normalise(v));
 
-    CAML_DOMAIN_STATE->stat_blocks_marked++;
+    Caml_state->stat_blocks_marked++;
     /* mark the current object */
     hd_v = Hd_val(v);
     // caml_gc_log ("mark: v=0x%lx hd=0x%lx tag=%d sz=%lu",
     //             v, hd_v, Tag_val(v), Wosize_val(v));
     if (Tag_hd (hd_v) == Stack_tag) {
       // caml_gc_log ("mark: stack=%p", (value*)v);
-      caml_scan_stack(&caml_darken, 0, v);
+      caml_darken_stack(v);
     } else if (Tag_hd (hd_v) < No_scan_tag) {
       int i;
       for (i = 0; i < Wosize_hd(hd_v); i++) {
@@ -177,25 +176,147 @@ void caml_darken(void* state, value v, value* ignored) {
   if (caml_mark_object(v)) mark_stack_push(v);
 }
 
+
+/* This variable is only written with the world stopped,
+   so it need not be atomic */
+static uintnat major_cycles_completed = 0;
+
+/* double-buffered sampled GC stats.
+   At the end of GC cycle N, domains update sampled_gc_stats[N&1],
+   but requests to Gc.stats() read from sampled_gc_stats[!(N&1)].
+   That way, Gc.stats() returns the statistics atomically sampled
+   at the end of the most recently completed GC cycle */
+static struct gc_stats sampled_gc_stats[2][Max_domains];
+
+void caml_accum_heap_stats(struct heap_stats* acc, const struct heap_stats* h)
+{
+  acc->pool_words += h->pool_words;
+  if (acc->pool_max_words < h->pool_max_words)
+    acc->pool_max_words = h->pool_max_words;
+  acc->pool_live_words += h->pool_live_words;
+  acc->pool_live_blocks += h->pool_live_blocks;
+  acc->pool_frag_words += h->pool_frag_words;
+  acc->large_words += h->large_words;
+  if (acc->large_max_words < h->large_max_words)
+    acc->large_max_words = h->large_max_words;
+  acc->large_blocks += h->large_blocks;
+}
+
+void caml_sample_gc_stats(struct gc_stats* buf)
+{
+  memset(buf, 0, sizeof(*buf));
+  /* we read from the buffers that are not currently being
+     written to. that way, we pick up the numbers written
+     at the end of the most recently completed GC cycle */
+  int phase = ! (major_cycles_completed & 1);
+  int i;
+  intnat pool_max = 0, large_max = 0;
+  for (i=0; i<Max_domains; i++) {
+    struct gc_stats* s = &sampled_gc_stats[phase][i];
+    struct heap_stats* h = &s->major_heap;
+    buf->minor_words += s->minor_words;
+    buf->promoted_words += s->promoted_words;
+    buf->major_words += s->major_words;
+    buf->minor_collections += s->minor_collections;
+    /* The instantaneous maximum heap size cannot be computed
+       from per-domain statistics, and would be very expensive
+       to maintain directly. Here, we just sum the per-domain
+       maxima, which is statistically dubious.
+
+       FIXME: maybe maintain coarse global maxima? */
+    pool_max += h->pool_max_words;
+    large_max += h->large_max_words;
+    caml_accum_heap_stats(&buf->major_heap, h);
+  }
+  buf->major_heap.pool_max_words = pool_max;
+  buf->major_heap.large_max_words = large_max;
+}
+
+static void major_cycle_callback(struct domain* domain, void* unused)
+{
+  Assert(domain == caml_domain_self());
+
+  caml_gc_log("In STW callback");
+
+  /* finish GC */
+  caml_ev_start_gc();
+  while (caml_sweep(domain->state->shared_heap, 10) <= 0);
+  caml_empty_minor_heap();
+  caml_finish_marking();
+  caml_ev_msg("Finished major gc");
+  caml_ev_end_gc();
+
+  {
+    /* update GC stats */
+    int stats_phase = major_cycles_completed & 1;
+    struct gc_stats* stats = &sampled_gc_stats[stats_phase][domain->state->id];
+    stats->minor_words = domain->state->stat_minor_words;
+    stats->promoted_words = domain->state->stat_promoted_words;
+    stats->major_words = domain->state->stat_major_words;
+    stats->minor_collections = domain->state->stat_minor_collections;
+    caml_sample_heap_stats(domain->state->shared_heap, &stats->major_heap);
+  }
+
+  {
+    /* Cycle major heap */
+    // FIXME: delete caml_cycle_heap_stw and have per-domain copies of the data?
+    barrier_status b = caml_global_barrier_begin();
+    if (caml_global_barrier_is_final(b)) {
+      caml_cycle_heap_stw();
+      /* FIXME: Maybe logging outside the barrier would be better */
+      caml_gc_log("GC cycle %lu completed (heap cycled)", (long unsigned int)major_cycles_completed);
+      major_cycles_completed++;
+    }
+    // should interrupts be processed here or not?
+    // depends on whether marking above may need interrupts
+    caml_global_barrier_end(b);
+  }
+
+  /* If the heap is to be verified, do it before the domains continue
+     running OCaml code. */
+  if (caml_params->verify_heap) {
+    struct heap_verify_state* ver = caml_verify_begin();
+    caml_do_local_roots(&caml_verify_root, ver, caml_domain_self());
+    caml_scan_stack(&caml_verify_root, ver, Caml_state->current_stack);
+    caml_scan_global_roots(&caml_verify_root, ver);
+    caml_verify_heap(ver);
+    caml_gc_log("Heap verified");
+    caml_global_barrier();
+  }
+
+  domain->state->stat_major_collections++;
+  caml_cycle_heap(domain->state->shared_heap);
+
+  /* Mark roots for new cycle */
+  caml_do_local_roots(&caml_darken, 0, caml_domain_self());
+  caml_scan_stack(&caml_darken, 0, Caml_state->current_stack);
+  caml_scan_global_roots(&caml_darken, 0);
+}
+
+void caml_finish_major_cycle() {
+  uintnat cycle = major_cycles_completed;
+  /* To handle the case where multiple domains try to finish the major
+     cycle simultaneously, we loop until the current cycle has ended,
+     ignoring whether caml_try_run_on_all_domains succeeds. */
+  while (cycle == major_cycles_completed) {
+    caml_try_run_on_all_domains(&major_cycle_callback, 0);
+  }
+}
+
 intnat caml_major_collection_slice(intnat howmuch)
 {
   intnat computed_work = howmuch ? howmuch : default_slice_budget();
   intnat budget = computed_work;
   intnat sweep_work, mark_work;
-  uintnat blocks_marked_before = CAML_DOMAIN_STATE->stat_blocks_marked;
+  uintnat blocks_marked_before = Caml_state->stat_blocks_marked;
   value v;
 
   caml_save_stack_gc();
+  caml_ev_start_gc();
 
   sweep_work = budget;
-  budget = caml_sweep(caml_domain_self()->shared_heap, budget);
+  budget = caml_sweep(Caml_state->shared_heap, budget);
   sweep_work -= budget;
-
-  if (CAML_DOMAIN_STATE->gc_phase == Phase_idle) {
-    caml_do_local_roots(&caml_darken, 0, caml_domain_self());
-    caml_scan_global_roots(&caml_darken, 0);
-    CAML_DOMAIN_STATE->gc_phase = Phase_marking;
-  }
 
   mark_work = budget;
   if (mark_stack_pop(&v))
@@ -203,15 +324,16 @@ intnat caml_major_collection_slice(intnat howmuch)
   mark_work -= budget;
 
   caml_gc_log("Major slice: %lu alloc, %ld work, %ld sweep, %ld mark (%lu blocks)",
-              (unsigned long)CAML_DOMAIN_STATE->allocated_words,
+              (unsigned long)Caml_state->allocated_words,
               (long)computed_work, (long)sweep_work, (long)mark_work,
-              (unsigned long)(CAML_DOMAIN_STATE->stat_blocks_marked - blocks_marked_before));
-  CAML_DOMAIN_STATE->stat_major_words += CAML_DOMAIN_STATE->allocated_words;
-  CAML_DOMAIN_STATE->allocated_words = 0;
+              (unsigned long)(Caml_state->stat_blocks_marked - blocks_marked_before));
+  Caml_state->stat_major_words += Caml_state->allocated_words;
+  Caml_state->allocated_words = 0;
+  caml_ev_end_gc();
   caml_restore_stack_gc();
 
   if (budget > 0) {
-    caml_trigger_stw_gc();
+    caml_finish_major_cycle();
   }
 
 
@@ -223,46 +345,30 @@ void caml_empty_mark_stack () {
 
   while (mark_stack_pop(&v)) mark(v, 10000000);
 
-  if (CAML_DOMAIN_STATE->stat_blocks_marked)
+  if (Caml_state->stat_blocks_marked)
     caml_gc_log("Finished marking major heap. Marked %u blocks",
-                (unsigned)CAML_DOMAIN_STATE->stat_blocks_marked);
-  CAML_DOMAIN_STATE->stat_blocks_marked = 0;
+                (unsigned)Caml_state->stat_blocks_marked);
+  Caml_state->stat_blocks_marked = 0;
 }
 
 void caml_finish_marking () {
   //caml_gc_log ("caml_finish_marking(0)");
   caml_save_stack_gc();
-  caml_do_local_roots(&caml_darken, 0, caml_domain_self());
-  caml_scan_global_roots(&caml_darken, 0);
   caml_empty_mark_stack();
-  CAML_DOMAIN_STATE->stat_major_words += CAML_DOMAIN_STATE->allocated_words;
-  CAML_DOMAIN_STATE->allocated_words = 0;
+  Caml_state->stat_major_words += Caml_state->allocated_words;
+  Caml_state->allocated_words = 0;
   caml_restore_stack_gc();
   //caml_gc_log ("caml_finish_marking(1)");
 }
 
 void caml_empty_mark_stack_domain (struct domain* domain)
 {
-  struct caml_domain_state* state = domain->state;
+  caml_domain_state* state = domain->state;
 
   while (state->mark_stack_count) {
     state->mark_stack_count = state->mark_stack_count - 1;
     mark (state->mark_stack[state->mark_stack_count], 10000000);
   }
-}
-
-void caml_finish_marking_domain (struct domain* domain) {
-  struct caml_domain_state* domain_state = CAML_DOMAIN_STATE;
-  //caml_gc_log("caml_finish_marking_domain(0): domain=%d", domain->id);
-  caml_save_stack_gc();
-  caml_do_local_roots(&caml_darken, 0, domain);
-  caml_empty_mark_stack_domain(domain);
-  /* Previous step might have pushed values into our mark stack. Hence,
-   * empty our mark stack */
-  caml_empty_mark_stack();
-  domain_state->allocated_words = 0;
-  caml_restore_stack_gc();
-  //caml_gc_log("caml_finish_marking_domain(1): domain=%d", domain->id);
 }
 
 static struct pool** pools_to_rescan;
@@ -302,7 +408,7 @@ static void mark_stack_prune ()
 {
   struct addrmap t = ADDRMAP_INIT;
   int count = 0, entry;
-  struct caml_domain_state* domain_state = CAML_DOMAIN_STATE;
+  caml_domain_state* domain_state = Caml_state;
   addrmap_iterator i;
   uintnat mark_stack_count = domain_state->mark_stack_count;
   value* mark_stack = domain_state->mark_stack;
@@ -434,6 +540,12 @@ static void mark_stack_prune ()
 
 
 void caml_init_major_gc() {
-  CAML_DOMAIN_STATE->mark_stack = caml_stat_alloc(MARK_STACK_SIZE * sizeof(value));
-  CAML_DOMAIN_STATE->mark_stack_count = 0;
+  Caml_state->mark_stack = caml_stat_alloc(MARK_STACK_SIZE * sizeof(value));
+  Caml_state->mark_stack_count = 0;
+}
+
+void caml_teardown_major_gc() {
+  Assert(Caml_state->mark_stack_count == 0);
+  caml_stat_free(Caml_state->mark_stack);
+  Caml_state->mark_stack = NULL;
 }

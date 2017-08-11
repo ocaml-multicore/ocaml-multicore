@@ -50,12 +50,12 @@
 /* **** array.c */
 
 /* **** backtrace.c */
-/*#define backtrace_buffer (CAML_DOMAIN_STATE->caml_backtrace_buffer)
-  #define backtrace_last_exn (CAML_DOMAIN_STATE->caml_backtrace_last_exn)*/
+/*#define backtrace_buffer (Caml_state->caml_backtrace_buffer)
+  #define backtrace_last_exn (Caml_state->caml_backtrace_last_exn)*/
 #define print_exception_backtrace caml_print_exception_backtrace
 
 /* **** callback.c */
-#define callback_depth caml_callback_depth
+#define callback_depth (caml_get_callback_depth())
 #define callbackN_exn caml_callbackN_exn
 #define callback_exn caml_callback_exn
 #define callback2_exn caml_callback2_exn

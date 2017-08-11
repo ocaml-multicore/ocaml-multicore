@@ -225,6 +225,10 @@ external ( := ) : 'a ref -> 'a -> unit = "%setfield0"
 external incr : int ref -> unit = "%incr"
 external decr : int ref -> unit = "%decr"
 
+(* Result type *)
+
+type ('a,'b) result = Ok of 'a | Error of 'b
+
 (* String conversion functions *)
 
 external format_int : string -> int -> string = "caml_format_int"
@@ -493,6 +497,7 @@ let (^^) (Format (fmt1, str1)) (Format (fmt2, str2)) =
 (* Miscellaneous *)
 
 external sys_exit : int -> 'a = "caml_sys_exit"
+external maybe_print_stats : unit -> unit = "caml_maybe_print_stats"
 
 let exit_function = ref flush_all
 
@@ -504,6 +509,7 @@ let do_at_exit () = (!exit_function) ()
 
 let exit retcode =
   do_at_exit ();
+  maybe_print_stats ();
   sys_exit retcode
 
 let _ = register_named_value "Pervasives.do_at_exit" do_at_exit

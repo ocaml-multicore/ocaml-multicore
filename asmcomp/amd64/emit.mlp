@@ -88,7 +88,7 @@ let load_symbol_addr s =
 
 let locate_domain_state () =
   let bits = Domainstate.minor_heap_align_bits in
-  let dom_mask = Nativeint.(lognot (sub (shift_left one bits) one)) in
+  let dom_mask = Nativeint.(shift_left minus_one bits) in
   (* CR mshinwell: could do (-1) lsl bits *)
   `andq	${emit_nativeint dom_mask}`
 
@@ -244,6 +244,27 @@ let emit_call_bound_errors () =
   List.iter emit_call_bound_error !bound_error_sites;
   if !bound_error_call > 0 then
     `{emit_label !bound_error_call}:	{emit_call "caml_ml_array_bound_error"}\n`
+
+(* read barrier calls *)
+
+type read_barrier_call =
+  { rb_base       : Reg.t;              (* Base register *)
+    rb_off        : Reg.t;              (* Offset register *)
+    rb_dest       : Reg.t;              (* Destination register *)
+    rb_lbl        : label;              (* Entry label *)
+    rb_return_lbl : label;              (* Where to branch after read barrier *)
+    rb_frame      : label }             (* Label of frame descriptor *)
+
+let read_barrier_call_sites = ref ([] : read_barrier_call list)
+
+let emit_call_read_barrier rb =
+  `{emit_label rb.rb_lbl}:\n`;
+  `	movq	{emit_reg rb.rb_base}, %rax\n`;
+  `	movq  {emit_reg rb.rb_off}, %rdx\n`;
+  `	{emit_call "caml_call_read_barrier"}\n`;
+  `{emit_label rb.rb_frame}:\n`;
+  `	movq	%rax, {emit_reg rb.rb_dest}\n`;
+  `	jmp	{emit_label rb.rb_return_lbl}\n`
 
 (* Names for instructions *)
 
@@ -413,20 +434,49 @@ let emit_instr fallthrough i =
     | Lop(Iconst_symbol s) ->
         `	{load_symbol_addr s}, {emit_reg i.res.(0)}\n`
     | Lop(Icall_ind) ->
+        if Config.stats then begin
+          `	pushq	%r11\n`;
+          `	movq	%r15, %r11\n`;
+          `	{locate_domain_state()}, %r11\n`;
+          `	incq	{domain_field Domainstate.Domain_call_ind}(%r11)\n`;
+          `	popq	%r11\n`;
+        end;
         `	call	*{emit_reg i.arg.(0)}\n`;
         record_frame i.live i.dbg
     | Lop(Icall_imm(s)) ->
+        if Config.stats then begin
+          `	movq	%r15, %r11\n`;
+          `	{locate_domain_state()}, %r11\n`;
+          `	incq	{domain_field Domainstate.Domain_call_imm}(%r11)\n`;
+        end;
         `	{emit_call s}\n`;
         record_frame i.live i.dbg
     | Lop(Itailcall_ind) ->
         output_epilogue begin fun () ->
+        if Config.stats then begin
+          `	pushq	%r11\n`;
+          `	movq	%r15, %r11\n`;
+          `	{locate_domain_state()}, %r11\n`;
+          `	incq	{domain_field Domainstate.Domain_tailcall_ind}(%r11)\n`;
+          `	popq	%r11\n`;
+        end;
         `	jmp	*{emit_reg i.arg.(0)}\n`
         end
     | Lop(Itailcall_imm s) ->
-        if s = !function_name then
+        if s = !function_name then begin
+          if Config.stats then begin
+            `	movq	%r15, %r11\n`;
+            `	{locate_domain_state()}, %r11\n`;
+            `	incq	{domain_field Domainstate.Domain_tailcall_imm}(%r11)\n`
+          end;
           `	jmp	{emit_label !tailrec_entry_point}\n`
-        else begin
+        end else begin
           output_epilogue begin fun () ->
+          if Config.stats then begin
+            `	movq	%r15, %r11\n`;
+            `	{locate_domain_state()}, %r11\n`;
+            `	incq	{domain_field Domainstate.Domain_tailcall_imm}(%r11)\n`;
+          end;
           `	{emit_jump s}\n`
           end
         end
@@ -441,6 +491,9 @@ let emit_instr fallthrough i =
           (* caml_c_call preserves the old value of %r15, but this may no longer
              be the correct minor heap pointer, so we reload young_ptr *)
           `	{locate_domain_state ()}, %r15\n`;
+          if Config.stats then begin
+            `	incq	{domain_field Domainstate.Domain_extcall_alloc_stackargs}(%r15)\n`;
+          end;
           `	movq	{domain_field Domainstate.Domain_young_ptr}(%r15), %r15\n`;
           end
         else if alloc then begin
@@ -450,16 +503,27 @@ let emit_instr fallthrough i =
           (* caml_c_call preserves the old value of %r15, but this may no longer
              be the correct minor heap pointer, so we reload young_ptr *)
           `	{locate_domain_state ()}, %r15\n`;
+          if Config.stats then begin
+            `	incq	{domain_field Domainstate.Domain_extcall_alloc}(%r15)\n`;
+          end;
           `	movq	{domain_field Domainstate.Domain_young_ptr}(%r15), %r15\n`;
         end else begin
-          ` movq  %rsp, %r10\n`;
-          ` movq  %r15, %r11\n`;
+          `	movq  %rsp, %r10\n`;
+          `	movq  %r15, %r11\n`;
           `	{locate_domain_state ()}, %r11\n`;
+          if Config.stats then begin
+            `	incq	{domain_field Domainstate.Domain_extcall_noalloc}(%r11)\n`;
+          end;
+          `	.cfi_remember_state\n`;
           `	movq	{domain_field Domainstate.Domain_system_sp}(%r11), %rsp\n`;
-          ` pushq %r10\n`;
+          `	.cfi_def_cfa_offset 8\n`;
+          `	pushq %r10\n`;
+          cfi_adjust_cfa_offset (8);
           `	{emit_call s}\n`;
-          ` popq  %r10\n`;
-          ` movq  %r10, %rsp\n`
+          `	popq  %r10\n`;
+          cfi_adjust_cfa_offset (-8);
+          `	movq  %r10, %rsp\n`;
+          `	.cfi_restore_state\n`;
         end
     | Lop(Istackoffset n) ->
         if n < 0
@@ -469,6 +533,12 @@ let emit_instr fallthrough i =
         stack_offset := !stack_offset + n
     | Lop(Iload(chunk, addr)) ->
         let dest = i.res.(0) in
+        if Config.stats then begin
+          `	push	%r15\n`;
+          `	{locate_domain_state()}, %r15\n`;
+          `	incq	{domain_field Domainstate.Domain_immutable_loads}(%r15)\n`;
+          `	pop	%r15\n`;
+        end;
         begin match chunk with
           | Word ->
               `	movq	{emit_addressing addr i.arg 0}, {emit_reg dest}\n`
@@ -489,7 +559,40 @@ let emit_instr fallthrough i =
           | Double | Double_u ->
             `	movsd	{emit_addressing addr i.arg 0}, {emit_reg dest}\n`
         end
-    | Lop(Istore(chunk, addr, _)) ->
+    | Lop Iloadmut ->
+        if Config.stats then begin
+          `	movq	%r15, %rax\n`;
+          `	{locate_domain_state()}, %rax\n`;
+          `	incq  {domain_field Domainstate.Domain_mutable_loads}(%rax)\n`;
+        end;
+        `	movq	({emit_reg i.arg.(0)},{emit_reg i.arg.(1)},8), {emit_reg i.res.(0)}\n`;
+        `	movq	{emit_reg i.res.(0)}, %rax\n`;
+        `	xorq	%r15, %rax\n`;
+        let s = Nativeint.(shift_left one Domainstate.minor_heap_align_bits) in
+        `	subq	${emit_nativeint s}, %rax\n`;
+        let bits = Domainstate.minor_heap_align_bits + Domainstate.minor_heap_sel_bits in
+        let minor_val_bitmask = Nativeint.(logor one (shift_left minus_one bits)) in
+        `	movabsq	${emit_nativeint minor_val_bitmask}, %rdx\n`;
+        `	testq	%rdx, %rax\n`;
+        let lbl_call_read_barrier = new_label () in
+        let lbl_return = new_label () in
+        let lbl_frame = record_frame_label i.live Debuginfo.none in
+        `	jz	{emit_label lbl_call_read_barrier}\n`;
+        `{emit_label lbl_return}:\n`;
+        read_barrier_call_sites :=
+          { rb_base = i.arg.(0);
+            rb_off = i.arg.(1);
+            rb_dest = i.res.(0);
+            rb_lbl = lbl_call_read_barrier;
+            rb_return_lbl = lbl_return;
+            rb_frame = lbl_frame } :: !read_barrier_call_sites
+    | Lop(Istore(chunk, addr, is_assignment)) ->
+        if Config.stats && is_assignment then begin
+          `	push	%r15\n`;
+          `	{locate_domain_state()}, %r15\n`;
+          `	incq	{domain_field Domainstate.Domain_immutable_stores}(%r15)\n`;
+          `	pop	%r15\n`;
+        end;
         begin match chunk with
           | Word ->
             `	movq	{emit_reg i.arg.(0)}, {emit_addressing addr i.arg 1}\n`
@@ -511,6 +614,9 @@ let emit_instr fallthrough i =
           `{emit_label lbl_redo}:	movq	%r15, %rax\n`;
           `	subq	${emit_int n}, %r15\n`;
           `	{locate_domain_state ()}, %rax\n`;
+          if Config.stats then begin
+            `	incq {domain_field Domainstate.Domain_allocations}(%rax)\n`;
+          end;
           `	cmpq	{domain_field Domainstate.Domain_young_limit}(%rax), %r15\n`;
           let lbl_call_gc = new_label() in
           let lbl_frame = record_frame_label i.live Debuginfo.none in
@@ -522,6 +628,11 @@ let emit_instr fallthrough i =
               gc_return_lbl = lbl_redo;
               gc_frame = lbl_frame } :: !call_gc_sites
         end else begin
+          if Config.stats then begin
+            `	movq	%r15, %rax\n`;
+            `	{locate_domain_state ()}, %rax\n`;
+            `	incq {domain_field Domainstate.Domain_allocations}(%rax)\n`;
+          end;
           begin match n with
             16  -> `	{emit_call "caml_alloc1"}\n`
           | 24 -> `	{emit_call "caml_alloc2"}\n`
@@ -790,6 +901,7 @@ let fundecl fundecl =
   call_gc_sites := [];
   bound_error_sites := [];
   bound_error_call := 0;
+  read_barrier_call_sites := [];
   `	.text\n`;
   emit_align 16;
   Emitaux.emit_block_header_for_closure ~word_directive:".quad"
@@ -837,6 +949,7 @@ let fundecl fundecl =
     `{emit_label !tailrec_entry_point}:\n`;
     emit_all true fundecl.fun_body;
     List.iter emit_call_gc !call_gc_sites;
+    List.iter emit_call_read_barrier !read_barrier_call_sites;
     emit_call_bound_errors ();
   end
   else begin
@@ -851,6 +964,9 @@ let fundecl fundecl =
 
     ` movq %r15, %r11\n`;
     `	{locate_domain_state ()}, %r11\n`;
+    if Config.stats then begin
+      `	incq	{domain_field Domainstate.Domain_stackoverflow_checks}(%r11)\n`;
+    end;
     `	movq	{domain_field Domainstate.Domain_stack_threshold}(%r11), %r11\n`;
     ` addq ${emit_int s}, %r11\n`;
     ` cmpq %r11, %rsp\n`;
@@ -858,6 +974,7 @@ let fundecl fundecl =
     `{emit_label !tailrec_entry_point}:\n`;
     emit_all true fundecl.fun_body;
     List.iter emit_call_gc !call_gc_sites;
+    List.iter emit_call_read_barrier !read_barrier_call_sites;
     emit_call_bound_errors ();
     `{emit_label handle_overflow}:\n`;
     ` {emit_call "caml_call_realloc_stack"}\n`;

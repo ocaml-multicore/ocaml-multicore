@@ -5,6 +5,7 @@
 #include "caml/version.h"
 #include "caml/prims.h"
 #include "caml/dynlink.h"
+#include "caml/domain.h"
 
 /* Configuration parameters and flags */
 
@@ -33,8 +34,15 @@ static void init_startup_params()
     params.cds_file = caml_strdup(params.cds_file);
   }
 #endif
+  params.profile_slop_wsz = 0;
 }
 
+CAMLprim value caml_maybe_print_stats (value v)
+{                             Assert (v == Val_unit);
+  if (params.print_stats)
+    caml_print_stats ();
+  return Val_unit;
+}
 
 /* Parse the OCAMLRUNPARAM variable */
 /* The option letter for each runtime option is the first letter of the
@@ -84,7 +92,9 @@ void caml_init_startup_params(void)
       case 'v': scanmult (opt, &params.verb_gc); break;
       case 'V': params.verify_heap = 1; break;
       case 'f': scanmult (opt, &params.fiber_wsz_init); break;
+      case 'w': scanmult (opt, &params.profile_slop_wsz); break;
       case 'e': params.eventlog_enabled = 1; break;
+      case 'S': params.print_stats = 1; break;
       }
     }
   }

@@ -31,6 +31,7 @@ let oper_result_type = function
       | Single | Double | Double_u -> typ_float
       | _ -> typ_int
       end
+  | Cloadmut -> typ_addr
   | Calloc -> typ_addr
   | Cstore c -> typ_void
   | Caddi | Csubi | Cmuli | Cmulhi | Cdivi | Cmodi |
@@ -191,7 +192,7 @@ method is_simple_expr = function
   | Cop(op, args) ->
       begin match op with
         (* The following may have side effects *)
-      | Capply _ | Cextcall _ | Calloc | Cstore _ | Craise _ -> false
+      | Capply _ | Cextcall _ | Cloadmut | Calloc | Cstore _ | Craise _ -> false
         (* The remaining operations are simple if their args are *)
       | _ ->
           List.for_all self#is_simple_expr args
@@ -253,6 +254,7 @@ method select_operation op args =
   | (Cload chunk, [arg]) ->
       let (addr, eloc) = self#select_addressing chunk arg in
       (Iload(chunk, addr), [eloc])
+  | (Cloadmut, _) -> (Iloadmut, args)
   | (Cstore chunk, [arg1; arg2]) ->
       let (addr, eloc) = self#select_addressing chunk arg1 in
       if chunk = Word then begin

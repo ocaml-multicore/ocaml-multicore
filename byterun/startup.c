@@ -45,6 +45,7 @@
 #include "caml/misc.h"
 #include "caml/mlvalues.h"
 #include "caml/osdeps.h"
+#include "caml/params.h"
 #include "caml/prims.h"
 #include "caml/printexc.h"
 #include "caml/reverse.h"
@@ -280,7 +281,7 @@ CAMLexport void caml_main(char **argv)
   caml_read_section_descriptors(fd, &trail);
   /* Initialize the abstract machine */
   caml_init_gc ();
-  CAML_DOMAIN_STATE->external_raise = NULL;
+  Caml_state->external_raise = NULL;
   if (caml_params->backtrace_enabled_init) caml_record_backtrace(Val_int(1));
   /* Initialize the interpreter */
   caml_interprete(NULL, 0);
@@ -302,6 +303,7 @@ CAMLexport void caml_main(char **argv)
   caml_seek_section(fd, &trail, "DATA");
   chan = caml_open_descriptor_in(fd);
   caml_modify_root(caml_global_data, caml_input_val(chan));
+  caml_minor_collection(); /* ensure all globals are in major heap */
   caml_close_channel(chan); /* this also closes fd */
   caml_stat_free(trail.section);
 #ifdef _WIN32
@@ -312,14 +314,15 @@ CAMLexport void caml_main(char **argv)
   /* Execute the program */
   caml_debugger(PROGRAM_START);
   res = caml_interprete(caml_start_code, caml_code_size);
+  caml_maybe_print_stats(Val_unit);
   if (Is_exception_result(res)) {
-    CAML_DOMAIN_STATE->exn_bucket = Extract_exception(res);
+    Caml_state->exn_bucket = Extract_exception(res);
     if (caml_debugger_in_use) {
-      CAML_DOMAIN_STATE->extern_sp = &CAML_DOMAIN_STATE->exn_bucket; /* The debugger needs the
+      Caml_state->extern_sp = &Caml_state->exn_bucket; /* The debugger needs the
                                                exception value.*/
       caml_debugger(UNCAUGHT_EXC);
     }
-    caml_fatal_uncaught_exception(CAML_DOMAIN_STATE->exn_bucket);
+    caml_fatal_uncaught_exception(Caml_state->exn_bucket);
   }
 }
 
@@ -350,7 +353,7 @@ CAMLexport void caml_startup_code(
   /* Initialize the abstract machine */
   caml_init_gc ();
   if (caml_params->backtrace_enabled_init) caml_record_backtrace(Val_int(1));
-  CAML_DOMAIN_STATE->external_raise = NULL;
+  Caml_state->external_raise = NULL;
   /* Initialize the interpreter */
   caml_interprete(NULL, 0);
   /* Initialize the debugger, if needed */
@@ -372,18 +375,19 @@ CAMLexport void caml_startup_code(
   caml_build_primitive_table_builtin();
   /* Load the globals */
   caml_modify_root(caml_global_data, caml_input_value_from_block(data, data_size));
+  caml_minor_collection(); /* ensure all globals are in major heap */
   /* Record the sections (for caml_get_section_table in meta.c) */
   caml_init_section_table(section_table, section_table_size);
   /* Execute the program */
   caml_debugger(PROGRAM_START);
   res = caml_interprete(caml_start_code, caml_code_size);
   if (Is_exception_result(res)) {
-    CAML_DOMAIN_STATE->exn_bucket = Extract_exception(res);
+    Caml_state->exn_bucket = Extract_exception(res);
     if (caml_debugger_in_use) {
-      CAML_DOMAIN_STATE->extern_sp = &CAML_DOMAIN_STATE->exn_bucket; /* The debugger needs the
+      Caml_state->extern_sp = &Caml_state->exn_bucket; /* The debugger needs the
                                                exception value.*/
       caml_debugger(UNCAUGHT_EXC);
     }
-    caml_fatal_uncaught_exception(CAML_DOMAIN_STATE->exn_bucket);
+    caml_fatal_uncaught_exception(Caml_state->exn_bucket);
   }
 }
