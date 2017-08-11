@@ -1141,9 +1141,9 @@ LBL(112):
         movq    %rax, %rbx          /* copy the effect object */
         movzbq  -8(%rax), %rdi      /* get tag */
         cmpq    $248, %rdi          /* check whether the operation is unboxed */
-        je      LBL(118)
+        je      LBL(120)
         movq    (%rax), %rbx        /* unbox the operation */
-LBL(118):
+LBL(120):
     /* Invoke the default handler */
         movq    16(%rbx), %rbx       /* project field 2 (default handler closure) */
         movq    (%rbx), %rsi         /* unwrap the closure */
@@ -1173,13 +1173,13 @@ LBL(113):
         movq    %r12, %rax      /* copy the effect into %rax (expected by handler) */
         movzbq  -8(%rax), %rcx  /* get tag */
         cmpq    $248, %rcx      /* test whether the operation is unboxed */
-        je      LBL(119)
+        je      LBL(121)
         movq    (%rax), %rdi    /* unbox operation */
         movq    24(%rdi), %rdi  /* project field 3 (the delegate handler) */
         /* call the handler */
         LEA_VAR(caml_apply2, %rsi)
         jmp     *%rsi
-LBL(119):
+LBL(121):
         movq    24(%rax), %rdi  /* project field 3 (the delegate handler) */
         LEA_VAR(caml_apply2, %rsi)
         jmp     *%rsi
