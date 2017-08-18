@@ -482,15 +482,13 @@ int caml_try_run_on_all_domains(void (*handler)(struct domain*, void*), void* da
 
   caml_gc_log("requesting STW");
 
-  /* First, take the lock by setting ourselves as the stw_leader.
-     This may require handling interrupts for a while, until any
-     in-progress STW sections are completed */
-  caml_handle_incoming_interrupts(&domain_self->interruptor);
+  /* Try to take the lock by setting ourselves as the stw_leader.
+     If it fails, handle interrupts (probably participating in
+     an STW section) and return. */
   caml_plat_lock(&all_domains_lock);
   if (stw_leader) {
     caml_plat_unlock(&all_domains_lock);
-    // FIXME: is yield OK here? deadlock?
-    caml_yield_until_interrupted(&domain_self->interruptor);
+    caml_handle_incoming_interrupts(&domain_self->interruptor);
     return 0;
   } else {
       stw_leader = domain_self;
@@ -563,7 +561,7 @@ void caml_handle_gc_interrupt() {
     while (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
       atomic_cas(young_limit, INTERRUPT_MAGIC, domain_self->minor_heap_area);
     }
-    caml_ev_pause(EV_PAUSE_GC);
+    caml_ev_pause(EV_PAUSE_YIELD);
     caml_handle_incoming_interrupts(&domain_self->interruptor);
     caml_ev_resume();
   }
@@ -772,8 +770,12 @@ static void domain_terminate() {
   int finished = 0;
 
   caml_gc_log("Domain terminating");
+  caml_ev_pause(EV_PAUSE_TERMINATE);
   while (!finished) {
+    caml_ev_start_gc();
     while (caml_sweep(domain_self->state.state->shared_heap, 10) <= 0);
+    caml_ev_end_gc();
+
     caml_empty_minor_heap();
     caml_finish_marking();
 
