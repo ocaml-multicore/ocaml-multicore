@@ -37,6 +37,8 @@ and pat_extra =
   | Tpat_type of Path.t * Longident.t loc
   | Tpat_unpack
 
+and constructor_completeness = Check | Complete
+
 and pattern_desc =
     Tpat_any
   | Tpat_var of Ident.t * string loc
@@ -44,7 +46,7 @@ and pattern_desc =
   | Tpat_constant of constant
   | Tpat_tuple of pattern list
   | Tpat_construct of
-      Longident.t loc * bool * constructor_description * pattern list
+      Longident.t loc * constructor_completeness * constructor_description * pattern list
   | Tpat_variant of label * pattern option * row_desc ref
   | Tpat_record of
       (Longident.t loc * label_description * pattern) list *

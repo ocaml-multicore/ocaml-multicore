@@ -1078,8 +1078,13 @@ let rec type_pat ~constrs ~labels ~no_existentials ~mode ~env sp expected_ty =
       else
         unify_pat_types loc !env ty_res expected_ty;
       let args = List.map2 (fun p t -> type_pat p t) sargs ty_args in
+      let completeness =
+        match total with
+        | Parsetree.Complete -> Typedtree.Complete
+        | _ -> Typedtree.Check
+      in
       rp {
-        pat_desc=Tpat_construct(lid, total, constr, args);
+        pat_desc=Tpat_construct(lid, completeness, constr, args);
         pat_loc = loc; pat_extra=[];
         pat_type = expected_ty;
         pat_attributes = sp.ppat_attributes;
@@ -3898,7 +3903,7 @@ let type_default_effect_handler env cname shandler =
        else
          { pcase with pc_lhs =
               { ppat with ppat_desc =
-                  Ppat_construct (lid, true, arg) } }
+                  Ppat_construct (lid, Complete, arg) } }
     | _ ->
        raise (Error (loc, env,
                      Unexpected_default_effect_pattern cname))

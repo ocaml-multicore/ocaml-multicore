@@ -622,8 +622,8 @@ let clean_env env =
   loop env
 
 let full_match ignore_generalized closing env =  match env with
-  | ({pat_desc = Tpat_construct(_,true,_,_)},_) :: _ -> true
-  | ({pat_desc = Tpat_construct(_,false,c,_);pat_type=typ},_) :: _ ->
+  | ({pat_desc = Tpat_construct(_,Complete,_,_)},_) :: _ -> true
+  | ({pat_desc = Tpat_construct(_,_,c,_);pat_type=typ},_) :: _ ->
     if c.cstr_consts < 0 then false (* extensions *)
     else
       if ignore_generalized then
@@ -668,8 +668,8 @@ let full_match ignore_generalized closing env =  match env with
 | _ -> fatal_error "Parmatch.full_match"
 
 let full_match_gadt env = match env with
-  | ({pat_desc = Tpat_construct(_,true,_,_)},_) :: _ -> true
-  | ({pat_desc = Tpat_construct(_,false,c,_);pat_type=typ},_) :: _ ->
+  | ({pat_desc = Tpat_construct(_,Complete,_,_)},_) :: _ -> true
+  | ({pat_desc = Tpat_construct(_,_,c,_);pat_type=typ},_) :: _ ->
     List.length env = c.cstr_consts + c.cstr_nonconsts
   | _ -> true
 
@@ -718,7 +718,7 @@ let complete_tags nconsts nconstrs tags =
 (* build a pattern from a constructor list *)
 let pat_of_constr ex_pat cstr =
  {ex_pat with pat_desc =
-  Tpat_construct (mknoloc (Longident.Lident "?pat_of_constr?"), false,
+  Tpat_construct (mknoloc (Longident.Lident "?pat_of_constr?"), Check,
                   cstr,omegas cstr.cstr_arity)}
 
 let rec pat_of_constrs ex_pat = function
@@ -1522,10 +1522,15 @@ let rec lub p q = match p.pat_desc,q.pat_desc with
     make_pat (Tpat_lazy r) p.pat_type p.pat_env
 | Tpat_construct (lid, t1, c1,ps1), Tpat_construct (_, t2, c2,ps2)
      when  c1.cstr_tag = c2.cstr_tag  ->
-        let t  = t1 || t2 in
-        let rs = lubs ps1 ps2 in
-        make_pat (Tpat_construct (lid, t, c1,rs))
-          p.pat_type p.pat_env
+   let t  =
+     match t1, t2 with
+     | Complete, _
+     | _, Complete -> Complete
+     | _,_ -> Check
+   in
+   let rs = lubs ps1 ps2 in
+   make_pat (Tpat_construct (lid, t, c1,rs))
+     p.pat_type p.pat_env
 | Tpat_variant(l1,Some p1,row), Tpat_variant(l2,Some p2,_)
           when  l1=l2 ->
             let r=lub p1 p2 in
@@ -1721,9 +1726,14 @@ module Conv = struct
           let lid = { cstr_lid with txt = Longident.Lident id } in
           Hashtbl.add constrs id cstr;
           let results = select (List.map loop lst) in
+          let completeness =
+            match total with
+            | Typedtree.Complete -> Parsetree.Complete
+            | _ -> Parsetree.Check
+          in
           begin match lst with
             [] ->
-              [mkpat (Ppat_construct(lid, total, None))]
+              [mkpat (Ppat_construct(lid, completeness, None))]
           | _ ->
               List.map
                 (fun lst ->
@@ -1733,7 +1743,7 @@ module Conv = struct
                     | [x] -> Some x
                     | _ -> Some (mkpat (Ppat_tuple lst))
                   in
-                  mkpat (Ppat_construct(lid, total, arg)))
+                  mkpat (Ppat_construct(lid, completeness, arg)))
                 results
           end
       | Tpat_variant(label,p_opt,row_desc) ->

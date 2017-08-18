@@ -230,7 +230,12 @@ and untype_pattern pat =
     | Tpat_tuple list ->
         Ppat_tuple (List.map untype_pattern list)
     | Tpat_construct (lid, total, _, args) ->
-        Ppat_construct (lid, total,
+       let completeness =
+         match total with
+         | Typedtree.Complete -> Parsetree.Complete
+         | _                  -> Parsetree.Check
+       in
+        Ppat_construct (lid, completeness,
           (match args with
               [] -> None
             | [arg] -> Some (untype_pattern arg)

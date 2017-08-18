@@ -64,7 +64,7 @@ module Pat = struct
   let constant ?loc ?attrs a = mk ?loc ?attrs (Ppat_constant a)
   let interval ?loc ?attrs a b = mk ?loc ?attrs (Ppat_interval (a, b))
   let tuple ?loc ?attrs a = mk ?loc ?attrs (Ppat_tuple a)
-  let construct ?loc ?attrs ?(total=false) a b = mk ?loc ?attrs (Ppat_construct (a, total, b))
+  let construct ?loc ?attrs ?(total=Check) a b = mk ?loc ?attrs (Ppat_construct (a, total, b))
   let variant ?loc ?attrs a b = mk ?loc ?attrs (Ppat_variant (a, b))
   let record ?loc ?attrs a b = mk ?loc ?attrs (Ppat_record (a, b))
   let array ?loc ?attrs a = mk ?loc ?attrs (Ppat_array a)
