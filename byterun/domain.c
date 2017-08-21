@@ -532,21 +532,18 @@ int caml_try_run_on_all_domains(void (*handler)(struct domain*, void*), void* da
 
   handler(&domain_self->state, data);
 
-  /* release the STW lock before allowing other domains to continue */
-  caml_plat_lock(&all_domains_lock);
-  Assert (stw_leader == domain_self);
-  stw_leader = 0;
-  caml_plat_broadcast(&all_domains_cond);
-  caml_plat_unlock(&all_domains_lock);
   atomic_fetch_add(&stw_request.num_domains_still_processing, -1);
   SPIN_WAIT {
     if (atomic_load_acq(&stw_request.num_domains_still_processing) == 0)
       break;
   }
-  /* other domains might not have finished stw_handler yet, but they
-     will finish as soon as they notice num_domains_still_processing
-     == 0, which will remain the case until they have responded to
-     another interrupt from caml_run_on_all_domains */
+
+  /* release the STW lock */
+  caml_plat_lock(&all_domains_lock);
+  Assert (stw_leader == domain_self);
+  stw_leader = 0;
+  caml_plat_broadcast(&all_domains_cond);
+  caml_plat_unlock(&all_domains_lock);
   return 1;
 }
 

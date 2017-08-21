@@ -153,6 +153,7 @@ void caml_scan_stack(scanning_action f, void* fdata, value stack)
 
   if (Stack_sp(stack) == 0) return;
   sp = (char*)(Stack_high(stack) + Stack_sp(stack));
+  Assert((char*)stack < sp);
   Assert(caml_frame_descriptor_table != Val_unit);
   frame_descriptors = Data_abstract_val(caml_frame_descriptor_table);
   frame_descriptors_mask = Wosize_val(caml_frame_descriptor_table) - 1;
@@ -169,6 +170,7 @@ next_chunk:
 
   if (sp == (char*)Stack_high(stack)) return;
   retaddr = *(uintnat*)sp;
+  Assert(retaddr);
 #ifndef Stack_grows_upwards
   sp += sizeof(value);
 #else
@@ -176,10 +178,13 @@ next_chunk:
 #endif
 
   while(1) {
+    Assert(sp <= (char*)Stack_high(stack));
+    Assert((char*)stack < sp);
     /* Find the descriptor corresponding to the return address */
     h = Hash_retaddr(retaddr, frame_descriptors_mask);
     while(1) {
       d = frame_descriptors[h];
+      Assert(d);
       if (d->retaddr == retaddr) break;
       h = (h+1) & frame_descriptors_mask;
     }

@@ -333,6 +333,7 @@ void caml_sample_gc_stats(struct gc_stats* buf)
   buf->major_heap.large_max_words = large_max;
 }
 
+void caml_empty_minor_heap_domain(struct domain* domain, void* unused);
 static void major_cycle_callback(struct domain* domain, void* unused)
 {
   uintnat num_domains_in_stw;
@@ -343,7 +344,7 @@ static void major_cycle_callback(struct domain* domain, void* unused)
 
   /* finish GC */
   caml_finish_sweeping();
-  caml_empty_minor_heap();
+  caml_empty_minor_heap_domain(domain, 0);
   caml_finish_marking();
 
   {

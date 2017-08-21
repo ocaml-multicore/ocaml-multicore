@@ -30,6 +30,7 @@
 #include "caml/addrmap.h"
 #include "caml/fiber.h"
 #include "caml/eventlog.h"
+#include "caml/platform.h"
 
 static void alloc_table (struct caml_ref_table *tbl, asize_t sz, asize_t rsv)
 {
@@ -128,24 +129,28 @@ static void oldify_one (void* st_v, value v, value *p)
   struct caml_remembered_set *remembered_set = domain_state->remembered_set;
   char* young_ptr = domain_state->young_ptr;
   char* young_end = domain_state->young_end;
+  atomic_uintnat* header_word;
   Assert (domain_state->young_start <= domain_state->young_ptr &&
           domain_state->young_ptr <= domain_state->young_end);
 
  tail_call:
-  if (!Is_block(v)
-      || !(young_ptr <= Hp_val(v) && Hp_val(v) < young_end)) {
+  if (!Is_block(v) || !Is_minor(v)) {
     /* not a minor block */
     *p = v;
     return;
   }
 
   infix_offset = 0;
-  do {
-    hd = Hd_val (v);
+  SPIN_WAIT {
+    header_word = (atomic_uintnat*)&Hd_val(v);
+    hd = atomic_load_acq(header_word);
     if (hd == 0) {
       /* already forwarded, forward pointer is first field. */
       *p = Op_val(v)[0] + infix_offset;
       return;
+    } else if (hd == 1) {
+      /* another thread is forwarding, keep spinning */
+      continue;
     }
     tag = Tag_hd (hd);
     if (tag == Infix_tag) {
@@ -154,8 +159,15 @@ static void oldify_one (void* st_v, value v, value *p)
       infix_offset = Infix_offset_hd (hd);
       Assert(infix_offset > 0);
       v -= infix_offset;
+      continue;
+    } else if (atomic_cas(header_word, hd, 1)) {
+      Assert (Wosize_hd(hd) <= Max_young_wosize);
+      /* we've locked this header */
+      break;
     }
-  } while (tag == Infix_tag);
+  }
+  Assert (hd != 0 && hd != 1);
+  Assert (tag != Infix_tag);
 
   if (((value)Hp_val(v)) > st->oldest_promoted) {
     st->oldest_promoted = (value)Hp_val(v);
@@ -176,20 +188,23 @@ static void oldify_one (void* st_v, value v, value *p)
       if (tag == Stack_tag) {
         /* Ensure that the stack remains 16-byte aligned. Note: Stack_high
          * always returns 16-byte aligned down address. */
+        value* stack_high = ((value*)(((value)(Op_val(v) + Wosize_hd(hd))) & (-1uLL << 4)));
+        Assert(infix_offset == 0);
         stack_used = -Stack_sp(v);
         memcpy((void*)result, (void*)v, sizeof(value) * Stack_ctx_words);
-        memcpy(Stack_high(result) - stack_used, Stack_high(v) - stack_used,
+        memcpy(Stack_high(result) - stack_used, stack_high - stack_used,
                stack_used * sizeof(value));
 
-        Hd_val (v) = 0;
         Op_val(v)[0] = result;
+        atomic_store_rel(header_word, 0);
         Op_val(v)[1] = st->todo_list;
         st->todo_list = v;
       } else {
         field0 = Op_val(v)[0];
         Assert (!Is_debug_tag(field0));
-        Hd_val (v) = 0;            /* Set forward flag */
         Op_val(v)[0] = result;     /*  and forward pointer. */
+        atomic_store_rel (header_word, 0);            /* Set forward flag */
+
         if (sz > 1){
           Op_val (result)[0] = field0;
           Op_val (result)[1] = st->todo_list;    /* Add this block */
@@ -213,8 +228,8 @@ static void oldify_one (void* st_v, value v, value *p)
       //Assert(!Is_debug_tag(curr));
       Op_val (result)[i] = curr;
     }
-    Hd_val (v) = 0;            /* Set forward flag */
     Op_val (v)[0] = result;    /*  and forward pointer. */
+    atomic_store_rel(header_word, 0);
     // caml_gc_log ("promoting object %p (referred from %p) tag=%d size=%lu to %p", (value*)v, p, tag, sz, (value*)result);
     Assert (infix_offset == 0);
     *p = result;
@@ -226,10 +241,11 @@ static void oldify_one (void* st_v, value v, value *p)
     tag_t ft = 0;
 
     if (Is_block (f)) {
+      /* FIXME race */
       ft = Tag_val (Hd_val (f) == 0 ? Op_val (f)[0] : f);
     }
 
-    if (ft == Forward_tag || ft == Lazy_tag || ft == Double_tag) {
+    if (1 /* FIXME */ || ft == Forward_tag || ft == Lazy_tag || ft == Double_tag) {
       /* Do not short-circuit the pointer.  Copy as a normal block. */
       Assert (Wosize_hd (hd) == 1);
       st->live_bytes += Bhsize_hd(hd);
@@ -237,8 +253,8 @@ static void oldify_one (void* st_v, value v, value *p)
       // caml_gc_log ("promoting object %p (referred from %p) tag=%d size=%lu to %p",
       //             (value*)v, p, tag, (value)1, (value*)result);
       *p = result;
-      Hd_val (v) = 0;             /* Set (GC) forward flag */
       Op_val (v)[0] = result;      /*  and forward pointer. */
+      atomic_store_rel(header_word, 0);
       p = Op_val (result);
       v = f;
       goto tail_call;
@@ -278,15 +294,13 @@ static void oldify_mopup (struct oldify_state* st)
 
       f = Op_val (new_v)[0];
       Assert (!Is_debug_tag(f));
-      if (Is_block (f) && young_ptr <= Hp_val(v)
-          && Hp_val(v) < young_end) {
+      if (Is_block (f) && Is_young(v)) {
         oldify_one (st, f, Op_val (new_v));
       }
       for (i = 1; i < Wosize_val (new_v); i++){
         f = Op_val (v)[i];
         Assert (!Is_debug_tag(f));
-        if (Is_block (f) && young_ptr <= Hp_val(v)
-            && Hp_val(v) < young_end) {
+        if (Is_block (f) && Is_young(v)) {
           oldify_one (st, f, Op_val (new_v) + i);
         } else {
           Op_val (new_v)[i] = f;
@@ -310,6 +324,7 @@ void forward_pointer (void* state, value v, value *p) {
   char* young_ptr = domain_state->young_ptr;
   char* young_end = domain_state->young_end;
 
+  Assert(0);
   if (Is_block (v) && young_ptr <= Hp_val(v) && Hp_val(v) < young_end) {
     hd = Hd_val(v);
     if (hd == 0) {
@@ -381,7 +396,7 @@ void caml_empty_minor_heap_domain (struct domain* domain, void* unused)
   st.promote_domain = domain;
   st.should_promote_stacks = 1;
 
-  if (minor_allocated_bytes != 0) {
+  if (1 || minor_allocated_bytes != 0) {
     uintnat prev_alloc_words = domain_state->allocated_words;
     caml_gc_log ("Minor collection of domain %d starting", domain->state->id);
     caml_ev_msg("Start minor");
@@ -401,10 +416,8 @@ void caml_empty_minor_heap_domain (struct domain* domain, void* unused)
 
     for (r = remembered_set->major_ref.base; r < remembered_set->major_ref.ptr; r++) {
       value v = **r;
-      if (Is_block (v) &&
-          (char*)young_ptr <= Hp_val(v) &&
-          Hp_val(v) < (char*)young_end) {
-        Assert (Hp_val (v) >= domain_state->young_ptr);
+      if (Is_block (v) && Is_minor(v)) {
+        //Assert (Hp_val (v) >= domain_state->young_ptr);
         value vnew;
         header_t hd = Hd_val(v);
         int offset = 0;
@@ -451,6 +464,8 @@ void caml_empty_minor_heap_domain (struct domain* domain, void* unused)
     caml_restore_stack_gc();
   }
 
+  caml_global_barrier();
+  
   caml_ev_msg("Minor heap empty");
   domain_state->promoted_in_current_cycle = 0;
 

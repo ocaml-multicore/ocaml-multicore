@@ -86,7 +86,7 @@ CAMLexport void caml_initialize_field (value obj, int field, value val)
 CAMLexport int caml_atomic_cas_field (value obj, int field, value oldval, value newval)
 {
   value* p = &Op_val(obj)[field];
-  if (Is_young(obj)) {
+  if (0) {
     /* non-atomic CAS since only this thread can access the object */
     if (*p == oldval) {
       *p = newval;
@@ -134,7 +134,7 @@ CAMLprim value caml_atomic_store (value ref, value v)
 CAMLprim value caml_atomic_cas (value ref, value oldv, value newv)
 {
   value* p = Op_val(ref);
-  if (Is_young(ref)) {
+  if (0) {
     if (*p == oldv) {
       *p = newv;
       write_barrier(ref, 0, oldv, newv);

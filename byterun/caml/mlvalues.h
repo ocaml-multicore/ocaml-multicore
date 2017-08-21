@@ -184,24 +184,29 @@ bits  63    10 9     8 7   0
 #define Minor_val_bitmask \
   ((uintnat)1 | ~(((uintnat)1 << (Minor_heap_align_bits + Minor_heap_sel_bits)) - (uintnat)1))
 
-
+#if 0
 /* Is_young(val) is true iff val is a block in the current domain's minor heap.
    Since the minor heap is allocated in one aligned block, this can be tested
    via bitmasking. */
 #define Is_young(val) \
   ((((uintnat)(val) ^ (uintnat)Caml_state) & Young_val_bitmask) == 0)
+#endif
 
 /* Is_minor(val) is true iff val is a block in any domain's minor heap. */
 #define Is_minor(val) \
   ((((uintnat)(val) ^ (uintnat)Caml_state) & Minor_val_bitmask) == 0)
 
+#define Is_young Is_minor
+
 /* Is_foreign(val) is true iff val is a block in another domain's minor heap.
    Since all minor heaps lie in one aligned block, this can be tested via
    more bitmasking. */
+#if 0
 #define Is_foreign(val) \
   (((((uintnat)(val) ^ (uintnat)Caml_state) - (1 << Minor_heap_align_bits)) & \
     Minor_val_bitmask) == 0)
-
+#endif
+#define Is_foreign(val) 0
 
 CAMLextern value caml_read_barrier(value, int);
 static inline value Field(value x, int i) {
