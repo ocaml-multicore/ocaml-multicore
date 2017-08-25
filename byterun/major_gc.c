@@ -446,7 +446,9 @@ intnat caml_major_collection_slice(intnat howmuch)
       available = budget > Chunk_size ? Chunk_size : budget;
       left = caml_sweep(domain_state->shared_heap, available);
       budget -= available - left;
+      caml_ev_end_gc();
       caml_handle_incoming_interrupts();
+      caml_ev_start_gc();
     } while (budget > 0 && available != left);
 
     if (budget > 0) {
@@ -456,7 +458,9 @@ intnat caml_major_collection_slice(intnat howmuch)
 
     caml_ev_msg("End sweeping");
 
+    caml_ev_end_gc();
     caml_handle_incoming_interrupts();
+    caml_ev_start_gc();
   }
 
   mark_work = budget;
@@ -467,7 +471,9 @@ intnat caml_major_collection_slice(intnat howmuch)
         available = budget > Chunk_size ? Chunk_size : budget;
         left = mark(v, available);
         budget -= available - left;
+        caml_ev_end_gc();
         caml_handle_incoming_interrupts();
+        caml_ev_start_gc();
       }
       caml_ev_msg("End marking");
     }

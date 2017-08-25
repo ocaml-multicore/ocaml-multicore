@@ -363,8 +363,10 @@ CAMLexport value caml_promote(struct domain* domain, value root)
 {
   CAMLparam1(root);
   if (Is_minor(root)) {
+    caml_ev_pause(EV_PAUSE_YIELD);
     caml_gc_log("caml_promote: forcing minor GC");
     caml_empty_minor_heap();
+    caml_ev_resume();
   }
   Assert(!Is_minor(root));
   CAMLreturn (root);
