@@ -198,6 +198,7 @@ static void create_domain(uintnat initial_minor_heap_size) {
     domain_state->young_start = domain_state->young_end =
       domain_state->young_ptr = 0;
     domain_state->remembered_set = caml_alloc_remembered_set();
+    if (domain_state->remembered_set == NULL) caml_raise_out_of_memory;
 
     d->state.state->shared_heap = caml_init_shared_heap();
     caml_init_major_gc();
