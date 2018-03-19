@@ -168,7 +168,7 @@ and untype_extension_constructor ext =
   {
     pext_name = ext.ext_name;
     pext_kind = (match ext.ext_kind with
-        Text_decl (args, ret) ->
+        Text_decl (args, ret, _) ->
           Pext_decl (List.map untype_core_type args,
                      option untype_core_type ret)
       | Text_rebind (_p, lid) -> Pext_rebind lid
@@ -181,15 +181,23 @@ and untype_effect_constructor ext =
   {
     peff_name = ext.ext_name;
     peff_kind = (match ext.ext_kind with
-      | Text_decl (_, None) -> assert false
-      | Text_decl (args, Some ret_type) ->
+      | Text_decl (_, None, _) -> assert false
+      | Text_decl (args, Some ret_type, edef) ->
           let uret_type = untype_core_type ret_type in
           let uret =
             match uret_type.ptyp_desc with
             | Ptyp_constr(_, [ret]) -> ret
             | _ -> assert false
           in
-            Peff_decl (List.map untype_core_type args, uret)
+          let default_handler =
+            match edef with
+            | None
+            | Some Tdef_impl_generated -> None
+            | Some (Tdef_impl_provided { edef_cases; edef_loc }) ->
+               Some { peh_cases = List.map untype_case edef_cases;
+                      peh_loc   = edef_loc }
+          in
+            Peff_decl (List.map untype_core_type args, uret, default_handler)
       | Text_rebind (_p, lid) -> Peff_rebind lid
     );
     peff_loc = ext.ext_loc;
@@ -221,8 +229,13 @@ and untype_pattern pat =
     | Tpat_constant cst -> Ppat_constant cst
     | Tpat_tuple list ->
         Ppat_tuple (List.map untype_pattern list)
-    | Tpat_construct (lid, _, args) ->
-        Ppat_construct (lid,
+    | Tpat_construct (lid, total, _, args) ->
+       let completeness =
+         match total with
+         | Typedtree.Complete -> Parsetree.Complete
+         | _                  -> Parsetree.Check
+       in
+        Ppat_construct (lid, completeness,
           (match args with
               [] -> None
             | [arg] -> Some (untype_pattern arg)

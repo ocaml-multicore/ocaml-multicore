@@ -590,15 +590,15 @@ let event_after exp lam =
                     lev_env = Env.summary exp.exp_env})
   else lam
 
-let event_function exp lam =
+let event_function loc env lam =
   if !Clflags.debug then
     let repr = Some (ref 0) in
     let (info, body) = lam repr in
     (info,
-     Levent(body, {lev_loc = exp.exp_loc;
+     Levent(body, {lev_loc = loc;
                    lev_kind = Lev_function;
                    lev_repr = repr;
-                   lev_env = Env.summary exp.exp_env}))
+                   lev_env = Env.summary env}))
   else
     lam None
 
@@ -670,7 +670,7 @@ and transl_exp0 e =
       transl_let rec_flag pat_expr_list (event_before body (transl_exp body))
   | Texp_function (_, pat_expr_list, partial) ->
       let ((kind, params), body) =
-        event_function e
+        event_function e.exp_loc e.exp_env
           (function repr ->
             let pl = push_defaults e.exp_loc [] pat_expr_list partial in
             transl_function e.exp_loc !Clflags.native_code repr partial pl)
@@ -1228,11 +1228,59 @@ and transl_handler e body val_caselist exn_caselist eff_caselist =
        (fn, arg)
     | body ->
        let param = Ident.create "param" in
-       (Lfunction (Curried, [param], body), 
+       (Lfunction (Curried, [param], body),
         Lconst(Const_base(Const_int 0)))
   in
     Lprim(Presume e.exp_loc, [Lprim(prim_alloc_stack, [val_fun; exn_fun; eff_fun]);
                               body_fun; arg])
+
+let transl_default_effect_handler = function
+  | Tdef_impl_provided edef ->
+     let ((kind, params), body) =
+       event_function edef.edef_loc edef.edef_env
+         (fun repr ->
+           transl_function edef.edef_loc
+              !Clflags.native_code repr edef.edef_partial edef.edef_cases)
+     in
+     Lfunction (kind, params, body)
+  | Tdef_impl_generated ->
+     let dummy_param = Ident.create "param" in
+     let body = Lprim(Praise Raise_regular,
+                      [transl_normal_path Predef.path_unhandled])
+     in
+     Lfunction (Curried, [dummy_param], body)
+
+let transl_default_delegate_handler default_handler_id =
+  let eff_id  = Ident.create "eff" in
+  let cont_id = Ident.create "k" in
+  let exn_id  = Ident.create "exn" in
+  let val_id  = Ident.create "v" in
+  let resume cont f v =
+    Lprim(Presume Location.none, [cont; f; v])
+  in
+  let continue cont_id val_id =
+    let arg_id = Ident.create "x" in
+    let f = Lfunction (Curried, [arg_id], Lvar arg_id) in
+    resume (Lvar cont_id) f (Lvar val_id)
+  in
+  let discontinue cont_id exn_id =
+    let arg_id = Ident.create "x" in
+    let f = Lfunction (Curried, [arg_id], Lprim(Praise Raise_regular, [Lvar arg_id])) in
+    resume (Lvar cont_id) f (Lvar exn_id)
+  in
+  let static_exception_id = next_negative_raise_count () in
+  let body =
+    Lstaticcatch
+      (Ltrywith
+         (Lstaticraise (static_exception_id,
+                        [Lapply(Lvar default_handler_id,
+                                [Lvar eff_id],
+                                Location.none)]),
+          exn_id, discontinue cont_id exn_id),
+       (static_exception_id, [val_id]),
+       continue cont_id val_id)
+  in
+  Lfunction (Curried, [eff_id; cont_id], body)
 
 (* Wrapper for class compilation *)
 

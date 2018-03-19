@@ -224,7 +224,7 @@ and pattern i ppf x =
   | Tpat_tuple (l) ->
       line i ppf "Ppat_tuple\n";
       list i pattern ppf l;
-  | Tpat_construct (li, _, po) ->
+  | Tpat_construct (li, _, _, po) ->
       line i ppf "Ppat_construct %a\n" fmt_longident li;
       list i pattern ppf po;
   | Tpat_variant (l, po, _) ->
@@ -431,13 +431,25 @@ and extension_constructor i ppf x =
 
 and extension_constructor_kind i ppf x =
   match x with
-      Text_decl(a, r) ->
+      Text_decl(a, r, d) ->
         line i ppf "Pext_decl\n";
         list (i+1) core_type ppf a;
         option (i+1) core_type ppf r;
+        begin match d with
+        | None -> ()
+        | Some edef -> extension_default (i + 1) ppf edef
+        end;
     | Text_rebind(p, _) ->
         line i ppf "Pext_rebind\n";
         line (i+1) ppf "%a\n" fmt_path p;
+
+and extension_default i ppf = function
+  | Tdef_impl_provided x ->
+     line i ppf "extension_default %a\n" fmt_location x.edef_loc;
+     let i = i + 1 in
+     line i ppf "edef_cases =\n";
+     list (i+1) case ppf x.edef_cases
+  | _ -> ()
 
 and class_type i ppf x =
   line i ppf "class_type %a\n" fmt_location x.cltyp_loc;

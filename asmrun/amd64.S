@@ -1131,9 +1131,17 @@ CFI_STARTPROC
         LEA_VAR(caml_apply2, %rsi)
         jmp     *%rsi
 LBL(112):
-    /* No parent stack. Raise Unhandled. */
-        LEA_VAR(caml_exn_Unhandled, %rax)
-        jmp LBL(caml_raise_exn)
+    /* No parent stack; invoke default handler. */
+        movq    %rax, %rbx          /* copy the effect object */
+        movzbq  -8(%rax), %rdi      /* get tag */
+        cmpq    $248, %rdi          /* check whether the operation is unboxed */
+        je      LBL(120)
+        movq    (%rax), %rbx        /* unbox the operation */
+LBL(120):
+    /* Invoke the default handler */
+        movq    16(%rbx), %rbx       /* project field 2 (default handler closure) */
+        movq    (%rbx), %rsi         /* unwrap the closure */
+        jmp     *%rsi                /* call the default handler (its closure in %rbx) */
 CFI_ENDPROC
 
 FUNCTION(G(caml_reperform))
@@ -1155,9 +1163,20 @@ CFI_STARTPROC
         LEA_VAR(caml_apply2, %rsi)
         jmp     *%rsi
 LBL(113):
-    /* No parent stack. Raise Unhandled. */
-        LEA_VAR(caml_exn_Unhandled, %rax)
-        jmp LBL(caml_raise_exn)
+    /* No parent stack; invoke default delegate handler. */
+        movq    %r12, %rax      /* copy the effect into %rax (expected by handler) */
+        movzbq  -8(%rax), %rcx  /* get tag */
+        cmpq    $248, %rcx      /* test whether the operation is unboxed */
+        je      LBL(121)
+        movq    (%rax), %rdi    /* unbox operation */
+        movq    24(%rdi), %rdi  /* project field 3 (the delegate handler) */
+        /* call the handler */
+        LEA_VAR(caml_apply2, %rsi)
+        jmp     *%rsi
+LBL(121):
+        movq    24(%rax), %rdi  /* project field 3 (the delegate handler) */
+        LEA_VAR(caml_apply2, %rsi)
+        jmp     *%rsi
 CFI_ENDPROC
 
 FUNCTION(G(caml_resume))

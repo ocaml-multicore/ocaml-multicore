@@ -143,6 +143,10 @@ and pattern =
      ppat_attributes: attributes; (* ... [@id1] [@id2] *)
     }
 
+(* Used to decide whether to skip exhaustiveness check for
+   Ppat_construct / Tpat_construct *)
+and constructor_completeness = Check | Complete
+
 and pattern_desc =
   | Ppat_any
         (* _ *)
@@ -162,7 +166,7 @@ and pattern_desc =
 
            Invariant: n >= 2
         *)
-  | Ppat_construct of Longident.t loc * pattern option
+  | Ppat_construct of Longident.t loc * constructor_completeness * pattern option
         (* C                None
            C P              Some P
            C (P1, ..., Pn)  Some (Ppat_tuple [P1; ...; Pn])
@@ -452,7 +456,7 @@ and effect_constructor =
     }
 
 and effect_constructor_kind =
-    Peff_decl of core_type list * core_type
+    Peff_decl of core_type list * core_type * effect_handler option
       (*
          | C of T1 * ... * Tn     ([T1; ...; Tn], None)
          | C: T0                  ([], Some T0)
@@ -462,6 +466,12 @@ and effect_constructor_kind =
       (*
          | C = D
        *)
+
+and effect_handler =
+  {
+    peh_cases: case list;
+    peh_loc: Location.t;
+  }
 
 (** {2 Class language} *)
 

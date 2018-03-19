@@ -69,6 +69,8 @@ type error =
   | Exception_pattern_below_toplevel
   | Effect_pattern_below_toplevel
   | Invalid_continuation_pattern
+  | Unexpected_default_effect_label of string * string
+  | Unexpected_default_effect_pattern of string
 
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error
@@ -470,7 +472,7 @@ let rec build_as_type env p =
   | Tpat_tuple pl ->
       let tyl = List.map (build_as_type env) pl in
       newty (Ttuple tyl)
-  | Tpat_construct(_, cstr, pl) ->
+  | Tpat_construct(_, _, cstr, pl) ->
       let keep = cstr.cstr_private = Private || cstr.cstr_existentials <> [] in
       if keep then p.pat_type else
       let tyl = List.map (build_as_type env) pl in
@@ -1023,7 +1025,7 @@ let rec type_pat ~constrs ~labels ~no_existentials ~mode ~env sp expected_ty =
         pat_type = expected_ty;
         pat_attributes = sp.ppat_attributes;
         pat_env = !env }
-  | Ppat_construct(lid, sarg) ->
+  | Ppat_construct(lid, total, sarg) ->
       let opath =
         try
           let (p0, p, _) = extract_concrete_variant !env expected_ty in
@@ -1076,8 +1078,13 @@ let rec type_pat ~constrs ~labels ~no_existentials ~mode ~env sp expected_ty =
       else
         unify_pat_types loc !env ty_res expected_ty;
       let args = List.map2 (fun p t -> type_pat p t) sargs ty_args in
+      let completeness =
+        match total with
+        | Parsetree.Complete -> Typedtree.Complete
+        | _ -> Typedtree.Check
+      in
       rp {
-        pat_desc=Tpat_construct(lid, constr, args);
+        pat_desc=Tpat_construct(lid, completeness, constr, args);
         pat_loc = loc; pat_extra=[];
         pat_type = expected_ty;
         pat_attributes = sp.ppat_attributes;
@@ -1670,7 +1677,7 @@ let iter_ppat f p =
   | Ppat_type _ | Ppat_unpack _ -> ()
   | Ppat_array pats -> List.iter f pats
   | Ppat_or (p1,p2) | Ppat_effect(p1, p2) -> f p1; f p2
-  | Ppat_variant (_, arg) | Ppat_construct (_, arg) -> may f arg
+  | Ppat_variant (_, arg) | Ppat_construct (_, _, arg) -> may f arg
   | Ppat_tuple lst ->  List.iter f lst
   | Ppat_exception p | Ppat_alias (p,_)
   | Ppat_constraint (p,_) | Ppat_lazy p -> f p
@@ -1687,7 +1694,7 @@ let contains_polymorphic_variant p =
 let contains_gadt env p =
   let rec loop p =
     match p.ppat_desc with
-      Ppat_construct (lid, _) ->
+      Ppat_construct (lid, _, _) ->
         begin try
           let cstrs = Env.lookup_all_constructors lid.txt env in
           List.iter (fun (cstr,_) -> if cstr.cstr_generalized then raise Exit)
@@ -3860,6 +3867,55 @@ let type_expression env sexp =
       {exp with exp_type = desc.val_type}
   | _ -> exp
 
+(* Typing of default effect handlers *)
+let type_default_effect_handler env cname shandler =
+  Typetexp.reset_type_variables ();
+  let loc = shandler.peh_loc in
+  let ty  = newvar () in
+  begin_def ();
+  (* Create a fake abstract type declaration for the return type. *)
+  let level = get_current_level () in
+  let decl = {
+      type_params = [];
+      type_arity = 0;
+      type_kind = Type_abstract;
+      type_private = Public;
+      type_manifest = None;
+      type_variance = [];
+      type_newtype_level = Some (level, level);
+      type_loc = loc;
+      type_attributes = [];
+    }
+  in
+  Ident.set_current_time ty.level;
+  let tname = Ctype.get_new_abstract_name "effect" in
+  let (id, env) = Env.enter_type tname decl env in
+  Ctype.init_def (Ident.current_time ());
+  let ty_res = newgenty (Tconstr (Path.Pident id, [], ref Mnil)) in
+  let ty_arg = Predef.type_eff ty_res in
+  let check_case pcase =
+    let ppat = pcase.pc_lhs in
+    match ppat.ppat_desc with
+    | Ppat_construct ({ txt = Longident.Lident name; _ } as lid, _, arg) ->
+       if name <> cname then
+         raise (Error(loc, env,
+                      Unexpected_default_effect_label (name, cname)))
+       else
+         { pcase with pc_lhs =
+              { ppat with ppat_desc =
+                  Ppat_construct (lid, Complete, arg) } }
+    | _ ->
+       raise (Error (loc, env,
+                     Unexpected_default_effect_pattern cname))
+  in
+  let caselist = List.map check_case shandler.peh_cases in
+  let cases, partial = type_cases env ty_arg ty_res true loc caselist in
+  end_def();
+  { edef_cases = cases;
+    edef_partial = partial;
+    edef_env = env;
+    edef_loc = loc; }
+
 (* Error report *)
 
 open Format
@@ -4079,7 +4135,16 @@ let report_error env ppf = function
         "@[Effect patterns must be at the top level of a match case.@]"
   | Invalid_continuation_pattern ->
       fprintf ppf
-        "@[Invalid continuation pattern: only variables and _ are allowed .@]"
+              "@[Invalid continuation pattern: only variables and _ are allowed .@]"
+  | Unexpected_default_effect_label (unexpected, expected) ->
+     fprintf ppf
+             "@[This pattern matches effect %s, but the expected effect was %s.@]"
+             unexpected expected
+
+  | Unexpected_default_effect_pattern cname ->
+     fprintf ppf
+             "@[Expected definition of the form:@ %s@ ... -> ...@]"
+             cname
 
 let report_error env ppf err =
   wrap_printing_env env (fun () -> report_error env ppf err)

@@ -200,7 +200,7 @@ and pattern i ppf x =
   | Ppat_tuple (l) ->
       line i ppf "Ppat_tuple\n";
       list i pattern ppf l;
-  | Ppat_construct (li, po) ->
+  | Ppat_construct (li, _, po) ->
       line i ppf "Ppat_construct %a\n" fmt_longident_loc li;
       option i pattern ppf po;
   | Ppat_variant (l, po) ->
@@ -459,13 +459,20 @@ and effect_constructor i ppf x =
 
 and effect_constructor_kind i ppf x =
   match x with
-      Peff_decl(a, r) ->
+      Peff_decl(a, r, h) ->
         line i ppf "Peff_decl\n";
         list (i+1) core_type ppf a;
         core_type (i + 1) ppf r;
+        option (i + 1) effect_handler ppf h
     | Peff_rebind li ->
         line i ppf "Peff_rebind\n";
         line (i+1) ppf "%a\n" fmt_longident_loc li;
+
+and effect_handler i ppf x =
+  line i ppf "effect_handler %a\n" fmt_location x.peh_loc;
+  let i = i + 1 in
+  line i ppf "peh_cases =\n";
+  list (i + 1) case ppf x.peh_cases;
 
 and class_type i ppf x =
   line i ppf "class_type %a\n" fmt_location x.pcty_loc;

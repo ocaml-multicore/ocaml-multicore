@@ -57,23 +57,60 @@ let transl_extension_constructor env path ext =
     | Some p -> Path.name p
   in
   match ext.ext_kind with
-    Text_decl(args, ret) ->
-      Lprim(prim_set_oo_id,
+  | Text_decl(args, ret, None) ->
+     let extn =
+       Lprim(prim_set_oo_id,
             [Lprim(Pmakeblock(Obj.object_tag, Mutable),
-                   [Lconst(Const_base(Const_string (name,None)));
+                   [Lconst(Const_base(Const_string (name, None)));
                     Lconst(Const_base(Const_int 0))])])
+     in
+     extn, None
+  | Text_decl(args, ret, Some edef) ->
+     let handler_id = Ident.create "default" in
+     let delegate_id = Ident.create "delegate" in
+     let handler = transl_default_effect_handler edef in
+     let delegate = transl_default_delegate_handler handler_id in
+     let extn =
+       Lprim(prim_set_oo_id,
+             [Lprim(Pmakeblock(Obj.object_tag, Mutable),
+                    [Lconst(Const_base(Const_string (name, None)));
+                     Lconst(Const_base(Const_int 0));
+                     Lvar handler_id;
+                     Lvar delegate_id])])
+     in
+     extn, Some ((handler_id, handler), (delegate_id, delegate))
   | Text_rebind(path, lid) ->
-      transl_path ~loc:ext.ext_loc env path
+      transl_path ~loc:ext.ext_loc env path, None
 
 let transl_type_extension env rootpath tyext body =
-  List.fold_right
-    (fun ext body ->
-      let lam =
-        transl_extension_constructor env (field_path rootpath ext.ext_id) ext
-      in
-      Llet(Strict, ext.ext_id, lam, body))
-    tyext.tyext_constructors
-    body
+  let bindings =
+    List.fold_right
+      (fun ext acc ->
+        let extn, def =
+          transl_extension_constructor env
+            (field_path rootpath ext.ext_id) ext
+        in
+        let acc = (ext.ext_id, extn) :: acc in
+        let acc =
+          match def with
+          | None -> acc
+          | Some (handler, reperformer) -> reperformer :: handler :: acc
+        in
+        acc)
+      tyext.tyext_constructors []
+  in
+  Lletrec (bindings, body)
+
+let transl_extension_constructor env path ext body =
+  let extn, def = transl_extension_constructor env path ext in
+  match def with
+  | None ->
+     Llet (Strict, ext.ext_id, extn, body)
+  | Some ((handler_id, handler), (delegate_id, delegate)) ->
+     Lletrec ([ext.ext_id, extn;
+               handler_id, handler;
+               delegate_id, delegate],
+              body)
 
 (* Compile a coercion *)
 
@@ -414,13 +451,13 @@ and transl_structure fields cc rootpath = function
   | Tstr_exception ext ->
       let id = ext.ext_id in
       let path = field_path rootpath id in
-      Llet(Strict, id, transl_extension_constructor item.str_env path ext,
-           transl_structure (id :: fields) cc rootpath rem)
+      transl_extension_constructor item.str_env path ext
+        (transl_structure (id :: fields) cc rootpath rem)
   | Tstr_effect ext ->
       let id = ext.ext_id in
       let path = field_path rootpath id in
-      Llet(Strict, id, transl_extension_constructor item.str_env path ext,
-           transl_structure (id :: fields) cc rootpath rem)
+      transl_extension_constructor item.str_env path ext
+        (transl_structure (id :: fields) cc rootpath rem)
   | Tstr_module mb ->
       let id = mb.mb_id in
       Llet(pure_module mb.mb_expr, id,
@@ -616,14 +653,18 @@ let transl_store_structure glob map prims str =
   | Tstr_exception ext ->
       let id = ext.ext_id in
       let path = field_path rootpath id in
-      let lam = transl_extension_constructor item.str_env path ext in
-      Lsequence(Llet(Strict, id, subst_lambda subst lam, store_ident id),
+      let lam =
+        transl_extension_constructor item.str_env path ext (store_ident id)
+      in
+      Lsequence(subst_lambda subst lam,
                 transl_store rootpath (add_ident false id subst) rem)
   | Tstr_effect ext ->
       let id = ext.ext_id in
       let path = field_path rootpath id in
-      let lam = transl_extension_constructor item.str_env path ext in
-      Lsequence(Llet(Strict, id, subst_lambda subst lam, store_ident id),
+      let lam =
+        transl_extension_constructor item.str_env path ext (store_ident id)
+      in
+      Lsequence(subst_lambda subst lam,
                 transl_store rootpath (add_ident false id subst) rem)
   | Tstr_module{mb_id=id; mb_expr={mod_desc = Tmod_structure str}} ->
     let lam = transl_store (field_path rootpath id) subst str.str_items in
@@ -840,11 +881,15 @@ let transl_toplevel_item item =
         transl_type_extension item.str_env None tyext
           (make_sequence toploop_setvalue_id idents)
   | Tstr_exception ext ->
-      toploop_setvalue ext.ext_id
-        (transl_extension_constructor item.str_env None ext)
+     let id = ext.ext_id in
+     set_toplevel_unique_name id;
+     transl_extension_constructor item.str_env None ext
+                                  (toploop_setvalue_id id)
   | Tstr_effect ext ->
-      toploop_setvalue ext.ext_id
-        (transl_extension_constructor item.str_env None ext)
+     let id = ext.ext_id in
+     set_toplevel_unique_name id;
+     transl_extension_constructor item.str_env None ext
+                                  (toploop_setvalue_id id)
   | Tstr_module {mb_id=id; mb_expr=modl} ->
       (* we need to use the unique name for the module because of issues
          with "open" (PR#1672) *)

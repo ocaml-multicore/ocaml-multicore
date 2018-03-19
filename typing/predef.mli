@@ -50,6 +50,7 @@ val path_int32: Path.t
 val path_int64: Path.t
 val path_lazy_t: Path.t
 
+val path_unhandled: Path.t
 val path_match_failure: Path.t
 val path_assert_failure : Path.t
 val path_undefined_recursive_module : Path.t

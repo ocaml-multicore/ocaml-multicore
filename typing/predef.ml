@@ -96,6 +96,7 @@ and ident_undefined_recursive_module =
         ident_create_predef_exn "Undefined_recursive_module"
 and ident_unhandled = ident_create_predef_exn "Unhandled"
 
+let path_unhandled = Pident ident_unhandled
 let path_match_failure = Pident ident_match_failure
 and path_assert_failure = Pident ident_assert_failure
 and path_undefined_recursive_module = Pident ident_undefined_recursive_module

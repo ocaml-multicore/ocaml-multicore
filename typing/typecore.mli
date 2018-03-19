@@ -30,6 +30,9 @@ val type_let:
           Typedtree.value_binding list * Env.t
 val type_expression:
         Env.t -> Parsetree.expression -> Typedtree.expression
+val type_default_effect_handler :
+        Env.t -> string -> Parsetree.effect_handler ->
+        Typedtree.extension_default_impl
 val type_class_arg_pattern:
         string -> Env.t -> Env.t -> label -> Parsetree.pattern ->
         Typedtree.pattern * (Ident.t * string loc * Ident.t * type_expr) list *
@@ -114,6 +117,8 @@ type error =
   | Exception_pattern_below_toplevel
   | Effect_pattern_below_toplevel
   | Invalid_continuation_pattern
+  | Unexpected_default_effect_label of string * string
+  | Unexpected_default_effect_pattern of string
 
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error

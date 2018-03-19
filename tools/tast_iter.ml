@@ -66,7 +66,7 @@ let type_extension sub te =
 
 let extension_constructor sub ext =
   match ext.ext_kind with
-    Text_decl(ctl, cto) ->
+    Text_decl(ctl, cto, _) ->
       List.iter (sub # core_type) ctl;
       opt (sub # core_type) cto
   | Text_rebind _ -> ()
@@ -83,7 +83,7 @@ let pattern sub pat =
   | Tpat_var _
   | Tpat_constant _ -> ()
   | Tpat_tuple l
-  | Tpat_construct (_, _, l) -> List.iter (sub # pattern) l
+  | Tpat_construct (_, _, _, l) -> List.iter (sub # pattern) l
   | Tpat_variant (_, po, _) -> opt (sub # pattern) po
   | Tpat_record (l, _) -> List.iter (fun (_, _, pat) -> sub # pattern pat) l
   | Tpat_array l -> List.iter (sub # pattern) l

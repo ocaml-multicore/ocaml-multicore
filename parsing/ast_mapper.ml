@@ -168,9 +168,18 @@ module T = struct
       ~loc:(sub.location sub pext_loc)
       ~attrs:(sub.attributes sub pext_attributes)
 
+  let map_effect_handler sub
+      {peh_loc;
+       peh_cases} =
+    Te.effect_handler
+      (sub.cases sub peh_cases)
+      ~loc:(sub.location sub peh_loc)
+
   let map_effect_constructor_kind sub = function
-      Peff_decl(ctl, cto) ->
-        Peff_decl(List.map (sub.typ sub) ctl, sub.typ sub cto)
+      Peff_decl(ctl, cto, handler) ->
+      Peff_decl(List.map (sub.typ sub) ctl,
+                sub.typ sub cto,
+                map_opt (map_effect_handler sub) handler)
     | Peff_rebind li ->
         Peff_rebind (map_loc sub li)
 
@@ -184,7 +193,6 @@ module T = struct
       (map_effect_constructor_kind sub peff_kind)
       ~loc:(sub.location sub peff_loc)
       ~attrs:(sub.attributes sub peff_attributes)
-
 end
 
 module CT = struct
@@ -410,8 +418,8 @@ module P = struct
     | Ppat_constant c -> constant ~loc ~attrs c
     | Ppat_interval (c1, c2) -> interval ~loc ~attrs c1 c2
     | Ppat_tuple pl -> tuple ~loc ~attrs (List.map (sub.pat sub) pl)
-    | Ppat_construct (l, p) ->
-        construct ~loc ~attrs (map_loc sub l) (map_opt (sub.pat sub) p)
+    | Ppat_construct (l, total, p) ->
+        construct ~loc ~attrs ~total (map_loc sub l) (map_opt (sub.pat sub) p)
     | Ppat_variant (l, p) -> variant ~loc ~attrs l (map_opt (sub.pat sub) p)
     | Ppat_record (lpl, cf) ->
         record ~loc ~attrs

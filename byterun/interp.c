@@ -41,7 +41,7 @@
         caml_trapsp pointer to the current trap frame
         extra_args number of extra arguments provided by the caller
 
-sp is a local copy of the global variable caml_extern_sp. */
+sp is a local copy of the domain global variable extern_sp. */
 
 /* Instruction decoding */
 
@@ -209,8 +209,6 @@ sp is a local copy of the global variable caml_extern_sp. */
 static __thread intnat caml_bcodcount;
 #endif
 
-static caml_root raise_unhandled;
-
 /* The interpreter itself */
 value caml_interprete(code_t prog, asize_t prog_size)
 {
@@ -250,17 +248,10 @@ value caml_interprete(code_t prog, asize_t prog_size)
 #endif
 
   if (prog == NULL) {           /* Interpreter is initializing */
-    static opcode_t raise_unhandled_code[] = { ACC, 0, RAISE };
 #ifdef THREADED_CODE
     caml_instr_table = (char **) jumptable;
     caml_instr_base = Jumptbl_base;
-    caml_thread_code(raise_unhandled_code,
-                     sizeof(raise_unhandled_code));
 #endif
-    value raise_unhandled_closure =
-      caml_alloc_1(Closure_tag,
-                   Val_bytecode(raise_unhandled_code));
-    raise_unhandled = caml_create_root(raise_unhandled_closure);
     caml_global_data = caml_create_root(Val_unit);
     caml_init_callbacks();
     return Val_unit;
@@ -1285,8 +1276,23 @@ do_resume:
       value heff = Stack_handle_effect(domain_state->current_stack);
 
       if (parent_stack == Val_long(0)) {
-        accu = Field_imm(caml_read_root(caml_global_data), UNHANDLED_EXN);
-        goto raise_exception;
+        // No parent handler; invoke default handler.
+        value defh;
+        if (Tag_val(eff) == Object_tag) { // the operation is unboxed
+          defh = Field_imm(eff, 2);
+        } else {                          // ... but in case it's boxed
+          defh = Field_imm(Field_imm(eff, 0), 2);
+        }
+        sp -= 4;
+        sp[0] = eff;
+        sp[1] = Val_pc(pc);
+        sp[2] = env;
+        sp[3] = Val_long(extra_args);
+        pc = Code_val(defh);
+        env = defh;
+        accu = defh;
+        extra_args = 0;
+        goto check_stacks;
       }
 
       sp -= 4;
@@ -1317,16 +1323,28 @@ do_resume:
       value self = domain_state->current_stack;
       value parent = Stack_parent(domain_state->current_stack);
 
+      if (parent == Val_long(0)) {
+        // No parent handler; invoke default delegate handler.
+        value delegate;
+        if (Tag_val(eff) == Object_tag) { // the operation is unboxed
+          delegate = Field_imm(eff, 3);
+        } else {                          // ... but in case it isn't
+          delegate = Field_imm(Field_imm(eff, 0), 3);
+        }
+
+        sp = sp + *pc - 2;
+        sp[0] = eff;
+        sp[1] = performer;
+        accu = delegate;
+        pc = Code_val(delegate);
+        env = delegate;
+        extra_args += 1;
+        goto check_stacks;
+      }
+
       sp = sp + *pc - 2;
       sp[0] = Val_long(domain_state->trap_sp_off);
       sp[1] = Val_long(extra_args);
-
-      if (parent == Val_long(0)) {
-        accu = performer;
-        resume_fn = caml_read_root(raise_unhandled);
-        resume_arg = Field_imm(caml_read_root(caml_global_data), UNHANDLED_EXN);
-        goto do_resume;
-      }
 
       Stack_parent(self) = performer;
 

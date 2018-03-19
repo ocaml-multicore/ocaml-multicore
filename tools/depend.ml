@@ -89,7 +89,7 @@ let add_extension_constructor bv ext =
 
 let add_effect_constructor bv eff =
   match eff.peff_kind with
-      Peff_decl(args, rty) ->
+      Peff_decl(args, rty, _handler) ->
         List.iter (add_type bv) args; add_type bv rty
     | Peff_rebind lid -> add bv lid
 
@@ -132,7 +132,7 @@ let rec add_pattern bv pat =
   | Ppat_interval _
   | Ppat_constant _ -> ()
   | Ppat_tuple pl -> List.iter (add_pattern bv) pl
-  | Ppat_construct(c, op) -> add bv c; add_opt add_pattern bv op
+  | Ppat_construct(c, _, op) -> add bv c; add_opt add_pattern bv op
   | Ppat_record(pl, _) ->
       List.iter (fun (lbl, p) -> add bv lbl; add_pattern bv p) pl
   | Ppat_array pl -> List.iter (add_pattern bv) pl

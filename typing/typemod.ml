@@ -39,6 +39,7 @@ type error =
   | Scoping_pack of Longident.t * type_expr
   | Recursive_module_require_explicit_type
   | Apply_generative
+  | Effect_sig_cannot_have_default
 
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error
@@ -619,17 +620,22 @@ and transl_signature env sg =
                Sig_typext(ext.ext_id, ext.ext_type, Text_exception) :: rem),
             final_env
         | Psig_effect seff ->
-            let (ext, newenv) = Typedecl.transl_effect env seff in
-            let (trem, rem, final_env) = transl_sig newenv srem in
-            let shadowed =
-              List.exists
-                (Ident.equal ext.ext_id)
-                (get_extension_constructors rem)
-            in
-            mksig (Tsig_effect ext) env loc :: trem,
-            (if shadowed then rem else
-               Sig_typext(ext.ext_id, ext.ext_type, Text_effect) :: rem),
-            final_env
+           begin match seff.peff_kind with
+           | Peff_decl (_,_, Some _) ->
+              raise (Error (seff.peff_loc, env, Effect_sig_cannot_have_default))
+           | _ ->
+              let (ext, newenv) = Typedecl.transl_effect env seff in
+              let (trem, rem, final_env) = transl_sig newenv srem in
+              let shadowed =
+                List.exists
+                  (Ident.equal ext.ext_id)
+                  (get_extension_constructors rem)
+              in
+              mksig (Tsig_effect ext) env loc :: trem,
+              (if shadowed then rem else
+                 Sig_typext(ext.ext_id, ext.ext_type, Text_effect) :: rem),
+              final_env
+           end
         | Psig_module pmd ->
             check_name "module" module_names pmd.pmd_name;
             let tmty = transl_modtype env pmd.pmd_type in
@@ -1831,7 +1837,9 @@ let report_error ppf = function
   | Recursive_module_require_explicit_type ->
       fprintf ppf "Recursive modules require an explicit module type."
   | Apply_generative ->
-      fprintf ppf "This is a generative functor. It can only be applied to ()"
+     fprintf ppf "This is a generative functor. It can only be applied to ()"
+  | Effect_sig_cannot_have_default ->
+     fprintf ppf "An effect declaration in a signature cannot have a default handler."
 
 let report_error env ppf err =
   Printtyp.wrap_printing_env env (fun () -> report_error ppf err)

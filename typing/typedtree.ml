@@ -38,6 +38,8 @@ and pat_extra =
   | Tpat_type of Path.t * Longident.t loc
   | Tpat_unpack
 
+and constructor_completeness = Check | Complete
+
 and pattern_desc =
     Tpat_any
   | Tpat_var of Ident.t * string loc
@@ -45,7 +47,7 @@ and pattern_desc =
   | Tpat_constant of constant
   | Tpat_tuple of pattern list
   | Tpat_construct of
-      Longident.t loc * constructor_description * pattern list
+      Longident.t loc * constructor_completeness * constructor_description * pattern list
   | Tpat_variant of label * pattern option * row_desc ref
   | Tpat_record of
       (Longident.t loc * label_description * pattern) list *
@@ -439,8 +441,20 @@ and extension_constructor =
   }
 
 and extension_constructor_kind =
-    Text_decl of core_type list * core_type option
+    Text_decl of core_type list * core_type option * extension_default option
   | Text_rebind of Path.t * Longident.t loc
+
+and extension_default =
+   | Tdef_impl_generated
+   | Tdef_impl_provided of extension_default_impl
+
+and extension_default_impl =
+  {
+    edef_cases: case list;
+    edef_partial: partial;
+    edef_env: Env.t;
+    edef_loc: Location.t;
+  }
 
 and class_type =
     {
@@ -504,7 +518,7 @@ and 'a class_infos =
 let iter_pattern_desc f = function
   | Tpat_alias(p, _, _) -> f p
   | Tpat_tuple patl -> List.iter f patl
-  | Tpat_construct(_, cstr, patl) -> List.iter f patl
+  | Tpat_construct(_, _, cstr, patl) -> List.iter f patl
   | Tpat_variant(_, pat, _) -> may f pat
   | Tpat_record (lbl_pat_list, _) ->
       List.iter (fun (_, lbl, pat) -> f pat) lbl_pat_list
@@ -523,8 +537,8 @@ let map_pattern_desc f d =
       Tpat_tuple (List.map f pats)
   | Tpat_record (lpats, closed) ->
       Tpat_record (List.map (fun (lid, l,p) -> lid, l, f p) lpats, closed)
-  | Tpat_construct (lid, c,pats) ->
-      Tpat_construct (lid, c, List.map f pats)
+  | Tpat_construct (lid, b, c,pats) ->
+      Tpat_construct (lid, b, c, List.map f pats)
   | Tpat_array pats ->
       Tpat_array (List.map f pats)
   | Tpat_lazy p1 -> Tpat_lazy (f p1)

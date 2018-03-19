@@ -37,6 +37,8 @@ and pat_extra =
   | Tpat_type of Path.t * Longident.t loc
   | Tpat_unpack
 
+and constructor_completeness = Check | Complete
+
 and pattern_desc =
     Tpat_any
   | Tpat_var of Ident.t * string loc
@@ -44,7 +46,7 @@ and pattern_desc =
   | Tpat_constant of constant
   | Tpat_tuple of pattern list
   | Tpat_construct of
-      Longident.t loc * constructor_description * pattern list
+      Longident.t loc * constructor_completeness * constructor_description * pattern list
   | Tpat_variant of label * pattern option * row_desc ref
   | Tpat_record of
       (Longident.t loc * label_description * pattern) list *
@@ -440,8 +442,20 @@ and extension_constructor =
   }
 
 and extension_constructor_kind =
-    Text_decl of core_type list * core_type option
+    Text_decl of core_type list * core_type option * extension_default option
   | Text_rebind of Path.t * Longident.t loc
+
+and extension_default =
+   | Tdef_impl_generated                          (* The extension has a compiler generated default implementation *)
+   | Tdef_impl_provided of extension_default_impl (* The extension has a programmer provided default implementation *)
+
+and extension_default_impl =
+  {
+    edef_cases: case list;
+    edef_partial: partial;
+    edef_env: Env.t;
+    edef_loc: Location.t;
+  }
 
 and class_type =
     {

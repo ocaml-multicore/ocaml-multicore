@@ -113,7 +113,7 @@ let mkexp_cons consloc args loc =
   Exp.mk ~loc (Pexp_construct(mkloc (Lident "::") consloc, Some args))
 
 let mkpat_cons consloc args loc =
-  Pat.mk ~loc (Ppat_construct(mkloc (Lident "::") consloc, Some args))
+  Pat.mk ~loc (Ppat_construct(mkloc (Lident "::") consloc, Check, Some args))
 
 let rec mktailexp nilloc = function
     [] ->
@@ -133,7 +133,7 @@ let rec mktailpat nilloc = function
     [] ->
       let loc = { nilloc with loc_ghost = true } in
       let nil = { txt = Lident "[]"; loc = loc } in
-      Pat.mk ~loc (Ppat_construct (nil, None))
+      Pat.mk ~loc (Ppat_construct (nil, Check, None))
   | p1 :: pl ->
       let pat_pl = mktailpat nilloc pl in
       let loc = {loc_start = p1.ppat_loc.loc_start;
@@ -1595,7 +1595,7 @@ pattern:
   | pattern_comma_list  %prec below_COMMA
       { mkpat(Ppat_tuple(List.rev $1)) }
   | constr_longident pattern %prec prec_constr_appl
-      { mkpat(Ppat_construct(mkrhs $1 1, Some $2)) }
+      { mkpat(Ppat_construct(mkrhs $1 1, Check, Some $2)) }
   | name_tag pattern %prec prec_constr_appl
       { mkpat(Ppat_variant($1, Some $2)) }
   | pattern COLONCOLON pattern
@@ -1632,7 +1632,7 @@ simple_pattern_not_ident:
   | signed_constant DOTDOT signed_constant
       { mkpat(Ppat_interval ($1, $3)) }
   | constr_longident
-      { mkpat(Ppat_construct(mkrhs $1 1, None)) }
+      { mkpat(Ppat_construct(mkrhs $1 1, Check, None)) }
   | name_tag
       { mkpat(Ppat_variant($1, None)) }
   | SHARP type_longident
@@ -1845,17 +1845,43 @@ effect_declaration:
 ;
 effect_constructor_declaration:
   | constr_ident attributes COLON core_type_list MINUSGREATER simple_core_type
-      post_item_attributes
+      default_handler post_item_attributes
       { Te.effect_decl (mkrhs $1 1) $6 ~args:(List.rev $4)
-          ~loc:(symbol_rloc()) ~attrs:($7 @ $2) }
-  | constr_ident attributes COLON simple_core_type post_item_attributes
+          ~loc:(symbol_rloc()) ~attrs:($8 @ $2) ~handler:$7 }
+  | constr_ident attributes COLON simple_core_type default_handler post_item_attributes
       { Te.effect_decl (mkrhs $1 1) $4
-          ~loc:(symbol_rloc()) ~attrs:($5 @ $2) }
+          ~loc:(symbol_rloc()) ~attrs:($6 @ $2) ~handler:$5 }
 ;
 effect_constructor_rebind:
   | constr_ident attributes EQUAL constr_longident post_item_attributes
       { Te.effect_rebind (mkrhs $1 1) (mkrhs $4 4)
           ~loc:(symbol_rloc()) ~attrs:($5 @ $2) }
+;
+
+default_handler:
+| /* empty */
+      { None }
+| WITH FUNCTION opt_bar default_handler_cases
+      { Some (Te.effect_handler ~loc:(symbol_rloc()) (List.rev $4)) }
+;
+
+default_handler_cases:
+| default_handler_case { [$1] }
+| default_handler_cases BAR default_handler_case { $3 :: $1 }
+;
+
+default_handler_case:
+| default_handler_pattern MINUSGREATER seq_expr
+      { Exp.case $1 $3 }
+| default_handler_pattern WHEN seq_expr MINUSGREATER seq_expr
+      { Exp.case $1 ~guard:$3 $5 }
+;
+
+default_handler_pattern:
+  | simple_pattern
+      { $1 } /* Continuation pattern is _ */
+ | constr_longident simple_pattern
+      { mkpat(Ppat_construct(mkrhs $1 1, Check, Some $2)) }
 ;
 
 generalized_constructor_arguments:

@@ -64,7 +64,7 @@ module Pat = struct
   let constant ?loc ?attrs a = mk ?loc ?attrs (Ppat_constant a)
   let interval ?loc ?attrs a b = mk ?loc ?attrs (Ppat_interval (a, b))
   let tuple ?loc ?attrs a = mk ?loc ?attrs (Ppat_tuple a)
-  let construct ?loc ?attrs a b = mk ?loc ?attrs (Ppat_construct (a, b))
+  let construct ?loc ?attrs ?(total=Check) a b = mk ?loc ?attrs (Ppat_construct (a, total, b))
   let variant ?loc ?attrs a b = mk ?loc ?attrs (Ppat_variant (a, b))
   let record ?loc ?attrs a b = mk ?loc ?attrs (Ppat_record (a, b))
   let array ?loc ?attrs a = mk ?loc ?attrs (Ppat_array a)
@@ -474,10 +474,10 @@ module Te = struct
      peff_attributes = attrs;
     }
 
-  let effect_decl ?(loc = !default_loc) ?(attrs = []) ?(args = []) name res =
+  let effect_decl ?(loc = !default_loc) ?(attrs = []) ?(args = []) ?(handler = None) name res =
     {
      peff_name = name;
-     peff_kind = Peff_decl(args, res);
+     peff_kind = Peff_decl(args, res, handler);
      peff_loc = loc;
      peff_attributes = attrs;
     }
@@ -490,6 +490,11 @@ module Te = struct
      peff_attributes = attrs;
     }
 
+  let effect_handler ?(loc = !default_loc) cases =
+    {
+      peh_loc = loc;
+      peh_cases = cases;
+    }
 end
 
 module Csig = struct

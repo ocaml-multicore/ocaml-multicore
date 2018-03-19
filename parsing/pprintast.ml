@@ -349,7 +349,7 @@ class printer  ()= object(self:'self)
     let rec pattern_list_helper f  =  function
       | {ppat_desc =
          Ppat_construct
-           ({ txt = Lident("::") ;_},
+           ({ txt = Lident("::") ;_},_,
             Some ({ppat_desc = Ppat_tuple([pat1; pat2]);_})); _}
             ->
               pp f "%a::%a"  self#simple_pattern  pat1  pattern_list_helper pat2 (*RA*)
@@ -357,8 +357,8 @@ class printer  ()= object(self:'self)
     if x.ppat_attributes <> [] then self#pattern f x
     else match x.ppat_desc with
     | Ppat_variant (l, Some p) ->  pp f "@[<2>`%s@;%a@]" l self#simple_pattern p
-    | Ppat_construct (({txt=Lident("()"|"[]");_}), _) -> self#simple_pattern f x
-    | Ppat_construct (({txt;_} as li), po) -> (* FIXME The third field always false *)
+    | Ppat_construct (({txt=Lident("()"|"[]");_}), _, _) -> self#simple_pattern f x
+    | Ppat_construct (({txt;_} as li), _, po) -> (* FIXME The third field always false *)
         if txt = Lident "::" then
           pp f "%a" pattern_list_helper x
         else
@@ -370,7 +370,7 @@ class printer  ()= object(self:'self)
   method simple_pattern (f:Format.formatter) (x:pattern) :unit =
     if x.ppat_attributes <> [] then self#pattern f x
     else match x.ppat_desc with
-    | Ppat_construct (({txt=Lident ("()"|"[]" as x);_}), _) -> pp f  "%s" x
+    | Ppat_construct (({txt=Lident ("()"|"[]" as x);_}),_, _) -> pp f  "%s" x
     | Ppat_any -> pp f "_";
     | Ppat_var ({txt = txt;_}) -> protect_ident f txt
     | Ppat_array l ->
@@ -1365,8 +1365,8 @@ class printer  ()= object(self:'self)
 
   method effect_constructor f x =
     match x.peff_kind with
-    | Peff_decl(l, r) ->
-        pp f "%s%a:@;%a" x.peff_name.txt
+    | Peff_decl(l, r, h) ->
+        pp f "%s%a:@;%a@;%a" x.peff_name.txt
           self#attributes x.peff_attributes
           (fun f -> function
                  | [] -> self#core_type1 f r
@@ -1374,10 +1374,15 @@ class printer  ()= object(self:'self)
                            (self#list self#core_type1 ~sep:"*@;") l
                            self#core_type1 r)
           l
+          (self#option self#effect_handler) h
     | Peff_rebind li ->
         pp f "%s%a@;=@;%a" x.peff_name.txt
           self#attributes x.peff_attributes
           self#longident_loc li
+
+  method effect_handler f x =
+    pp f "with function@;%a"
+       self#case_list x.peh_cases
 
   method case_list f l : unit =
     let aux f {pc_lhs; pc_guard; pc_rhs} =
