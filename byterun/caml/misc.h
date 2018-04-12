@@ -394,7 +394,7 @@ int caml_runtime_warnings_active(void);
 
 #ifdef DEBUG
 #ifdef ARCH_SIXTYFOUR
-#define Debug_tag(x) (0xD700D7D7D700D6D7ul \
+#define Debug_tag(x) (INT64_LITERAL(0xD700D7D7D700D6D7u) \
                       | ((uintnat) (x) << 16) \
                       | ((uintnat) (x) << 48))
 #define Is_debug_tag(x) \

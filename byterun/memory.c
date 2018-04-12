@@ -455,7 +455,7 @@ union max_align {
 
 struct pool_block {
 #ifdef DEBUG
-  long magic;
+  intnat magic;
 #endif
   struct pool_block *next;
   struct pool_block *prev;
