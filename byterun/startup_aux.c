@@ -177,10 +177,10 @@ CAMLexport void caml_shutdown(void)
   shutdown_happened = 1;
 }
 
-void caml_init_argv(const char* exe_name, char** main_argv)
+void caml_init_argv(const char_os* exe_name, char_os** main_argv)
 {
   params.exe_name = exe_name;
-  params.main_argv = (const char* const*)main_argv;
+  params.main_argv = (const char_os* const*)main_argv;
 }
 
 void caml_init_section_table(const char* section_table,
