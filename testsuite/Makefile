@@ -140,7 +140,7 @@ check-failstamp:
 
 .PHONY: all-enabled
 all-enabled: lib tools
-	@sed -n 's/#.*//; /\//d; /./p' disabled > disabled-dirs
+	@cat disabled | tr -d '\r' | sed -n 's/#.*//; /\//d; /./p' > disabled-dirs
 	@ls tests | fgrep -v -f disabled-dirs | \
 	  while read LINE; do \
 	    $(MAKE) $(NO_PRINT) exec-one DIR=tests/$$LINE; \

@@ -16,6 +16,7 @@
 BEGIN {
     while ((getline line < "disabled") > 0) {
         gsub(/#.*/, "", line);
+        gsub(/\r$/, "", line);
         if (line) {
             is_disabled[line] = 1;
         }
