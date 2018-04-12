@@ -1043,3 +1043,8 @@ CAMLexport clock_t caml_win32_clock(void)
   clocks_per_sec = INT64_LITERAL(10000000U) / (ULONGLONG)CLOCKS_PER_SEC;
   return (clock_t)(total / clocks_per_sec);
 }
+
+void caml_init_os_params(void)
+{
+  return;
+}
