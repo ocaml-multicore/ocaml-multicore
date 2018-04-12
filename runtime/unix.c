@@ -59,6 +59,7 @@
 #include "caml/sys.h"
 #include "caml/io.h"
 #include "caml/alloc.h"
+#include "caml/platform.h"
 
 #ifndef S_ISREG
 #define S_ISREG(mode) (((mode) & S_IFMT) == S_IFREG)
@@ -454,4 +455,10 @@ int caml_num_rows_fd(int fd)
 #else
   return -1;
 #endif
+}
+
+void caml_init_os_params(void)
+{
+  caml_sys_pagesize = sysconf(_SC_PAGESIZE);
+  return;
 }
