@@ -85,11 +85,12 @@ PROFILING=false
 DYNLINKOPTS=
 CC_PROFILE=
 SYSTHREAD_SUPPORT=true
+STATS=false
 EXTRALIBS=
 NATDYNLINK=true
 NATDYNLINKOPTS=
 CMXS=cmxs
-RUNTIMED=false
+RUNTIMED=true
 ASM_CFI_SUPPORTED=false
 WITH_FRAME_POINTERS=false
 UNIX_OR_WIN32=win32
@@ -122,11 +123,11 @@ BYTECCDBGCOMPOPTS=-g
 LDFLAGS=-municode
 
 ### Libraries needed
-BYTECCLIBS=-lws2_32 -lversion
-NATIVECCLIBS=-lws2_32 -lversion
+BYTECCLIBS=-lws2_32 -lversion -lpthread -lgcc_eh
+NATIVECCLIBS=-lws2_32 -lversion -lpthread -lgcc_eh
 
 ### How to invoke the C preprocessor
-CPP=cpp
+CPP=$(TOOLPREF)gcc -E -P
 
 ### Flexlink
 FLEXLINK_CMD=flexlink
@@ -190,7 +191,7 @@ PACKLD=$(TOOLPREF)ld -r -o # must have a space after '-o'
 
 ############# Configuration for the contributed libraries
 
-OTHERLIBRARIES=win32unix str win32graph dynlink bigarray systhreads
+OTHERLIBRARIES=win32unix str dynlink bigarray systhreads
 
 ############# for the testsuite makefiles
 #ml let topdir = "" and wintopdir = "";;

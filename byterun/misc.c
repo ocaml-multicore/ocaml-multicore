@@ -18,7 +18,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
-#include <execinfo.h>
+/* TODO This has kicked the can down the road to native code... */
+#if defined(DEBUG) || defined(NATIVE_CODE)
+/*#include <execinfo.h>*/
+#endif
 #include <stdlib.h>
 #include "caml/config.h"
 #include "caml/misc.h"
@@ -45,15 +48,21 @@ void print_trace (void)
   char **strings;
   size_t i;
 
+#ifdef _WIN32
+  size = 0;
+#else
   size = backtrace (array, 10);
   strings = backtrace_symbols (array, size);
+#endif
 
   caml_gc_log ("Obtained %zd stack frames.", size);
 
   for (i = 0; i < size; i++)
     caml_gc_log ("%s", strings[i]);
 
+#ifndef _WIN32
   free (strings);
+#endif
 }
 
 int caml_failed_assert (char * expr, char * file, int line)

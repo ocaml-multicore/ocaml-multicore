@@ -41,6 +41,8 @@
 #include "caml/osdeps.h"
 #include "caml/signals.h"
 #include "caml/sys.h"
+#include "caml/startup_aux.h"
+#include "caml/platform.h"
 
 #include "caml/config.h"
 #ifdef SUPPORT_DYNAMIC_LINKING
@@ -915,7 +917,21 @@ void caml_restore_win32_terminal(void)
     SetConsoleOutputCP(startup_codepage);
 }
 
+static LARGE_INTEGER frequency;
+
 void caml_init_os_params(void)
 {
-  return;
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  caml_sys_pagesize = si.dwPageSize;
+  QueryPerformanceFrequency(&frequency);
+}
+
+int64_t caml_time_counter(void)
+{
+  LARGE_INTEGER now;
+  /* Windows 2000 is no longer supported, so this function always succeeds */
+  QueryPerformanceCounter(&now);
+  now.QuadPart *= 1000000000L;
+  return (now.QuadPart * 1000000000L) / frequency.QuadPart;
 }

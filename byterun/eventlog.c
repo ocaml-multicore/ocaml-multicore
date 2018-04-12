@@ -11,6 +11,10 @@
 #include <sys/time.h>
 #endif
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include "caml/mlvalues.h"
 #include "caml/eventlog.h"
 #include "caml/startup.h"
@@ -70,10 +74,24 @@ struct event_buffer {
 
 static __thread struct event_buffer evbuf;
 
+/* Unix epoch as a Windows timestamp in hundreds of ns */
+#define epoch_ft 116444736000000000
 
 static uint64_t timestamp()
 {
   uint64_t now = 0;
+#ifdef _WIN32
+  /* TODO Code shared with otherlibs/win32unix/gettimeofday.c */
+  FILETIME ft;
+  GetSystemTimeAsFileTime(&ft);
+#if defined(_MSC_VER) && _MSC_VER < 1300
+  now = *(int64_t *)&ft - epoch_ft;
+#else
+  now = *(uint64_t *)&ft - epoch_ft;
+#endif
+  /* Convert to nanoseconds */
+  now /= 100;
+#endif
 #ifdef HAS_GETTIMEOFDAY
   struct timeval tv;
   gettimeofday(&tv, NULL);
@@ -89,7 +107,7 @@ static void output_event_descriptions();
 static void output_initial_events();
 void caml_setup_eventlog() {
   char filename[200 + sizeof(".eventlog")];
-#if !defined(HAS_GETTIMEOFDAY)
+#if !defined(_WIN32) && !defined(HAS_GETTIMEOFDAY)
   caml_fatal_error("No gettimeofday() on this system, event logging doesn't work");
 #endif
 
@@ -98,8 +116,9 @@ void caml_setup_eventlog() {
   caml_plat_lock(&lock);
   num_users++;
   if (!output) {
-    sprintf(filename, "%.200s.eventlog",
-            caml_params->exe_name ? caml_params->exe_name : "program");
+    /* TODO Changing that %S is clearly not portable... */
+    sprintf(filename, "%.200S.eventlog",
+            caml_params->exe_name ? caml_params->exe_name : _T("program"));
     output = fopen(filename, "w");
     if (!output) {
       caml_fatal_error_arg2("Failed to open event log '%s'", filename,
