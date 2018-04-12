@@ -57,6 +57,7 @@
 #include "caml/sys.h"
 #include "caml/io.h"
 #include "caml/alloc.h"
+#include "caml/platform.h"
 
 #ifndef S_ISREG
 #define S_ISREG(mode) (((mode) & S_IFMT) == S_IFREG)
@@ -446,4 +447,10 @@ int64_t caml_time_counter(void)
 #else
 # error "No timesource available"
 #endif
+}
+
+void caml_init_os_params(void)
+{
+  caml_sys_pagesize = sysconf(_SC_PAGESIZE);
+  return;
 }

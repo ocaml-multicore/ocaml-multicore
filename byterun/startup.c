@@ -332,6 +332,7 @@ CAMLexport void caml_main(char_os **argv)
 
   /* Read the table of contents (section descriptors) */
   caml_read_section_descriptors(fd, &trail);
+  caml_init_os_params();
   /* Initialize the abstract machine */
   caml_init_gc ();
   Caml_state->external_raise = NULL;
@@ -411,6 +412,7 @@ CAMLexport value caml_startup_code_exn(
   exe_name = caml_executable_name();
   if (exe_name == NULL) exe_name = caml_search_exe_in_path(argv[0]);
   Caml_state->external_raise = NULL;
+  caml_init_os_params();
   /* Initialize the abstract machine */
   caml_init_gc ();
   if (caml_params->backtrace_enabled_init) caml_record_backtrace(Val_int(1));

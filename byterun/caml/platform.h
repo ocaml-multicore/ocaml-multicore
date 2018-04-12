@@ -257,4 +257,8 @@ void* caml_mem_commit(void* mem, uintnat size);
 void caml_mem_decommit(void* mem, uintnat size);
 void caml_mem_unmap(void* mem, uintnat size);
 
+/* On Windows, the SYSTEM_INFO.dwPageSize is a DWORD (32-bit), but conveniently
+   long is also 32-bit */
+extern long caml_sys_pagesize;
+
 #endif /* CAML_PLATFORM_H */

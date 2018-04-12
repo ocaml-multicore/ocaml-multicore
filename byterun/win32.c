@@ -914,3 +914,8 @@ void caml_restore_win32_terminal(void)
   if (startup_codepage != 0)
     SetConsoleOutputCP(startup_codepage);
 }
+
+void caml_init_os_params(void)
+{
+  return;
+}
