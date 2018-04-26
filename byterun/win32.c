@@ -925,6 +925,8 @@ void caml_init_os_params(void)
   GetSystemInfo(&si);
   caml_sys_pagesize = si.dwPageSize;
   QueryPerformanceFrequency(&frequency);
+  /* Convert the frequency to the duration of 1 tick in ns */
+  frequency.QuadPart = 1000000000L / frequency.QuadPart;
 }
 
 int64_t caml_time_counter(void)
@@ -932,6 +934,5 @@ int64_t caml_time_counter(void)
   LARGE_INTEGER now;
   /* Windows 2000 is no longer supported, so this function always succeeds */
   QueryPerformanceCounter(&now);
-  now.QuadPart *= 1000000000L;
-  return (now.QuadPart * 1000000000L) / frequency.QuadPart;
+  return (now.QuadPart * frequency.QuadPart);
 }
