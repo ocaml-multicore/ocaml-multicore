@@ -18,7 +18,7 @@
  * the Op_val(stk) + Wosize_val(stk) is not 16-byte aligned. */
 #define Stack_high(stk) ((value*)(((value)(Op_val(stk) + Wosize_val(stk))) & (-1uLL << 4)))
 
-#define Stack_sp(stk) (*(long*)(Op_val(stk) + 0))
+#define Stack_sp(stk) (*(value**)(Op_val(stk) + 0))
 #define Stack_dirty_domain(stk) (*(struct domain**)(Op_val(stk) + 1))
 #define Stack_handle_value(stk) (*(Op_val(stk) + 2))
 #define Stack_handle_exception(stk) (*(Op_val(stk) + 3))

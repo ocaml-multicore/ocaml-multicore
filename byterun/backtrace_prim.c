@@ -306,7 +306,7 @@ static value get_callstack(value* sp, intnat trap_spoff, value stack,
       code_t p = caml_next_frame_pointer(stack_high, &sp, &trap_spoff);
       if (p == NULL) {
         if (parent == Val_unit) break;
-        sp = Stack_high(parent) + Stack_sp(parent);
+        sp = Stack_sp(parent);
         trap_spoff = Long_val(sp[0]);
         stack_high = Stack_high(parent);
         parent = Stack_parent(parent);
@@ -330,7 +330,7 @@ static value get_callstack(value* sp, intnat trap_spoff, value stack,
     while (trace_pos < trace_size) {
       code_t p = caml_next_frame_pointer(stack_high, &sp, &trap_spoff);
       if (p == NULL) {
-        sp = Stack_high(parent) + Stack_sp(parent);
+        sp = Stack_sp(parent);
         trap_spoff = Long_val(sp[0]);
         stack_high = Stack_high(parent);
         parent = Stack_parent(parent);
@@ -371,7 +371,7 @@ CAMLprim value caml_get_continuation_callstack (value cont, value max_frames)
   caml_read_field(cont, 0, &stack);
 
   stack = caml_reverse_fiber_stack(stack);
-  sp = Stack_high(stack) + Stack_sp(stack);
+  sp = Stack_sp(stack);
   callstack = get_callstack (sp, Long_val(sp[0]), stack, max_frames);
   caml_reverse_fiber_stack(stack);
 

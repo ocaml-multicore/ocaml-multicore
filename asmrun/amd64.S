@@ -171,16 +171,11 @@
 /* Switch from OCaml to C stack. Clobbers REG & %r14. */
 #define SWITCH_OCAML_TO_C_NO_CTXT(REG) \
     /* Save OCaml SP in the stack slot */ \
-        mov     %rsp, REG; \
-        LOAD_TL_VAR(caml_stack_high, %r14); \
-        subq    %r14, REG; \
-        sarq    $3, REG; \
         LOAD_TL_VAR(caml_current_stack, %r14); \
-        movq    REG, (%r14); \
+        movq    %rsp, (%r14); \
     /* Switch to system stack */ \
         LOAD_TL_VAR(caml_system_sp, %r14); \
         movq    %r14, %rsp; \
-        movq    REG, 16(%rsp); /* For DWARF CFI. See OFFXXX. */ \
         .cfi_def_cfa_offset 8 /* SYSCFAXXX */
 
 /* Switch from OCaml to C stack. Also builds a context at
@@ -194,13 +189,8 @@
 /* Switch from C to OCaml stack.  Clobbers REG & %r14. */
 #define SWITCH_C_TO_OCAML_NO_CTXT(REG,CFA_OFF) \
     /* Switch to OCaml stack */ \
-        LOAD_TL_VAR(caml_stack_high, %r14); \
         LOAD_TL_VAR(caml_current_stack, REG); \
-    /* REG is Stack_sp(caml_current_stack) */ \
-        movq    (REG), REG; \
-        salq    $3, REG; \
-        addq    REG, %r14; \
-        movq    %r14, %rsp; \
+        movq    (REG), %rsp; \
         .cfi_def_cfa_offset CFA_OFF
 
 /* Switch from C to OCaml stack. Also pops the context
@@ -388,6 +378,7 @@ G(caml_system__code_begin):
 FUNCTION(G(caml_enter_c))
 CFI_STARTPROC
         .cfi_signal_frame
+        #if 0
         .cfi_escape DW_CFA_val_expression, 0x7, 40, \
             /* DWARF_stack = [cfa] */ \
           DW_OP_dup, DW_OP_const1u, 24, DW_OP_plus, DW_OP_deref, DW_OP_const1u, 0x03, DW_OP_shl, \
@@ -402,6 +393,7 @@ CFI_STARTPROC
             /* DWARF_stack = [Stack_high(stack); offset] */ \
           DW_OP_plus, DW_OP_const1u, 0x10, DW_OP_plus \
             /* DWARF_stack = [desired rsp] */
+        #endif
         ENTER_FUNCTION
         call    *%rax
         LEAVE_FUNCTION
@@ -1025,7 +1017,7 @@ CFI_STARTPROC
     /* In handler. %rax has exception */
         mov     %rax, %rbx
         LOAD_TL_VAR(caml_current_stack, %rsi)
-        movq    $0, Stack_sp(%rsi)                  /* zero SP */
+        //movq    $0, Stack_sp(%rsi)                  /* zero SP */
         movq    Stack_handle_exception(%rsi), %r12  /* exception handler */
         movq    Stack_parent(%rsi), %rdi            /* parent stack. Never NULL here. */
     /* Switch stacks */
@@ -1043,7 +1035,7 @@ LBL(111):
     /* In handler. %rax has value */
         mov     %rax, %rbx
         LOAD_TL_VAR(caml_current_stack, %rsi)
-        movq    $0, Stack_sp(%rsi)                /* zero SP */
+        //movq    $0, Stack_sp(%rsi)                /* zero SP */
         movq    Stack_handle_value(%rsi), %r12    /* value handler */
         movq    Stack_parent(%rsi), %rdi          /* parent stack. Never NULL here. */
     /* Reset stack. First pop off fiber exn handler. */

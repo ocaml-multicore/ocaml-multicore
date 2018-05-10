@@ -194,10 +194,10 @@ static void oldify_one (void* st_v, value v, value *p)
       if (tag == Stack_tag) {
         /* Ensure that the stack remains 16-byte aligned. Note: Stack_high
          * always returns 16-byte aligned down address. */
-        stack_used = -Stack_sp(v);
         memcpy((void*)result, (void*)v, sizeof(value) * Stack_ctx_words);
-        memcpy(Stack_high(result) - stack_used, Stack_high(v) - stack_used,
-               stack_used * sizeof(value));
+        stack_used = Stack_high(v) - Stack_sp(v);
+        Stack_sp(result) = Stack_high(result) - stack_used;
+        memcpy(Stack_sp(result), Stack_sp(v), stack_used * sizeof(value));
 
         Hd_val (v) = 0;
         Op_val(v)[0] = result;

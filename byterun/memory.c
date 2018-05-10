@@ -249,7 +249,7 @@ CAMLexport value caml_alloc_shr (mlsize_t wosize, tag_t tag)
       Op_hp(v)[i] = init_val;
     }
   }
-  if (tag == Stack_tag) Stack_sp(Val_hp(v)) = 0;
+  if (tag == Stack_tag) Stack_sp(Val_hp(v)) = Stack_high(Val_hp(v));
 #if defined(COLLECT_STATS) && defined(NATIVE_CODE)
   dom_st->allocations++;
 #endif
