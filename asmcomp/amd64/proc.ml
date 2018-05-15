@@ -288,11 +288,12 @@ let destroyed_at_c_call =
 let destroyed_at_alloc =
   let regs =
     if Config.spacetime then
-      [| rax; loc_spacetime_node_hole |]
+      [| r10; r11; loc_spacetime_node_hole |]
     else
-      [| rax |]
+      [| r10; r11 |]
   in
-  Array.concat [regs; destroyed_by_plt_stub]
+  (* destroyed_by_plt_stub is included in regs *)
+  regs
 
 let destroyed_at_oper = function
     Iop(Icall_ind _ | Icall_imm _) ->
@@ -312,7 +313,7 @@ let destroyed_at_oper = function
   | Iop (Iintop_imm(Icheckbound _, _)) when Config.spacetime ->
       [| loc_spacetime_node_hole |]
   | Iswitch(_, _) -> [| rax; rdx |]
-  | Iop Iloadmut -> [| rax; rdx |]
+  | Iop Iloadmut -> [| rax; rdx; r10; r11 |]
   | _ ->
     if fp then
 (* prevent any use of the frame pointer ! *)

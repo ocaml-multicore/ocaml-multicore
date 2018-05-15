@@ -1,3 +1,16 @@
+/*
+
+FIXME:
+CFI / DWARF info
+Frame pointers
+PIC support
+Stack alignment (!)
+various int3
+everything below caml_start_program
+
+GC frame tables
+*/
+
 /**************************************************************************/
 /*                                                                        */
 /*                                 OCaml                                  */
@@ -138,10 +151,10 @@
         GET_DOMAIN_STATE(%r11)  ; \
         testq value, (8 * domain_field_##var)(%r11)
 
-/* Compare against a value in the current domain block.  Clobbers %rax. */
+/* Compare against a value in the current domain block.  Clobbers %r11. */
 #define CMP_TL_VAR(var, reg) \
-        GET_DOMAIN_STATE(%rax)  ; \
-        cmpq (8 * domain_field_##var)(%rax), reg
+        GET_DOMAIN_STATE(%r11)  ; \
+        cmpq (8 * domain_field_##var)(%r11), reg
 
 /* Push a value from the current domain block onto the stack.  Clobbers %r11. */
 #define PUSH_TL_VAR(var) \
@@ -200,14 +213,6 @@
     /* Pop the caml_context from the bottom of stack updating %r14 */ \
         popq    %r14; CFI_ADJUST(-8); \
         popq    REG; CFI_ADJUST(-8); \
-
-/* Load [caml_stack_high - %r14] into %rsp. %r14 is an offset. Clobbers %r11. */
-#define RESTORE_EXN_HANDLER_OCAML \
-        LOAD_TL_VAR(caml_stack_high, %r11); \
-        sub     %r14, %r11; \
-        movq    %r11, %rsp; \
-        .cfi_def_cfa_offset 16; \
-        popq    %r14; CFI_ADJUST(-8)
 
 /* Switch between OCaml stacks.
  * arguments : target stack (%rdi)
@@ -338,6 +343,89 @@
 #define Stack_handle_effect(REG)    32(REG)
 #define Stack_parent(REG)           40(REG)
 
+
+/******************************************************************************/
+/* Stack manipulation primitives                                              */
+/* See caml/stack.h for structure definitions                                 */
+/******************************************************************************/
+
+/* Push a struct caml_context to an OCaml stack.
+   Expects:   (%rsp) - return address, on an OCaml stack
+                       (e.g. as pushed by call)
+   Produces:  (%rsp) - struct caml_context (with gc_regs = NULL) */
+#define PUSH_caml_context \
+        pushq   $0 ; CFI_ADJUST(8); \
+        pushq   %r14 ; CFI_ADJUST(8)
+
+/* Pop and restore a struct caml_context from an OCaml stack.
+   Expects:   (%rsp) - struct caml_context, on an OCaml stack
+   Produces:  (%rsp) - return address, on same stack
+   Clobbers:   %r11 */
+#define POP_caml_context \
+        popq    %r14 ; CFI_ADJUST(-8); \
+        popq    %r11 ; CFI_ADJUST(-8)
+
+/* Push a struct c_call_context to the C stack, enclosing the callback_context
+   already present. Saves young_ptr.
+   Expects:   (%rsp) - struct caml_context, on an OCaml stack
+               %r15  - young_ptr
+   Produces:  (%rsp) - struct c_call_context, on C stack
+   Clobbers:   %r10, %r11 */
+#define PUSH_c_call_context \
+        STORE_TL_VAR(%r15, caml_young_ptr); \
+        movq    %rsp, %r10; \
+        LOAD_TL_VAR(caml_c_context, %rsp); \
+        /* prepend struct c_call_context */ \
+        pushq   %r10
+
+/* Pop a struct c_call_context from the C stack,
+   switching back to an OCaml stack and restoring young_ptr.
+   Expects:   (%rsp) - struct c_call_context, on C stack
+               %r15  - possibly-stale young_ptr (to find domain state)
+   Produces:  (%rsp) - struct caml_context, on an OCaml stack
+               %r15  - young_ptr
+   Clobbers:   %r10, %r11 */
+#define POP_c_call_context \
+        /* Could this be pop rsp? What does that do? mov (%rsp), %rsp is also fine */ \
+        popq    %r11; /* caml_context */ \
+        /* debug assert */ \
+        LOAD_TL_VAR(caml_c_context, %r10); cmpq %r10, %rsp; je 1f; int3; 1: ; \
+        movq    %r11, %rsp; \
+        LOAD_TL_VAR(caml_young_ptr, %r15)
+
+/* Push a struct callback_context to the C stack, switching to an OCaml stack.
+   Expects:    %rsp  - C stack pointer
+               %r15  - young_ptr
+               %r13  - OCaml stack pointer
+   Produces:   %rsp  - OCaml stack pointer
+   Clobbers:   %r10, %r11
+  */
+#define PUSH_callback_context \
+        LOAD_TL_VAR(caml_c_context, %r11); \
+        pushq   %r11; \
+        LOAD_TL_VAR(caml_current_stack, %r10); \
+        pushq   %r10; \
+        STORE_TL_VAR(%rsp, caml_c_context); \
+        movq    %rsp, %r10; \
+        movq    %r13, %rsp; \
+        pushq   %r10
+
+/* Switch from an OCaml to C stack and pop a struct callback_context.
+   Expects:    %rsp  - OCaml stack pointer
+   Produces:   %rsp  - C stack pointer
+   Clobbers:   %r10, %r11 */
+#define POP_callback_context \
+        popq    %r10; \
+        /* assert */ CMP_TL_VAR(caml_c_context, %r10); je 1f; int3; 1: \
+        movq    %rsp, %r11; \
+        movq    %r10, %rsp; \
+        LOAD_TL_VAR(caml_current_stack, %r10); \
+        movq    %r11, (%r10); \
+        popq    %r11 /* fiber */; \
+        popq    %r10 /* prev */; \
+        STORE_TL_VAR(%r10, caml_c_context)
+
+
 /******************************************************************************/
 /* text section
 /******************************************************************************/
@@ -349,7 +437,7 @@ G(caml_system__code_begin):
         ret  /* just one instruction, so that debuggers don't display
         caml_system__code_begin instead of caml_call_gc */
 
-
+#ifdef FIXME
 /******************************************************************************/
 /* DWARF
 /******************************************************************************/
@@ -378,7 +466,7 @@ G(caml_system__code_begin):
 FUNCTION(G(caml_enter_c))
 CFI_STARTPROC
         .cfi_signal_frame
-        #if 0
+        #ifdef FIXME
         .cfi_escape DW_CFA_val_expression, 0x7, 40, \
             /* DWARF_stack = [cfa] */ \
           DW_OP_dup, DW_OP_const1u, 24, DW_OP_plus, DW_OP_deref, DW_OP_const1u, 0x03, DW_OP_shl, \
@@ -456,15 +544,22 @@ LBL(118):
         movq  $0, 16(%rsp)
         ret
 CFI_ENDPROC
+#endif
 
-/******************************************************************************/
-/* Allocation */
-/******************************************************************************/
-
-#define SAVE_ALL_REGS_AND_CALL(TARGET_FUN)                                     \
-    /* Build array of registers, save it into OCaml stack's gc_regs slot */    \
-        pushq   %r11; CFI_ADJUST (8);                                          \
-        pushq   %r10; CFI_ADJUST (8);                                          \
+/* Save registers to the C stack.
+   Used when variables may be live across a call to C (e.g. when entering C due
+   to allocation failure, read barrier faults or stack overflow).
+   Not used for ordinary OCaml->C calls: instead, the register allocator ensures
+   that registers are not live across ordinary OCaml->C calls.
+   To be called right after PUSH_c_call_context.
+   Expects:   (%rsp) - struct c_call_context, on C stack
+   Produces:   fills in %rsp->caml->gc_regs
+   Clobbers:   %r11 */
+#define PUSH_gc_regs \
+        movq    %rsp, %r11; \
+        /* %r10 and %r11 are not preserved, so push dummy values */ \
+        pushq   $0; CFI_ADJUST (8);                                          \
+        pushq   $0; CFI_ADJUST (8);                                          \
         pushq   %r13; CFI_ADJUST (8);                                          \
         pushq   %r12; CFI_ADJUST (8);                                          \
         pushq   %r9; CFI_ADJUST (8);                                           \
@@ -475,14 +570,12 @@ CFI_ENDPROC
         pushq   %rdi; CFI_ADJUST (8);                                          \
         pushq   %rbx; CFI_ADJUST (8);                                          \
         pushq   %rax; CFI_ADJUST (8);                                          \
-    /* Update in OCaml stack's context, the pointer to gc_regs */              \
-        movq    %rsp, C_ARG_1;                                                 \
-        PREPARE_FOR_C_CALL;                                                    \
-        call    GCALL(caml_update_gc_regs_slot);                               \
-        CLEANUP_AFTER_C_CALL;                                                  \
-    /* Save caml_young_ptr */                                                  \
-        STORE_TL_VAR(%r15, caml_young_ptr);                                    \
-    /* Save floating-point registers */                                        \
+        /* update %r11->caml->gc_regs */; \
+        movq    0(%r11), %r11; /* c_call_context->caml */; \
+        /* assert gc_regs == 0 */ cmpq $0, 8(%r11); je 1f; int3; 1:            \
+        movq    %rsp, 8(%r11); /* caml_context->gc_regs */; \
+        /* Save floating-point registers. These are not part of gc_regs, */ \
+        /* since they cannot contain GC pointers, but must be preserved. */ \
         subq    $(16*8), %rsp; CFI_ADJUST (16*8);                              \
         movsd   %xmm0, 0*8(%rsp);                                              \
         movsd   %xmm1, 1*8(%rsp);                                              \
@@ -499,18 +592,13 @@ CFI_ENDPROC
         movsd   %xmm12, 12*8(%rsp);                                            \
         movsd   %xmm13, 13*8(%rsp);                                            \
         movsd   %xmm14, 14*8(%rsp);                                            \
-        movsd   %xmm15, 15*8(%rsp);                                            \
-        PREPARE_FOR_C_CALL;                                                    \
-    /* Args are relevant only for caml_realloc_stack */                        \
-        movq    $0, C_ARG_1;                                                   \
-        movq    $0, C_ARG_2;                                                   \
-        movq    $0, C_ARG_3;                                                   \
-        LEA_VAR(TARGET_FUN, %rax);                                             \
-        CAML_CALL_ENTER_C;                                                     \
-        CLEANUP_AFTER_C_CALL;                                                  \
-    /* Restore caml_young_ptr */                                               \
-        LOAD_TL_VAR(caml_young_ptr, %r15);                                     \
-    /* Restore all regs used by the code generator */                          \
+        movsd   %xmm15, 15*8(%rsp)
+
+/* Restore registers from the C stack.
+   This leaves the gc_regs pointer in caml_context dangling, so the GC must
+   not be entered between POP_gc_regs and POP_caml_context.
+   Preserves %r10 and %r11, which are not saved in the gc_regs structure. */
+#define POP_gc_regs \
         movsd   0*8(%rsp), %xmm0;                                              \
         movsd   1*8(%rsp), %xmm1;                                              \
         movsd   2*8(%rsp), %xmm2;                                              \
@@ -538,154 +626,62 @@ CFI_ENDPROC
         popq    %r9; CFI_ADJUST(-8);                                           \
         popq    %r12; CFI_ADJUST(-8);                                          \
         popq    %r13; CFI_ADJUST(-8);                                          \
-        popq    %r10; CFI_ADJUST(-8);                                          \
-        popq    %r11; CFI_ADJUST(-8)
+        /* skip %r11, %r10 */                                                  \
+        addq    $(2*8), %rsp; CFI_ADJUST(-2*8)
+
+
+/******************************************************************************/
+/* Allocation */
+/******************************************************************************/
 
 FUNCTION(G(caml_call_gc))
 CFI_STARTPROC
-        SWITCH_OCAML_TO_C(%rax)
-        ENTER_FUNCTION
-        call    LBL(do_gc)
-        LEAVE_FUNCTION
-        SWITCH_C_TO_OCAML(%rax)
-        ret
-LBL(do_gc):
-#ifdef WITH_FRAME_POINTERS
-        ENTER_FUNCTION
-#else
-        pushq   %rbp; CFI_ADJUST(8);
-#endif
-        SAVE_ALL_REGS_AND_CALL(caml_garbage_collection)
-#ifdef WITH_FRAME_POINTERS
-        LEAVE_FUNCTION;
-#else
-        popq    %rbp; CFI_ADJUST(-8)
-#endif
-
-    /* Return to caller */
+        /* FIXME: stack alignment, frame pointers, DWARF CFI */
+        PUSH_caml_context
+        PUSH_c_call_context
+        PUSH_gc_regs
+        PREPARE_FOR_C_CALL
+        call GCALL(caml_garbage_collection)
+        CLEANUP_AFTER_C_CALL
+        POP_gc_regs
+        POP_c_call_context
+        POP_caml_context
         ret
 CFI_ENDPROC
 
 FUNCTION(G(caml_call_realloc_stack))
 CFI_STARTPROC
-        SWITCH_OCAML_TO_C(%r10)
-#ifdef WITH_FRAME_POINTERS
-        ENTER_FUNCTION
-#else
-        pushq   %rbp; CFI_ADJUST(8);
-#endif
-        SAVE_ALL_REGS_AND_CALL(caml_realloc_stack)
-#ifdef WITH_FRAME_POINTERS
-        LEAVE_FUNCTION;
-#else
-        popq    %rbp; CFI_ADJUST(-8)
-#endif
-        SWITCH_C_TO_OCAML(%r10)
-    /* Return to caller */
+        PUSH_caml_context
+        PUSH_c_call_context
+        PUSH_gc_regs
+        movq    $0, C_ARG_1
+        movq    $0, C_ARG_2
+        movq    $0, C_ARG_3
+        PREPARE_FOR_C_CALL
+        call    GCALL(caml_realloc_stack)
+        CLEANUP_AFTER_C_CALL
+        POP_gc_regs
+        POP_c_call_context
+        POP_caml_context
         ret
 CFI_ENDPROC
 
 /* Arguments: %rax = base; %rdx = offset. */
 FUNCTION(G(caml_call_read_barrier))
 CFI_STARTPROC
-        /* Save %r10, and use it as a temp to switch stacks. */
-        pushq   %r10; CFI_ADJUST(8)
-        LOAD_TL_VAR(caml_system_sp, %r10)
-        popq    -8(%r10); CFI_ADJUST(-8)
-        SWITCH_OCAML_TO_C(%r10)
-        movq    -8(%rsp), %r10
-#ifdef WITH_FRAME_POINTERS
-        ENTER_FUNCTION
-#else
-        pushq   %rbp; CFI_ADJUST(8);
-#endif
-    /* Build array of registers, save it into OCaml stack's gc_regs slot */
-        pushq   %r11; CFI_ADJUST (8);
-        pushq   %r10; CFI_ADJUST (8);
-        pushq   %r13; CFI_ADJUST (8);
-        pushq   %r12; CFI_ADJUST (8);
-        pushq   %r9; CFI_ADJUST (8);
-        pushq   %r8; CFI_ADJUST (8);
-        pushq   %rcx; CFI_ADJUST (8);
-        pushq   %rdx; CFI_ADJUST (8);
-        pushq   %rsi; CFI_ADJUST (8);
-        pushq   %rdi; CFI_ADJUST (8);
-        pushq   %rbx; CFI_ADJUST (8);
-        pushq   %rax; CFI_ADJUST (8);
-    /* Update in OCaml stack's context, the pointer to gc_regs */
-        movq    %rsp, C_ARG_1;
-        PREPARE_FOR_C_CALL;
-        call    GCALL(caml_update_gc_regs_slot);
-        CLEANUP_AFTER_C_CALL;
-    /* Set up arguments for caml_read_barrier */
-        movq    (%rsp), C_ARG_1;        /* rax = base */
-        movq    32(%rsp), C_ARG_2;      /* rdx = offset */
-    /* Save caml_young_ptr */
-        STORE_TL_VAR(%r15, caml_young_ptr);
-    /* Save floating-point registers */
-        subq    $(16*8), %rsp; CFI_ADJUST (16*8);
-        movsd   %xmm0, 0*8(%rsp);
-        movsd   %xmm1, 1*8(%rsp);
-        movsd   %xmm2, 2*8(%rsp);
-        movsd   %xmm3, 3*8(%rsp);
-        movsd   %xmm4, 4*8(%rsp);
-        movsd   %xmm5, 5*8(%rsp);
-        movsd   %xmm6, 6*8(%rsp);
-        movsd   %xmm7, 7*8(%rsp);
-        movsd   %xmm8, 8*8(%rsp);
-        movsd   %xmm9, 9*8(%rsp);
-        movsd   %xmm10, 10*8(%rsp);
-        movsd   %xmm11, 11*8(%rsp);
-        movsd   %xmm12, 12*8(%rsp);
-        movsd   %xmm13, 13*8(%rsp);
-        movsd   %xmm14, 14*8(%rsp);
-        movsd   %xmm15, 15*8(%rsp);
-    /* Call the read barrier */
-        PREPARE_FOR_C_CALL;
-        LEA_VAR(caml_read_barrier, %rax);
-        CAML_CALL_ENTER_C;
-    /* Result is in %rax */
-        CLEANUP_AFTER_C_CALL;
-    /* Restore caml_young_ptr */
-        LOAD_TL_VAR(caml_young_ptr, %r15);
-    /* Restore all regs used by the code generator */
-        movsd   0*8(%rsp), %xmm0;
-        movsd   1*8(%rsp), %xmm1;
-        movsd   2*8(%rsp), %xmm2;
-        movsd   3*8(%rsp), %xmm3;
-        movsd   4*8(%rsp), %xmm4;
-        movsd   5*8(%rsp), %xmm5;
-        movsd   6*8(%rsp), %xmm6;
-        movsd   7*8(%rsp), %xmm7;
-        movsd   8*8(%rsp), %xmm8;
-        movsd   9*8(%rsp), %xmm9;
-        movsd   10*8(%rsp), %xmm10;
-        movsd   11*8(%rsp), %xmm11;
-        movsd   12*8(%rsp), %xmm12;
-        movsd   13*8(%rsp), %xmm13;
-        movsd   14*8(%rsp), %xmm14;
-        movsd   15*8(%rsp), %xmm15;
-        addq    $(16*8), %rsp; CFI_ADJUST(-16*8);
-        addq    $8, %rsp; CFI_ADJUST(-8); /* Don't overwrite result in %rax */
-        popq    %rbx; CFI_ADJUST(-8);
-        popq    %rdi; CFI_ADJUST(-8);
-        popq    %rsi; CFI_ADJUST(-8);
-        addq    $8, %rsp; CFI_ADJUST(-8); /* Don't bother restoring  %rdx. */
-        popq    %rcx; CFI_ADJUST(-8);
-        popq    %r8; CFI_ADJUST(-8);
-        popq    %r9; CFI_ADJUST(-8);
-        popq    %r12; CFI_ADJUST(-8);
-        popq    %r13; CFI_ADJUST(-8);
-        popq    %r10; CFI_ADJUST(-8);
-        popq    %r11; CFI_ADJUST(-8)
-#ifdef WITH_FRAME_POINTERS
-        LEAVE_FUNCTION;
-#else
-        popq    %rbp; CFI_ADJUST(-8)
-#endif
-    /* %rdx is not live at this point. */
-        SWITCH_C_TO_OCAML(%rdx)
-    /* Return to caller */
+        PUSH_caml_context
+        PUSH_c_call_context
+        PUSH_gc_regs
+        movq    %rax, C_ARG_1
+        movq    %rdx, C_ARG_2
+        PREPARE_FOR_C_CALL
+        call    GCALL(caml_read_barrier)
+        CLEANUP_AFTER_C_CALL
+        movq    %rax, %r10
+        POP_gc_regs
+        movq    %r10, %rax
+        POP_c_call_context
+        POP_caml_context
         ret
 CFI_ENDPROC
 
@@ -698,11 +694,7 @@ LBL(caml_alloc1):
         ret
 LBL(100):
         addq    $16, %r15
-        SWITCH_OCAML_TO_C(%rax)
-        ENTER_FUNCTION
-        call    LBL(do_gc)
-        LEAVE_FUNCTION
-        SWITCH_C_TO_OCAML(%rax)
+        call    GCALL(caml_call_gc)
         jmp     LBL(caml_alloc1)
 CFI_ENDPROC
 
@@ -715,11 +707,7 @@ LBL(caml_alloc2):
         ret
 LBL(101):
         addq    $24, %r15
-        SWITCH_OCAML_TO_C(%rax)
-        ENTER_FUNCTION
-        call    LBL(do_gc)
-        LEAVE_FUNCTION
-        SWITCH_C_TO_OCAML(%rax)
+        call    GCALL(caml_call_gc)
         jmp     LBL(caml_alloc2)
 CFI_ENDPROC
 
@@ -732,37 +720,21 @@ LBL(caml_alloc3):
         ret
 LBL(102):
         addq    $32, %r15
-        SWITCH_OCAML_TO_C(%rax)
-        ENTER_FUNCTION
-        call    LBL(do_gc)
-        LEAVE_FUNCTION
-        SWITCH_C_TO_OCAML(%rax)
+        call    GCALL(caml_call_gc)
         jmp     LBL(caml_alloc3)
 CFI_ENDPROC
 
 FUNCTION(G(caml_allocN))
 CFI_STARTPROC
 LBL(caml_allocN):
-        pushq   %rax; CFI_ADJUST(8)        /* save desired size */
-        subq    %rax, %r15
+        /* desired size passed on stack */
+        subq    8(%rsp), %r15
         CMP_TL_VAR(caml_young_limit, %r15)
         jb      LBL(103)
-        addq    $8, %rsp; CFI_ADJUST (-8)  /* drop desired size */
         ret
 LBL(103):
-        movq    (%rsp), %rax
-        addq    %rax, %r15
-        /* Save desired size on system stack */
-        LOAD_TL_VAR(caml_system_sp, %rax)
-        popq    -8(%rax); CFI_ADJUST(-8)
-        SWITCH_OCAML_TO_C(%rax)
-        subq    $16, %rsp; CFI_ADJUST(16)
-        ENTER_FUNCTION
-        call    LBL(do_gc)
-        LEAVE_FUNCTION
-        SWITCH_C_TO_OCAML(%rax)
-        LOAD_TL_VAR(caml_system_sp, %rax)
-        movq    -8(%rax), %rax
+        addq    8(%rsp), %r15
+        call    GCALL(caml_call_gc)
         jmp     LBL(caml_allocN)
 CFI_ENDPROC
 
@@ -776,30 +748,20 @@ LBL(caml_c_call):
     /* Arguments:
         C arguments         : %rdi, %rsi, %rdx, %rcx, %r8, and %r9
         C function          : %rax */
-    /* Switch from OCaml to C */
-        SWITCH_OCAML_TO_C(%r10)
-        ENTER_FUNCTION
-    /* Make the alloc ptr available to the C code */
-        STORE_TL_VAR(%r15, caml_young_ptr)
-    /* Call the function (address in %rax) */
+        PUSH_caml_context
+        PUSH_c_call_context
         PREPARE_FOR_C_CALL
-        .cfi_remember_state
-        call    GCALL(caml_enter_c)
-        .cfi_def_cfa_offset 8
-        nop
-        .cfi_restore_state
+        call *%rax
         CLEANUP_AFTER_C_CALL
-    /* Prepare for return to OCaml */
-        LOAD_TL_VAR(caml_young_ptr, %r15)
-    /* Load ocaml stack and restore global variables */
-        LEAVE_FUNCTION
-        SWITCH_C_TO_OCAML(%r10)
-    /* Return to OCaml caller */
+        POP_c_call_context
+        POP_caml_context
         ret
 CFI_ENDPROC
 
 FUNCTION(G(caml_c_call_stack_args))
 CFI_STARTPROC
+        int3
+#ifdef FIXME
     /* Arguments:
         C arguments         : %rdi, %rsi, %rdx, %rcx, %r8, and %r9
         C function          : %rax
@@ -828,6 +790,7 @@ LBL(106):
         SWITCH_C_TO_OCAML(%r10)
     /* Return to OCaml caller */
         ret
+#endif
 CFI_ENDPROC
 
 /******************************************************************************/
@@ -838,28 +801,25 @@ FUNCTION(G(caml_start_program))
 CFI_STARTPROC
     /* Save callee-save registers */
         PUSH_CALLEE_SAVE_REGS
-    /* Load caml_young_ptr into r15 (was passed as an argument from C) */
+    /* Load caml_young_ptr and stack pointer into r15, r13 
+        (passed as arguments from C) */
         movq    C_ARG_1, %r15
+        movq    C_ARG_2, %r13
     /* Initial entry point is G(caml_program) */
         LEA_VAR(caml_program, %r12)
         movq    $0, %rax  /* dummy */
         movq    $0, %rbx  /* dummy */
         movq    $0, %rdi  /* dummy */
         movq    $0, %rsi  /* dummy */
-    /* Common code for caml_start_program and caml_callback* */
+
+    /* Common code for caml_start_program and caml_callback*
+       Expects:    %rsp  - C stack pointer
+                   %r15  - young_ptr
+                   %r12  - code pointer
+                   %r13  - OCaml stack pointer */
 LBL(caml_start_program):
         pushq   $0   ; CFI_ADJUST(8) // alignment word
-    /* Build context on system stack for DWARF CFI */
-        ADDR_TL_VAR(caml_current_stack, %r13)
-        pushq   %r13; CFI_ADJUST(8)
-        pushq   $0 ; CFI_ADJUST(8) /* will be filled in at SWITCH_OCAML_TO_C. See OFFXXX. */
-    /* System stack is captured unaligned. Hence, any OCaml to C calls
-     * are expected to explicitly align stack using ENTER_FUNCTION and such. */
-        STORE_TL_VAR(%rsp, caml_system_sp)
-    /* Switch from C to OCaml stack. CFA offset -8 refers to OCAMLCFAXXX. */
-        SWITCH_C_TO_OCAML_NO_CTXT(%r10,-8)
-    /* Setup alloc ptr */
-        LOAD_TL_VAR(caml_young_ptr, %r15)
+        PUSH_callback_context
     /* Build a handler for exceptions raised in OCaml */
         lea     LBL(109)(%rip), %r13
         pushq   %r13; CFI_ADJUST(8)
@@ -870,11 +830,9 @@ LBL(caml_start_program):
         sub     %rsp, %r14
     /* Call the OCaml code */
         .cfi_remember_state
-        LOAD_TL_VAR(caml_system_sp, %r13)
-        call    GCALL(caml_enter_caml)
+        call    *%r12
 LBL(108):
-        .cfi_def_cfa_offset 120
-        nop
+        /*.cfi_def_cfa_offset 120*/
         .cfi_restore_state
     /* Pop the OCaml exception handler */
         popq    %r14; CFI_ADJUST(-8)
@@ -882,10 +840,7 @@ LBL(108):
 LBL(110):
     /* Update alloc ptr */
         STORE_TL_VAR(%r15,caml_young_ptr)
-    /* Return to C stack. */
-        SWITCH_OCAML_TO_C_NO_CTXT(%r10)
-    /* Pop the C exception handler and DWARF cfi info. */
-        addq    $16, %rsp; CFI_ADJUST(-32)
+        POP_callback_context
         popq %r10            ; CFI_ADJUST(-8) // alignment word
     /* Restore callee-save registers. */
         POP_CALLEE_SAVE_REGS
@@ -898,6 +853,15 @@ LBL(109):
         jmp     LBL(110)
 CFI_ENDPROC
 
+
+FUNCTION(G(caml_fiber_exn_handler))
+FUNCTION(G(caml_fiber_val_handler))
+FUNCTION(G(caml_perform))
+FUNCTION(G(caml_reperform))
+FUNCTION(G(caml_resume))
+FUNCTION(G(caml_stack_overflow))
+        int3
+
 /******************************************************************************/
 /* Exceptions */
 /******************************************************************************/
@@ -909,34 +873,34 @@ CFI_STARTPROC
 LBL(caml_raise_exn):
         TEST_TL_VAR($1, caml_backtrace_active)
         jne   LBL(116)
-        RESTORE_EXN_HANDLER_OCAML
+LBL(do_raise):
+        /* Load [caml_stack_high - %r14] into %rsp. %r14 is an offset. Clobbers %r11. */
+        LOAD_TL_VAR(caml_stack_high, %r11)
+        sub     %r14, %r11
+        movq    %r11, %rsp
+        .cfi_def_cfa_offset 16
+        popq    %r14; CFI_ADJUST(-8)
         ret
+
 LBL(116):
         STORE_TL_VAR($0, caml_backtrace_pos)
 LBL(117):
-        movq    %rsp, %r10        /* Save OCaml stack pointer */
         movq    %rax, %r12        /* Save exception bucket */
-        LOAD_TL_VAR(caml_system_sp, %rsp)
         movq    %rax, C_ARG_1     /* arg 1: exception bucket */
-        movq    (%r10), C_ARG_2   /* arg 2: pc of raise */
-        leaq    8(%r10), C_ARG_3  /* arg 3: sp at raise */
+        movq    (%rsp), C_ARG_2   /* arg 2: pc of raise */
+        leaq    8(%rsp), C_ARG_3  /* arg 3: sp at raise. FIXME: why+8? */
         movq    %r14, C_ARG_4     /* arg 4: sp offset of handler */
-        ENTER_FUNCTION
-        PREPARE_FOR_C_CALL
-        call    GCALL(caml_stash_backtrace)
-        CLEANUP_AFTER_C_CALL
-        LEAVE_FUNCTION
+        lea     GCALL(caml_stash_backtrace), %rax
+        call    LBL(caml_c_call)
         movq    %r12, %rax        /* Recover exception bucket */
-        RESTORE_EXN_HANDLER_OCAML
-        ret
+        jmp     LBL(do_raise)
 CFI_ENDPROC
 
 FUNCTION(G(caml_reraise_exn))
 CFI_STARTPROC
         TEST_TL_VAR($1, caml_backtrace_active)
         jne   LBL(117)
-        RESTORE_EXN_HANDLER_OCAML
-        ret
+        jmp   LBL(do_raise)
 CFI_ENDPROC
 
 /* Raise an exception from C */
@@ -947,10 +911,14 @@ CFI_STARTPROC
         movq    C_ARG_2, %rax
 LBL(caml_raise_exception):
     /* Load ocaml stack and restore global variables */
-        SWITCH_C_TO_OCAML(%r10)
+        LOAD_TL_VAR(caml_c_context, %r11)
+        movq    -8(%r11), %rsp /* c_call_context->caml */
+        POP_caml_context
     /* Raise the exception in OCaml */
         jmp LBL(caml_raise_exn)
 CFI_ENDPROC
+
+#ifdef FIXME
 
 /* Raise a Stack_overflow exception on return from segv_handler()
    (in asmrun/signals_asm.c).  On entry, the stack is full, so we
@@ -962,6 +930,8 @@ CFI_STARTPROC
         jmp     LBL(caml_raise_exception)
 CFI_ENDPROC
 
+#endif
+
 /******************************************************************************/
 /* Callback from C to OCaml */
 /******************************************************************************/
@@ -972,8 +942,9 @@ CFI_STARTPROC
         PUSH_CALLEE_SAVE_REGS
     /* Initial loading of arguments */
         movq    C_ARG_1, %r15      /* young_ptr */
-        movq    C_ARG_2, %rbx      /* closure */
-        movq    0(C_ARG_3), %rax   /* argument */
+        movq    C_ARG_2, %r13      /* stack */
+        movq    C_ARG_3, %rbx      /* closure */
+        movq    0(C_ARG_4), %rax   /* argument */
         movq    0(%rbx), %r12      /* code pointer */
         movq    $0, %rdi           /* dummy */
         movq    $0, %rsi           /* dummy */
@@ -986,9 +957,10 @@ CFI_STARTPROC
         PUSH_CALLEE_SAVE_REGS
     /* Initial loading of arguments */
         movq    C_ARG_1, %r15      /* young_ptr */
-        movq    C_ARG_2, %rdi      /* closure */
-        movq    0(C_ARG_3), %rax   /* first argument */
-        movq    8(C_ARG_3), %rbx   /* second argument */
+        movq    C_ARG_2, %r13      /* stack */
+        movq    C_ARG_3, %rdi      /* closure */
+        movq    0(C_ARG_4), %rax   /* first argument */
+        movq    8(C_ARG_4), %rbx   /* second argument */
         LEA_VAR(caml_apply2, %r12) /* code pointer */
         movq    $0, %rsi           /* dummy */
         jmp     LBL(caml_start_program)
@@ -1000,10 +972,11 @@ CFI_STARTPROC
         PUSH_CALLEE_SAVE_REGS
     /* Initial loading of arguments */
         movq    C_ARG_1, %r15      /* young_ptr */
-        movq    0(C_ARG_3), %rax   /* first argument */
-        movq    8(C_ARG_3), %rbx   /* second argument */
-        movq    C_ARG_2, %rsi      /* closure */
-        movq    16(C_ARG_3), %rdi  /* third argument */
+        movq    C_ARG_2, %r13      /* stack */
+        movq    C_ARG_3, %rsi      /* closure */
+        movq    0(C_ARG_4), %rax   /* first argument */
+        movq    8(C_ARG_4), %rbx   /* second argument */
+        movq    16(C_ARG_4), %rdi  /* third argument */
         LEA_VAR(caml_apply3, %r12) /* code pointer */
         jmp     LBL(caml_start_program)
 CFI_ENDPROC
@@ -1011,7 +984,7 @@ CFI_ENDPROC
 /******************************************************************************/
 /* Fibers */
 /******************************************************************************/
-
+#ifdef FIXME
 FUNCTION(G(caml_fiber_exn_handler))
 CFI_STARTPROC
     /* In handler. %rax has exception */
@@ -1128,7 +1101,7 @@ LBL(114):
         je      LBL(caml_handler)
         jmp     *%rsi
 CFI_ENDPROC
-
+#endif
 
 FUNCTION(G(caml_ml_array_bound_error))
 CFI_STARTPROC
@@ -1143,11 +1116,12 @@ G(caml_system__code_end):
         .globl  G(caml_system__frametable)
         .align  EIGHT_ALIGN
 G(caml_system__frametable):
-        .quad   4           /* three descriptors */
+        .quad   1           /* three descriptors */
         .quad   LBL(108)    /* return address into callback */
         .value  -1          /* negative frame size => use callback link */
         .value  0           /* no roots here */
         .align  EIGHT_ALIGN
+#ifdef FIXME
         .quad   LBL(111)    /* return address into fiber_val_handler */
         .value  -1          /* negative frame size => use callback link */
         .value  0           /* no roots here */
@@ -1156,10 +1130,7 @@ G(caml_system__frametable):
         .value  8           /* frame size = 8 */
         .value  0           /* no roots here */
         .align  EIGHT_ALIGN
-        .quad   LBL(119)    /* return address into caml_enter_caml */
-        .value  16          /* frame size = 16 */
-        .value  0           /* no roots here */
-        .align  EIGHT_ALIGN
+#endif
 
 #if defined(SYS_macosx)
         .literal16

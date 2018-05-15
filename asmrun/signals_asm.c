@@ -31,6 +31,7 @@
 #include "caml/signals_machdep.h"
 #include "signals_osdep.h"
 #include "caml/stack.h"
+#include "caml/fiber.h"
 #include "caml/spacetime.h"
 
 #ifdef HAS_STACK_OVERFLOW_DETECTION
@@ -73,6 +74,8 @@ extern char caml_system__code_begin, caml_system__code_end;
 
 void caml_garbage_collection()
 {
+  Stack_sp(Caml_state->current_stack) =
+    (value*)(get_c_call_context(Caml_state->c_context)->caml);
   caml_handle_gc_interrupt();
 
 #ifdef WITH_SPACETIME

@@ -56,7 +56,7 @@ extern void caml_raise_exception (char* young_ptr, value bucket) Noreturn;
 
 void caml_raise(value v)
 {
-  if (Caml_state->system_sp == 0)
+  if (Caml_state->c_context == NULL)
     caml_fatal_uncaught_exception(v);
 
 #ifndef Stack_grows_upwards
@@ -64,7 +64,7 @@ void caml_raise(value v)
 #else
 #define PUSHED_AFTER >
 #endif
-  char* exception_pointer = Caml_state->system_sp;
+  char* exception_pointer = Caml_state->c_context;
   while (CAML_LOCAL_ROOTS != NULL &&
          (char *) CAML_LOCAL_ROOTS PUSHED_AFTER exception_pointer) {
     Assert(CAML_LOCAL_ROOTS != NULL);

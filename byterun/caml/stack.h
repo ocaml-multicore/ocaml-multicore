@@ -17,48 +17,12 @@
 
 #ifndef CAML_STACK_H
 #define CAML_STACK_H
+#include <stddef.h>
+#include "caml/domain_state.h"
+#include "caml/misc.h"
+
 
 #ifdef CAML_INTERNALS
-
-/* Macros to access the stack frame */
-
-#ifdef TARGET_i386
-#define Saved_return_address(sp) *((intnat *)((sp) - 4))
-#ifndef SYS_win32
-#define Callback_link(sp) ((struct caml_context *)((sp) + 16)) //FIXME KC
-#else
-#define Callback_link(sp) ((struct caml_context *)((sp) + 8)) //FIXME KC
-#endif
-#endif
-
-#ifdef TARGET_power
-#if defined(MODEL_ppc)
-#define Saved_return_address(sp) *((intnat *)((sp) - 4))
-#define Callback_link(sp) ((struct caml_context *)((sp) + 16))
-#elif defined(MODEL_ppc64)
-#define Saved_return_address(sp) *((intnat *)((sp) + 16))
-#define Callback_link(sp) ((struct caml_context *)((sp) + (48 + 32)))
-#elif defined(MODEL_ppc64le)
-#define Saved_return_address(sp) *((intnat *)((sp) + 16))
-#define Callback_link(sp) ((struct caml_context *)((sp) + (32 + 32)))
-#else
-#error "TARGET_power: wrong MODEL"
-#endif
-#define Already_scanned(sp, retaddr) ((retaddr) & 1)
-#define Mask_already_scanned(retaddr) ((retaddr) & ~1)
-#define Mark_scanned(sp, retaddr) Saved_return_address(sp) = (retaddr) | 1
-#endif
-
-#ifdef TARGET_s390x
-#define Saved_return_address(sp) *((intnat *)((sp) - SIZEOF_PTR))
-#define Trap_frame_size 16
-#define Callback_link(sp) ((struct caml_context *)((sp) + Trap_frame_size)) //FIXME KC
-#endif
-
-#ifdef TARGET_arm
-#define Saved_return_address(sp) *((intnat *)((sp) - 4))
-#define Callback_link(sp) ((struct caml_context *)((sp) + 8)) //FIXME KC
-#endif
 
 #ifdef TARGET_amd64
 #define Saved_return_address(sp) *((intnat *)((sp) - 8))
@@ -66,18 +30,54 @@
 
 #ifdef TARGET_arm64
 #define Saved_return_address(sp) *((intnat *)((sp) - 8))
-#define Context_needs_padding /* keep stack 16-byte aligned */
 #endif
 
-/* Structure of OCaml callback contexts */
 
-struct caml_context {
-  uintnat exception_ptr_offset; /* exception pointer offset from top of stack */
-  value * gc_regs;              /* pointer to register block */
-#ifdef Context_needs_padding
-  value padding;
-#endif
+
+/*
+
+*/
+
+/* pushed to the C stack when calling OCaml from C */
+struct callback_context {
+  value fiber; /* the fiber being called into */
+  struct callback_context* prev; /* previous C frame, or NULL if top level */
 };
+
+/* pushed to an OCaml fiber stack when the fiber pauses, in order
+   to perform an effect, handle effects from another fiber, or call C */
+struct caml_context {
+  uintnat  exception_handler_offset; /* pointer to the exception trap frame */
+  value* gc_regs;           /* pointer to register block (may be NULL) */
+  void*  pc;                /* return address */
+};
+
+/* pushed to the C stack when calling C from OCaml */
+struct c_call_context {
+  struct caml_context* caml;   /* fiber that paused to make this call */
+  struct callback_context callback; /* enclosing C frame */
+};
+
+struct caml_exn_frame {
+  uintnat next_offset;
+  void* handler_pc;
+};
+
+struct caml_start_context {
+  struct caml_exn_frame exn;
+  struct callback_context* callback;
+};
+
+static inline struct c_call_context* get_c_call_context(struct callback_context* cb)
+{
+  CAMLassert (cb != NULL);
+  /* Since this is C code, the callback_context must be part of an
+     enclosing c_call_context */
+  return
+    (struct c_call_context*)
+    ((char*)Caml_state->c_context -
+     offsetof(struct c_call_context, callback));    
+}
 
 /* Declaration of variables used in the asm code */
 extern value * caml_globals[];

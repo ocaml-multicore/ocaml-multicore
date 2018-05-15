@@ -5,7 +5,9 @@ DOMAIN_STATE(char*, young_end)
 DOMAIN_STATE(value, current_stack)
 DOMAIN_STATE(value*, stack_high)
 DOMAIN_STATE(value*, stack_threshold)
-DOMAIN_STATE(char*, system_sp)
+
+DOMAIN_STATE(struct callback_context*, c_context)
+
 DOMAIN_STATE(value**, gc_regs_slot)
 DOMAIN_STATE(struct caml_remembered_set*, remembered_set)
 DOMAIN_STATE(value*, mark_stack)

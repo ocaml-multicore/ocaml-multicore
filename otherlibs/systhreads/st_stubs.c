@@ -176,7 +176,7 @@ static inline void caml_thread_save_runtime_state(void)
   curr_thread->current_stack = Caml_state->current_stack;
   curr_thread->local_roots = CAML_LOCAL_ROOTS;
 #ifdef NATIVE_CODE
-  curr_thread->system_sp = Caml_state->system_sp;
+  //curr_thread->system_sp = Caml_state->system_sp; // FIXME
 #ifdef WITH_SPACETIME
   curr_thread->spacetime_trie_node_ptr
     = caml_spacetime_trie_node_ptr;
@@ -204,7 +204,7 @@ static inline void caml_thread_restore_runtime_state(void)
   caml_restore_stack();
   CAML_LOCAL_ROOTS = curr_thread->local_roots;
 #ifdef NATIVE_CODE
-  Caml_state->system_sp = curr_thread->system_sp;
+  //Caml_state->system_sp = curr_thread->system_sp; // FIXME
 #ifdef WITH_SPACETIME
   caml_spacetime_trie_node_ptr
     = curr_thread->spacetime_trie_node_ptr;

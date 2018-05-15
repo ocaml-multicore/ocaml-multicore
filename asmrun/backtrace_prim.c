@@ -48,7 +48,7 @@ frame_descr * caml_next_frame_descriptor(uintnat * pc, char ** sp, value stack)
 #else
       *sp -= (d->frame_size & 0xFFFC);
 #endif
-      *pc = Saved_return_address(*sp);
+      abort();//       *pc = Saved_return_address(*sp);
       return d;
     } else {
       /* This marks the top of an ML stack chunk. Move sp to the previous stack

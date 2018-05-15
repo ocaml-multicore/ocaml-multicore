@@ -106,7 +106,8 @@ value caml_alloc_stack (value hval, value hexn, value heff) {
   /* Build a context */
   sp -= sizeof(struct caml_context);
   ctxt = (struct caml_context*)sp;
-  ctxt->exception_ptr_offset = 2 * sizeof(value);
+  abort();
+  //ctxt->exception_ptr_offset = 2 * sizeof(value);
   ctxt->gc_regs = NULL;
   Stack_sp(stack) = Stack_high(stack) - INIT_FIBER_USED;
 
@@ -126,7 +127,7 @@ void caml_get_stack_sp_pc (value stack, char** sp /* out */, uintnat* pc /* out 
   p -= sizeof(struct caml_context) + sizeof(value);
 #endif
   *sp = p;
-  *pc = Saved_return_address(*sp);
+  abort(); //  *pc = Saved_return_address(*sp);
 }
 
 void caml_scan_stack(scanning_action f, void* fdata, value stack)
@@ -137,11 +138,7 @@ void caml_scan_stack(scanning_action f, void* fdata, value stack)
   frame_descr * d;
   uintnat h;
   int n, ofs;
-#ifdef Stack_grows_upwards
-  short * p;  /* PR#4339: stack offsets are negative in this case */
-#else
   unsigned short * p;
-#endif
   value *root;
   struct caml_context* context;
   frame_descr** frame_descriptors;
@@ -163,19 +160,8 @@ next_chunk:
   if (sp == (char*)Stack_high(stack)) return;
   context = (struct caml_context*)sp;
   regs = context->gc_regs;
-#ifndef Stack_grows_upwards
+  retaddr = (uintnat)context->pc;
   sp += sizeof(struct caml_context);
-#else
-  sp -= sizeof(struct caml_context);
-#endif
-
-  if (sp == (char*)Stack_high(stack)) return;
-  retaddr = *(uintnat*)sp;
-#ifndef Stack_grows_upwards
-  sp += sizeof(value);
-#else
-  sp -= sizeof(value);
-#endif
 
   while(1) {
     /* Find the descriptor corresponding to the return address */
@@ -197,21 +183,13 @@ next_chunk:
         f (fdata, *root, root);
       }
       /* Move to next frame */
-#ifndef Stack_grows_upwards
       sp += (d->frame_size & 0xFFFC);
-#else
-      sp -= (d->frame_size & 0xFFFC);
-#endif
       retaddr = Saved_return_address(sp);
       /* XXX KC: disabled already scanned optimization. */
     } else {
       /* This marks the top of an ML stack chunk. Move sp to the previous stack
        * chunk. This includes skipping over the trap frame (2 words). */
-#ifndef Stack_grows_upwards
-      sp += 2 * sizeof(value);
-#else
-      sp -= 2 * sizeof(value);
-#endif
+      sp += sizeof(struct caml_start_context);
       goto next_chunk;
     }
   }
@@ -460,6 +438,13 @@ int caml_on_current_stack(value* p)
   return Stack_base(Caml_state->current_stack) <= p && p < Caml_state->stack_high;
 }
 
+void caml_move_stack(value old_stack, value new_stack, struct caml_context** sp)
+{
+  int stack_used = Stack_high(old_stack) - (value*)*sp;
+  CAMLassert(0 <= stack_used && stack_used < Wosize_val(old_stack));
+  
+}
+
 void caml_realloc_stack(asize_t required_space, value* saved_vals, int nsaved)
 {
   CAMLparamN(saved_vals, nsaved);
@@ -536,12 +521,13 @@ value caml_alloc_main_stack (uintnat init_size)
   CAMLreturn(stack);
 }
 
-void caml_init_main_stack ()
+void* caml_init_main_stack ()
 {
   value stack;
   stack = caml_alloc_main_stack (caml_params->profile_slop_wsz +
                             Stack_size/sizeof(value));
   load_stack(stack);
+  return Stack_sp(stack);
 }
 
 CAMLprim value caml_clone_continuation (value cont)

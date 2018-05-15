@@ -461,6 +461,7 @@ CAMLexport value caml_promote(struct domain* domain, value root)
       if (hd != 0) {
         value curr = Val_hp(iter);
         tag_t tag = Tag_hd (hd);
+        CAMLassert(Wosize_val(curr) <= Max_young_wosize);
         if (tag < No_scan_tag && tag != Stack_tag) {
           for (i = 0; i < Wosize_hd(hd); i++) {
             value* f = Op_val(curr) + i;

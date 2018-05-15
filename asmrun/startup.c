@@ -77,7 +77,7 @@ static void init_segments(void)
 struct longjmp_buffer caml_termination_jmpbuf;
 void (*caml_termination_hook)(void *) = NULL;
 
-extern value caml_start_program (char*);
+extern value caml_start_program (char*, void*);
 extern void caml_init_ieee_floats (void);
 extern void caml_init_signals (void);
 #ifdef _WIN32
@@ -94,6 +94,7 @@ extern void caml_install_invalid_parameter_handler();
 value caml_startup_common(char_os **argv, int pooling)
 {
   char_os * exe_name, * proc_self_exe;
+  void* main_stack;
 
   CAML_INIT_DOMAIN_STATE;
 
@@ -138,8 +139,8 @@ value caml_startup_common(char_os **argv, int pooling)
     if (caml_termination_hook != NULL) caml_termination_hook(NULL);
     return Val_unit;
   }
-  caml_init_main_stack();
-  return caml_start_program(Caml_state->young_ptr);
+  main_stack = caml_init_main_stack();
+  return caml_start_program(Caml_state->young_ptr, main_stack);
 }
 
 value caml_startup_exn(char_os **argv)

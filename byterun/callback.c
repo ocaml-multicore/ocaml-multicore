@@ -24,6 +24,7 @@
 #include "caml/mlvalues.h"
 #include "caml/platform.h"
 #include "caml/fiber.h"
+#include "caml/stack.h"
 
 static __thread int callback_depth = 0;
 
@@ -108,7 +109,7 @@ static void init_callback_code(void)
 {
 }
 
-typedef value (callback_stub)(char* young, value closure, value* args);
+typedef value (callback_stub)(char* young, struct caml_context* stack, value closure, value* args);
 
 callback_stub caml_callback_asm, caml_callback2_asm, caml_callback3_asm;
 
@@ -126,18 +127,17 @@ static value do_callback(callback_stub* cbstub, value closure,
      to keep them alive for the whole duration of the callback */
   CAMLparam1(closure);
   CAMLlocal1(saved_parent);
-  char* saved_system_sp;
   value ret;
+  struct caml_context* stack;
 
-  saved_system_sp = Caml_state->system_sp;
   saved_parent = Stack_parent(Caml_state->current_stack);
 
   Stack_parent(Caml_state->current_stack) = Val_unit;
 
   check_stack(nargs, args);
-  ret = cbstub(Caml_state->young_ptr, closure, args);
+  stack = get_c_call_context(Caml_state->c_context)->caml;
+  ret = cbstub(Caml_state->young_ptr, stack, closure, args);
 
-  Caml_state->system_sp = saved_system_sp;
   Stack_parent(Caml_state->current_stack) = saved_parent;
 
   CAMLreturn(ret);

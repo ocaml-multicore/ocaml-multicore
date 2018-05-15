@@ -60,6 +60,7 @@ let cfi_endproc () =
 let cfi_adjust_cfa_offset n =
   if Config.asm_cfi_supported then D.cfi_adjust_cfa_offset n
 
+(*
 let cfi_remember_state () =
   if Config.asm_cfi_supported then D.cfi_remember_state ()
 
@@ -68,6 +69,7 @@ let cfi_restore_state () =
 
 let cfi_def_cfa_offset n =
   if Config.asm_cfi_supported then D.cfi_def_cfa_offset n
+*)
 
 let emit_debug_info dbg =
   emit_debug_info_gen dbg D.file D.loc
@@ -609,7 +611,7 @@ let emit_instr fallthrough i =
           record_frame Reg.Set.empty false i.dbg ~label:label_after
         end
         *)
-  | Lop(Iextcall {func; alloc; stack_ofs; label_after}) ->
+  | Lop(Iextcall {func; stack_ofs; label_after; _}) ->
       add_used_symbol func;
       if stack_ofs > 0 then begin
         I.lea (mem64 QWORD 0 RSP) r13;
@@ -624,7 +626,7 @@ let emit_instr fallthrough i =
           I.inc (domain_field Domainstate.Domain_extcall_alloc_stackargs R15)
         end;
         I.mov (domain_field Domainstate.Domain_young_ptr R15) r15;
-      end else if alloc then begin
+      end else (*if alloc then*) begin
         load_symbol_addr func rax;
         emit_call "caml_c_call";
         record_frame i.live false i.dbg ~label:label_after;
@@ -635,7 +637,7 @@ let emit_instr fallthrough i =
           I.inc (domain_field Domainstate.Domain_extcall_alloc R15)
         end;
         I.mov (domain_field Domainstate.Domain_young_ptr R15) r15;
-      end else begin
+      end (*else begin
         I.mov rsp r10;
         I.mov r15 r11;
         locate_domain_state r11;
@@ -657,7 +659,7 @@ let emit_instr fallthrough i =
         cfi_adjust_cfa_offset (-8);
         I.mov r10 rsp;
         cfi_restore_state ();
-      end
+      end*)
   | Lop(Istackoffset n) ->
       if n < 0
       then I.add (int (-n)) rsp
@@ -748,13 +750,13 @@ let emit_instr fallthrough i =
       if !fastcode_flag then begin
         let lbl_redo = new_label() in
         def_label lbl_redo;
-        I.mov r15 rax;
+        I.mov r15 r11;
         I.sub (int n) r15;
-        locate_domain_state rax;
+        locate_domain_state r11;
         if Config.stats then begin
-          I.inc (domain_field Domainstate.Domain_allocations RAX);
+          I.inc (domain_field Domainstate.Domain_allocations R11);
         end;
-        I.cmp (domain_field Domainstate.Domain_young_limit RAX) r15;
+        I.cmp (domain_field Domainstate.Domain_young_limit R11) r15;
         let lbl_call_gc = new_label() in
         let dbg =
           if not Config.spacetime then Debuginfo.none
@@ -777,9 +779,9 @@ let emit_instr fallthrough i =
             gc_spacetime; } :: !call_gc_sites
       end else begin
         if Config.stats then begin
-          I.mov r15 rax;
-          locate_domain_state rax;
-          I.inc (domain_field Domainstate.Domain_allocations RAX);
+          I.mov r15 r11;
+          locate_domain_state r11;
+          I.inc (domain_field Domainstate.Domain_allocations R11);
         end;
         if Config.spacetime then begin
           (* spacetime_before_uninstrumented_call ~node_ptr:(arg i 0)
@@ -791,8 +793,9 @@ let emit_instr fallthrough i =
         | 24 -> emit_call "caml_alloc2"
         | 32 -> emit_call "caml_alloc3"
         | _  ->
-          I.mov (int n) rax;
-          emit_call "caml_allocN"
+          I.push (int n);
+          emit_call "caml_allocN";
+          I.pop r11
         end;
         let label =
           record_frame_label ?label:label_after_call_gc i.live false
