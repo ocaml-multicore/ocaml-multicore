@@ -120,7 +120,7 @@ frame_descr* caml_find_frame_descr(uintnat pc)
   h = Hash_retaddr(pc, frame_descriptors_mask);
   while (1) {
     d = frame_descriptors[h];
-    if (d == 0) return NULL; /* can happen if some code compiled without -g */
+    if (d == 0) caml_fatal_error("incomplete frametables");
     if (d->retaddr == pc) break;
     h = (h+1) & frame_descriptors_mask;
   }
