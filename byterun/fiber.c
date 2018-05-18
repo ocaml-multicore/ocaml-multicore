@@ -77,57 +77,37 @@ static void load_stack (value stack) {
 extern void caml_fiber_exn_handler (value) Noreturn;
 extern void caml_fiber_val_handler (value) Noreturn;
 
-#define INIT_FIBER_USED (3 + sizeof(struct caml_context) / sizeof(value))
+//FIXME #define INIT_FIBER_USED (3 + sizeof(struct caml_context) / sizeof(value))
 
-value caml_alloc_stack (value hval, value hexn, value heff) {
+value caml_alloc_stack (value hval, value hexn, value heff)
+{
   CAMLparam3(hval, hexn, heff);
   CAMLlocal1(stack);
   char* sp;
-  struct caml_context *ctxt;
+  struct fiber_context *ctxt;
+  struct fiber_link *link;
 
   stack = caml_alloc(caml_fiber_wsz + caml_params->profile_slop_wsz, Stack_tag);
-  Stack_dirty_domain(stack) = FIBER_CLEAN;
-  Stack_handle_value(stack) = hval;
-  Stack_handle_exception(stack) = hexn;
-  Stack_handle_effect(stack) = heff;
-  Stack_parent(stack) = Val_unit;
+  link = fiber_link(stack);
+  link->dirty_domain = FIBER_CLEAN;
+  link->handle_val = hval;
+  link->handle_exn = hexn;
+  link->handle_eff = heff;
+  link->parent = Val_unit;
+//FIXME  link->parent_sp = 0;
+  link->exn.handler_pc = (uintnat)caml_fiber_exn_handler;
+  link->exn.next_offset = 0;
+  
+  /* push a fiber_context below the fiber_link */
+  ctxt = ((struct caml_context*)link) - 1;
+  ctxt->exception_handler_offset = (char*)link - (char*)(&link->exn);
+  ctxt->pc = (uintnat)caml_fiber_val_handler;
+  ctxt->gc_regs = 0;
 
-  sp = (char*)Stack_high(stack);
-  /* Fiber exception handler that returns to parent */
-  sp -= sizeof(value);
-  *(value**)sp = (value*)caml_fiber_exn_handler;
-  /* No previous exception frame. Infact, this is the debugger slot. Initialize it. */
-  sp -= sizeof(value);
-  Stack_debugger_slot(stack) = Stack_debugger_slot_offset_to_parent_slot(stack);
-  /* Value handler that returns to parent */
-  sp -= sizeof(value);
-  *(value**)sp = (value*)caml_fiber_val_handler;
-
-  /* Build a context */
-  sp -= sizeof(struct caml_context);
-  ctxt = (struct caml_context*)sp;
-  abort();
-  //ctxt->exception_ptr_offset = 2 * sizeof(value);
-  ctxt->gc_regs = NULL;
-  Stack_sp(stack) = Stack_high(stack) - INIT_FIBER_USED;
-
+  Stack_sp(stack) = (value*)ctxt;
   caml_gc_log ("Allocate stack=0x%lx of %lu words", stack, caml_fiber_wsz);
 
   CAMLreturn (stack);
-}
-
-void caml_get_stack_sp_pc (value stack, char** sp /* out */, uintnat* pc /* out */)
-{
-  Assert(Tag_val(stack) == Stack_tag);
-  char* p = (char*)Stack_sp(stack);
-
-#ifndef Stack_grows_upwards
-  p += sizeof(struct caml_context) + sizeof(value);
-#else
-  p -= sizeof(struct caml_context) + sizeof(value);
-#endif
-  *sp = p;
-  abort(); //  *pc = Saved_return_address(*sp);
 }
 
 void caml_scan_stack(scanning_action f, void* fdata, value stack)
@@ -140,8 +120,9 @@ void caml_scan_stack(scanning_action f, void* fdata, value stack)
   int n, ofs;
   unsigned short * p;
   value *root;
-  struct caml_context* context;
+  struct fiber_context* context;
   frame_descr** frame_descriptors;
+  struct fiber_link* fiblink;
   int frame_descriptors_mask;
 
   f(fdata, caml_frame_descriptor_table, &caml_frame_descriptor_table);
@@ -150,18 +131,18 @@ void caml_scan_stack(scanning_action f, void* fdata, value stack)
   f(fdata, Stack_handle_effect(stack), &Stack_handle_effect(stack));
   f(fdata, Stack_parent(stack), &Stack_parent(stack));
 
-  if (Stack_sp(stack) == Stack_high(stack)) return;
-  sp = (char*)Stack_sp(stack);
+  fiblink = fiber_link(stack);
+  context = (struct fiber_context*)fiblink->sp;
+  
   Assert(caml_frame_descriptor_table != Val_unit);
   frame_descriptors = Data_abstract_val(caml_frame_descriptor_table);
   frame_descriptors_mask = Wosize_val(caml_frame_descriptor_table) - 1;
 
 next_chunk:
-  if (sp == (char*)Stack_high(stack)) return;
-  context = (struct caml_context*)sp;
+  sp = (char*)(context + 1);
+  if (sp == (char*)fiblink) return;
   regs = context->gc_regs;
-  retaddr = (uintnat)context->pc;
-  sp += sizeof(struct caml_context);
+  retaddr = context->pc;
 
   while(1) {
     /* Find the descriptor corresponding to the return address */
@@ -188,8 +169,8 @@ next_chunk:
       /* XXX KC: disabled already scanned optimization. */
     } else {
       /* This marks the top of an ML stack chunk. Move sp to the previous stack
-       * chunk. This includes skipping over the trap frame (2 words). */
-      sp += sizeof(struct caml_start_context);
+       * chunk. */
+      context = (struct fiber_context*)sp;
       goto next_chunk;
     }
   }
@@ -220,11 +201,14 @@ void caml_update_gc_regs_slot (value* gc_regs)
  * to. */
 int caml_switch_stack(value stk)
 {
+  abort();
+  /*
   save_stack();
   load_stack(stk);
   if (Stack_sp(stk) == Stack_high(stk) - INIT_FIBER_USED)
     return 1;
   return 0;
+  */
 }
 
 #else /* End NATIVE_CODE, begin BYTE_CODE */
@@ -269,11 +253,23 @@ CAMLprim value caml_alloc_stack(value hval, value hexn, value heff)
   CAMLparam3(hval, hexn, heff);
   CAMLlocal1(stack);
   value* sp;
-  value* high;
+  struct fiber_context *ctxt;
+  struct fiber_link *link;
 
   stack = caml_alloc(caml_fiber_wsz, Stack_tag);
-  high = sp = Stack_high(stack);
+  link = fiber_link(stack);
+  link->dirty_domain = FIBER_CLEAN;
+  link->handle_val = hval;
+  link->handle_exn = hexn;
+  link->handle_eff = heff;
+  link->parent = Val_unit;
+  // FIXME ?
+  link->exn.handler_pc = Val_long(1);
+  link->exn.next_offset = Val_long(1);
 
+  Stack_sp(stack) = Stack_high(stack);
+
+#ifdef FIXME
   // ?
   sp -= 1;
   sp[0] = Val_long(1); /* trapsp ?? */
@@ -284,6 +280,7 @@ CAMLprim value caml_alloc_stack(value hval, value hexn, value heff)
   Stack_handle_exception(stack) = hexn;
   Stack_handle_effect(stack) = heff;
   Stack_parent(stack) = Val_unit;
+#endif
 
   CAMLreturn (stack);
 }
@@ -438,13 +435,6 @@ int caml_on_current_stack(value* p)
   return Stack_base(Caml_state->current_stack) <= p && p < Caml_state->stack_high;
 }
 
-void caml_move_stack(value old_stack, value new_stack, struct caml_context** sp)
-{
-  int stack_used = Stack_high(old_stack) - (value*)*sp;
-  CAMLassert(0 <= stack_used && stack_used < Wosize_val(old_stack));
-  
-}
-
 void caml_realloc_stack(asize_t required_space, value* saved_vals, int nsaved)
 {
   CAMLparamN(saved_vals, nsaved);
@@ -471,17 +461,7 @@ void caml_realloc_stack(asize_t required_space, value* saved_vals, int nsaved)
   }
 
   new_stack = caml_alloc(Stack_ctx_words + size, Stack_tag);
-  Stack_sp(new_stack) = Stack_high(new_stack) - stack_used;
-  memcpy(Stack_sp(new_stack), Stack_sp(old_stack), stack_used * sizeof(value));
-
-  Stack_handle_value(new_stack) = Stack_handle_value(old_stack);
-  Stack_handle_exception(new_stack) = Stack_handle_exception(old_stack);
-  Stack_handle_effect(new_stack) = Stack_handle_effect(old_stack);
-  Stack_parent(new_stack) = Stack_parent(old_stack);
-#ifdef NATIVE_CODE
-  Stack_debugger_slot(new_stack) =
-    Stack_debugger_slot_offset_to_parent_slot(new_stack);
-#endif
+  caml_move_stack(old_stack, new_stack);
 
   Stack_dirty_domain(new_stack) = FIBER_CLEAN;
   if (Stack_dirty_domain(old_stack) != FIBER_CLEAN) {
@@ -532,6 +512,8 @@ void* caml_init_main_stack ()
 
 CAMLprim value caml_clone_continuation (value cont)
 {
+  abort();
+#if FIXME
   CAMLparam1(cont);
   CAMLlocal4(new_cont, prev_target, source, target);
   intnat bvar_stat;
@@ -567,6 +549,7 @@ CAMLprim value caml_clone_continuation (value cont)
   } while (source != Val_unit);
 
   CAMLreturn(new_cont);
+#endif
 }
 
 void caml_restore_stack()

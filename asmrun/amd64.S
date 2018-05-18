@@ -229,7 +229,6 @@ GC frame tables
         LEAVE_FUNCTION; \
         SWITCH_C_TO_OCAML(%r10)
 
-
 /******************************************************************************/
 /* Save and restore all callee-save registers on stack.
    Keep the stack 16-aligned. */
@@ -349,58 +348,58 @@ GC frame tables
 /* See caml/stack.h for structure definitions                                 */
 /******************************************************************************/
 
-/* Push a struct caml_context to an OCaml stack.
+/* Push a struct fiber_context to an OCaml stack.
    Expects:   (%rsp) - return address, on an OCaml stack
                        (e.g. as pushed by call)
-   Produces:  (%rsp) - struct caml_context (with gc_regs = NULL) */
-#define PUSH_caml_context \
+   Produces:  (%rsp) - struct fiber_context (with gc_regs = NULL) */
+#define PUSH_fiber_context \
         pushq   $0 ; CFI_ADJUST(8); \
         pushq   %r14 ; CFI_ADJUST(8)
 
-/* Pop and restore a struct caml_context from an OCaml stack.
-   Expects:   (%rsp) - struct caml_context, on an OCaml stack
+/* Pop and restore a struct fiber_context from an OCaml stack.
+   Expects:   (%rsp) - struct fiber_context, on an OCaml stack
    Produces:  (%rsp) - return address, on same stack
    Clobbers:   %r11 */
-#define POP_caml_context \
+#define POP_fiber_context \
         popq    %r14 ; CFI_ADJUST(-8); \
         popq    %r11 ; CFI_ADJUST(-8)
 
-/* Push a struct c_call_context to the C stack, enclosing the callback_context
+/* Push a struct cstack_ccall to the C stack, enclosing the cstack_callback
    already present. Saves young_ptr.
-   Expects:   (%rsp) - struct caml_context, on an OCaml stack
+   Expects:   (%rsp) - struct fiber_context, on an OCaml stack
                %r15  - young_ptr
-   Produces:  (%rsp) - struct c_call_context, on C stack
+   Produces:  (%rsp) - struct cstack_ccall, on C stack
    Clobbers:   %r10, %r11 */
-#define PUSH_c_call_context \
+#define PUSH_cstack_ccall \
         STORE_TL_VAR(%r15, caml_young_ptr); \
         movq    %rsp, %r10; \
         LOAD_TL_VAR(caml_c_context, %rsp); \
-        /* prepend struct c_call_context */ \
+        /* prepend struct cstack_ccall */ \
         pushq   %r10
 
-/* Pop a struct c_call_context from the C stack,
+/* Pop a struct cstack_ccall from the C stack,
    switching back to an OCaml stack and restoring young_ptr.
-   Expects:   (%rsp) - struct c_call_context, on C stack
+   Expects:   (%rsp) - struct cstack_ccall, on C stack
                %r15  - possibly-stale young_ptr (to find domain state)
-   Produces:  (%rsp) - struct caml_context, on an OCaml stack
+   Produces:  (%rsp) - struct fiber_context, on an OCaml stack
                %r15  - young_ptr
    Clobbers:   %r10, %r11 */
-#define POP_c_call_context \
+#define POP_cstack_ccall \
         /* Could this be pop rsp? What does that do? mov (%rsp), %rsp is also fine */ \
-        popq    %r11; /* caml_context */ \
+        popq    %r11; /* fiber_context */ \
         /* debug assert */ \
         LOAD_TL_VAR(caml_c_context, %r10); cmpq %r10, %rsp; je 1f; int3; 1: ; \
         movq    %r11, %rsp; \
         LOAD_TL_VAR(caml_young_ptr, %r15)
 
-/* Push a struct callback_context to the C stack, switching to an OCaml stack.
+/* Push a struct cstack_callback to the C stack, switching to an OCaml stack.
    Expects:    %rsp  - C stack pointer
                %r15  - young_ptr
                %r13  - OCaml stack pointer
    Produces:   %rsp  - OCaml stack pointer
    Clobbers:   %r10, %r11
   */
-#define PUSH_callback_context \
+#define PUSH_cstack_callback \
         LOAD_TL_VAR(caml_c_context, %r11); \
         pushq   %r11; \
         LOAD_TL_VAR(caml_current_stack, %r10); \
@@ -410,11 +409,11 @@ GC frame tables
         movq    %r13, %rsp; \
         pushq   %r10
 
-/* Switch from an OCaml to C stack and pop a struct callback_context.
+/* Switch from an OCaml to C stack and pop a struct cstack_callback.
    Expects:    %rsp  - OCaml stack pointer
    Produces:   %rsp  - C stack pointer
    Clobbers:   %r10, %r11 */
-#define POP_callback_context \
+#define POP_cstack_callback \
         popq    %r10; \
         /* assert */ CMP_TL_VAR(caml_c_context, %r10); je 1f; int3; 1: \
         movq    %rsp, %r11; \
@@ -551,8 +550,8 @@ CFI_ENDPROC
    to allocation failure, read barrier faults or stack overflow).
    Not used for ordinary OCaml->C calls: instead, the register allocator ensures
    that registers are not live across ordinary OCaml->C calls.
-   To be called right after PUSH_c_call_context.
-   Expects:   (%rsp) - struct c_call_context, on C stack
+   To be called right after PUSH_cstack_ccall.
+   Expects:   (%rsp) - struct cstack_ccall, on C stack
    Produces:   fills in %rsp->caml->gc_regs
    Clobbers:   %r11 */
 #define PUSH_gc_regs \
@@ -571,9 +570,9 @@ CFI_ENDPROC
         pushq   %rbx; CFI_ADJUST (8);                                          \
         pushq   %rax; CFI_ADJUST (8);                                          \
         /* update %r11->caml->gc_regs */; \
-        movq    0(%r11), %r11; /* c_call_context->caml */; \
+        movq    0(%r11), %r11; /* cstack_ccall->caml */; \
         /* assert gc_regs == 0 */ cmpq $0, 8(%r11); je 1f; int3; 1:            \
-        movq    %rsp, 8(%r11); /* caml_context->gc_regs */; \
+        movq    %rsp, 8(%r11); /* fiber_context->gc_regs */; \
         /* Save floating-point registers. These are not part of gc_regs, */ \
         /* since they cannot contain GC pointers, but must be preserved. */ \
         subq    $(16*8), %rsp; CFI_ADJUST (16*8);                              \
@@ -595,8 +594,8 @@ CFI_ENDPROC
         movsd   %xmm15, 15*8(%rsp)
 
 /* Restore registers from the C stack.
-   This leaves the gc_regs pointer in caml_context dangling, so the GC must
-   not be entered between POP_gc_regs and POP_caml_context.
+   This leaves the gc_regs pointer in fiber_context dangling, so the GC must
+   not be entered between POP_gc_regs and POP_fiber_context.
    Preserves %r10 and %r11, which are not saved in the gc_regs structure. */
 #define POP_gc_regs \
         movsd   0*8(%rsp), %xmm0;                                              \
@@ -637,22 +636,22 @@ CFI_ENDPROC
 FUNCTION(G(caml_call_gc))
 CFI_STARTPROC
         /* FIXME: stack alignment, frame pointers, DWARF CFI */
-        PUSH_caml_context
-        PUSH_c_call_context
+        PUSH_fiber_context
+        PUSH_cstack_ccall
         PUSH_gc_regs
         PREPARE_FOR_C_CALL
         call GCALL(caml_garbage_collection)
         CLEANUP_AFTER_C_CALL
         POP_gc_regs
-        POP_c_call_context
-        POP_caml_context
+        POP_cstack_ccall
+        POP_fiber_context
         ret
 CFI_ENDPROC
 
 FUNCTION(G(caml_call_realloc_stack))
 CFI_STARTPROC
-        PUSH_caml_context
-        PUSH_c_call_context
+        PUSH_fiber_context
+        PUSH_cstack_ccall
         PUSH_gc_regs
         movq    $0, C_ARG_1
         movq    $0, C_ARG_2
@@ -661,16 +660,16 @@ CFI_STARTPROC
         call    GCALL(caml_realloc_stack)
         CLEANUP_AFTER_C_CALL
         POP_gc_regs
-        POP_c_call_context
-        POP_caml_context
+        POP_cstack_ccall
+        POP_fiber_context
         ret
 CFI_ENDPROC
 
 /* Arguments: %rax = base; %rdx = offset. */
 FUNCTION(G(caml_call_read_barrier))
 CFI_STARTPROC
-        PUSH_caml_context
-        PUSH_c_call_context
+        PUSH_fiber_context
+        PUSH_cstack_ccall
         PUSH_gc_regs
         movq    %rax, C_ARG_1
         movq    %rdx, C_ARG_2
@@ -680,8 +679,8 @@ CFI_STARTPROC
         movq    %rax, %r10
         POP_gc_regs
         movq    %r10, %rax
-        POP_c_call_context
-        POP_caml_context
+        POP_cstack_ccall
+        POP_fiber_context
         ret
 CFI_ENDPROC
 
@@ -748,13 +747,13 @@ LBL(caml_c_call):
     /* Arguments:
         C arguments         : %rdi, %rsi, %rdx, %rcx, %r8, and %r9
         C function          : %rax */
-        PUSH_caml_context
-        PUSH_c_call_context
+        PUSH_fiber_context
+        PUSH_cstack_ccall
         PREPARE_FOR_C_CALL
         call *%rax
         CLEANUP_AFTER_C_CALL
-        POP_c_call_context
-        POP_caml_context
+        POP_cstack_ccall
+        POP_fiber_context
         ret
 CFI_ENDPROC
 
@@ -819,7 +818,7 @@ CFI_STARTPROC
                    %r13  - OCaml stack pointer */
 LBL(caml_start_program):
         pushq   $0   ; CFI_ADJUST(8) // alignment word
-        PUSH_callback_context
+        PUSH_cstack_callback
     /* Build a handler for exceptions raised in OCaml */
         lea     LBL(109)(%rip), %r13
         pushq   %r13; CFI_ADJUST(8)
@@ -840,7 +839,7 @@ LBL(108):
 LBL(110):
     /* Update alloc ptr */
         STORE_TL_VAR(%r15,caml_young_ptr)
-        POP_callback_context
+        POP_cstack_callback
         popq %r10            ; CFI_ADJUST(-8) // alignment word
     /* Restore callee-save registers. */
         POP_CALLEE_SAVE_REGS
@@ -912,8 +911,8 @@ CFI_STARTPROC
 LBL(caml_raise_exception):
     /* Load ocaml stack and restore global variables */
         LOAD_TL_VAR(caml_c_context, %r11)
-        movq    -8(%r11), %rsp /* c_call_context->caml */
-        POP_caml_context
+        movq    -8(%r11), %rsp /* cstack_ccall->caml */
+        POP_fiber_context
     /* Raise the exception in OCaml */
         jmp LBL(caml_raise_exn)
 CFI_ENDPROC
