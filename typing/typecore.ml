@@ -957,7 +957,7 @@ let unify_head_only loc env ty constr =
 (* Typing of patterns *)
 
 (* Simplified patterns for effect continuations *)
-let type_continuation_pat env expected_ty sp =
+let rec type_continuation_pat env expected_ty sp =
   let loc = sp.ppat_loc in
   match sp.ppat_desc with
   | Ppat_any -> None
@@ -968,6 +968,21 @@ let type_continuation_pat env expected_ty sp =
           Types.val_loc = loc; val_attributes = []; }
       in
         Some (id, desc)
+  | Ppat_constraint (sp, sty) ->
+      let separate = true in
+      if separate then begin_def();
+      let cty, force = Typetexp.transl_simple_type_delayed env sty in
+      let ty = cty.ctyp_type in
+      let ty, expected_ty' =
+        if separate then begin
+          end_def();
+          generalize_structure ty;
+          instance env ty, instance env ty
+        end else ty, ty
+      in
+      unify_pat_types sp.ppat_loc env ty expected_ty;
+      pattern_force := force :: !pattern_force;
+      type_continuation_pat env expected_ty sp
   | Ppat_extension ext ->
       raise (Error_forward (Builtin_attributes.error_of_extension ext))
   | _ -> raise (Error (loc, env, Invalid_continuation_pattern))
@@ -4615,9 +4630,10 @@ and type_cases ?in_function env ty_arg ty_res ?conts partial_flag loc caselist =
   let pat_env_cont_list =
     match conts with
     | None -> List.map (fun (pat, env) -> (pat, env, None)) pat_env_list
-    | Some conts ->
+    | Some (conts, ty_cont) ->
         List.map2
-          (fun (pat, env) cont -> (pat, env, cont))
+            (fun (pat, env) cont -> let (envv, _) = env in
+              (pat, env, type_continuation_pat envv ty_cont cont))
           pat_env_list conts
   in
   let cases =
@@ -4727,8 +4743,8 @@ and type_effect_cases env ty_res loc caselist conts =
   let ty_eff = newgenty (Tconstr (Path.Pident id,[],ref Mnil)) in
   let ty_arg = Predef.type_eff ty_eff in
   let ty_cont = Predef.type_continuation ty_eff ty_res in
-  let conts = List.map (type_continuation_pat env ty_cont) conts in
-  let cases, _ = type_cases new_env ty_arg ty_res ~conts false loc caselist in
+  (* Format.printf "%a@" Printtyp.raw_type_expr ty_res; *)
+  let cases, _ = type_cases new_env ty_arg ty_res ~conts:(conts, ty_cont) false loc caselist in
   end_def ();
   cases
 
