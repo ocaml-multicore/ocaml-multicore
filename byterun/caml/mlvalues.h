@@ -306,6 +306,9 @@ CAMLextern value caml_get_public_method (value obj, value tag);
 /* Tag used for fiber stacks (see fiber.c) */
 #define Stack_tag 245
 
+/* Tag used for ephemeron maps (see weak.c) */
+#define Ephe_tag 244
+
 /* Another special case: variants */
 CAMLextern value caml_hash_variant(char const * tag);
 

@@ -227,3 +227,18 @@ CAMLprim value caml_weak_blit (value ars, value ofs,
 {
   return caml_ephe_blit_key (ars, ofs, ard, ofd, len);
 }
+
+CAMLprim value caml_ephemap_add (value key, value val, value tail)
+{
+  return caml_alloc_3(Ephe_tag, key, val, tail);
+}
+
+CAMLprim value caml_ephemap_lookup (value key, value ephe)
+{
+  CAMLparam2(key, ephe);
+  for (; Is_block(ephe); ephe = Field_imm(ephe, 2)) {
+    if (Field_imm(ephe, 0) == key)
+      CAMLreturn (caml_alloc_1(0, Field_imm(ephe, 1)));
+  }
+  CAMLreturn (Val_unit);
+}

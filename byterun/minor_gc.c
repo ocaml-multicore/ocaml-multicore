@@ -116,6 +116,7 @@ struct oldify_state {
   int should_promote_stacks;
   struct domain* promote_domain;
   value oldest_promoted;
+  struct caml_ref_table ephe_to_revisit;
 };
 
 static value alloc_shared(mlsize_t wosize, tag_t tag)
@@ -127,6 +128,16 @@ static value alloc_shared(mlsize_t wosize, tag_t tag)
     caml_fatal_error("allocation failure during minor GC");
   }
   return Val_hp(mem);
+}
+
+static int already_oldified (value v)
+{
+  if (!Is_block(v) || !Is_young(v) || Hd_val(v) == 0)
+    return 1;
+  else if (Tag_val(v) == Infix_tag)
+    return (Hd_val(v - Infix_offset_val(v)) == 0);
+  else
+    return 0;
 }
 
 /* Note that the tests on the tag depend on the fact that Infix_tag,
@@ -186,6 +197,15 @@ static void oldify_one (void* st_v, value v, value *p)
     if (tag == Stack_tag && !st->should_promote_stacks) {
       /* Stacks are not promoted unless explicitly requested. */
       Ref_table_add(&remembered_set->major_ref, p);
+    } else if (tag == Ephe_tag && !already_oldified(Op_val(v)[0])) {
+      /* This ephemeron's key has not been oldified, so its value is not
+         known to be live. Perhaps the key will be oldified later, so
+         let's record the ephemeron and recheck in oldify_mopup */
+      *p = v;
+      Ref_table_add(&st->ephe_to_revisit, p);
+      p = Op_val(v) + 2;
+      v = *p;
+      goto tail_call;
     } else {
       sz = Wosize_hd (hd);
       st->live_bytes += Bhsize_hd(hd);
@@ -407,7 +427,7 @@ CAMLexport value caml_promote(struct domain* domain, value root)
     }
   }
 
-  oldify_mopup (&st);
+  oldify_mopup (&st); // FIXME ephe
 
   CAMLassert (!Is_minor(root));
   CAMLassert (Has_status_hd(Hd_val(root), global.MARKED));
@@ -520,6 +540,7 @@ void caml_empty_minor_heap_domain (struct domain* domain)
   value young_end = (value)domain_state->young_end;
   uintnat minor_allocated_bytes = young_end - young_ptr;
   struct oldify_state st = {0};
+  const struct caml_ref_table empty_ref_table = {0};
   value **r;
 
   if (!caml_stack_is_saved()) {
@@ -547,8 +568,34 @@ void caml_empty_minor_heap_domain (struct domain* domain)
     caml_ev_end("minor_gc/roots");
 
     caml_ev_begin("minor_gc/promote");
-    oldify_mopup (&st);
+    do {
+      struct caml_ref_table ephe_to_revisit;
+      oldify_mopup (&st);
+      /* rescan any ephemerons found, to see if their keys have been oldified */
+      ephe_to_revisit = st.ephe_to_revisit;
+      st.ephe_to_revisit = empty_ref_table;
+      for (r = ephe_to_revisit.base; r < ephe_to_revisit.ptr; r++)
+        oldify_one(&st, **r, *r);
+      reset_table(&ephe_to_revisit);
+    } while (st.todo_list != 0);
     caml_ev_end("minor_gc/promote");
+    caml_ev_begin("minor_gc/ephe_clean");
+    for (r = st.ephe_to_revisit.base; r < st.ephe_to_revisit.ptr; r++) {
+      /* delete dead ephemerons by rewriting pointers to skip them */
+      value *p = *r, e = *p;
+      while (!already_oldified(e)) {
+        CAMLassert(Tag_val(e) == Ephe_tag && !already_oldified(Field_imm(e, 0)));
+        e = Field_imm(e, 2);
+      }
+      CAMLassert(already_oldified(e) && (e == Val_unit || Tag_val(e) == Ephe_tag));
+      while (*p != e) {
+        value* next = &Op_val(*p)[2];
+        *p = e;
+        p = next;
+      }
+    }
+    reset_table(&st.ephe_to_revisit);
+    caml_ev_end("minor_gc/ephe_clean");
 
     caml_ev_begin("minor_gc/update_remembered_set");
     for (r = remembered_set->major_ref.base; r < remembered_set->major_ref.ptr; r++) {
