@@ -160,7 +160,7 @@ void caml_maybe_expand_stack ()
     (value*)stk->sp - Stack_base(stk);
 
   if (stack_available < 2 * Stack_threshold / sizeof(value))
-    caml_realloc_stack (0, 0, 0);
+    caml_realloc_stack (0);
 }
 
 void caml_update_gc_regs_slot (value* gc_regs)
@@ -235,7 +235,7 @@ CAMLprim value caml_ensure_stack_capacity(value required_space)
 {
   asize_t req = Long_val(required_space);
   if (Caml_state->current_stack->sp - req < Stack_base(Caml_state->current_stack))
-    caml_realloc_stack(req, 0, 0);
+    caml_realloc_stack(req);
   return Val_unit;
 }
 
@@ -296,15 +296,12 @@ int caml_on_current_stack(value* p)
   return Stack_base(Caml_state->current_stack) <= p && p < Caml_state->stack_high;
 }
 
-void caml_realloc_stack(asize_t required_space, value* saved_vals, int nsaved)
+void caml_realloc_stack(asize_t required_space)
 {
-  CAMLparamN(saved_vals, nsaved);
   struct stack_info *old_stack, *new_stack;
   asize_t size;
   int stack_used;
-  /* No heap allocation here, but this function should never be called during
-     CAMLnoalloc calls because it invalidates pointers into the stack */
-  CAMLalloc_point_here;
+  CAMLnoalloc;
 
   old_stack = save_stack();
 
@@ -343,8 +340,6 @@ void caml_realloc_stack(asize_t required_space, value* saved_vals, int nsaved)
 
   caml_free_stack(old_stack);
   load_stack(new_stack);
-
-  CAMLreturn0;
 }
 
 static void caml_init_stack (struct stack_info* stack)

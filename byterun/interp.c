@@ -989,12 +989,9 @@ value caml_interprete(code_t prog, asize_t prog_size)
 
     check_stacks:
       if (sp < domain_state->stack_threshold) {
-        value saved[] = {env, accu};
         domain_state->current_stack->sp = sp;
-        caml_realloc_stack(Stack_threshold / sizeof(value), saved, 2);
+        caml_realloc_stack(Stack_threshold / sizeof(value));
         sp = domain_state->current_stack->sp;
-        env = saved[0];
-        accu = saved[1];
       }
       /* Fall through CHECK_SIGNALS */
 
