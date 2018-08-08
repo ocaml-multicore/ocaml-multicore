@@ -607,9 +607,11 @@ CFI_STARTPROC
         movsd   %xmm8, 8*8(%rsp)
         movsd   %xmm9, 9*8(%rsp)
 
+        STORE_TL_VAR(%r15, caml_young_ptr);
         PREPARE_FOR_C_CALL
         movq    %r11, C_ARG_1
-        call    GCALL(caml_realloc_stack)
+        LEA_VAR(caml_realloc_stack, %rax)
+        CAML_CALL_ENTER_C
         CLEANUP_AFTER_C_CALL
 
         movsd   0*8(%rsp), %xmm0

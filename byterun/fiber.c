@@ -301,7 +301,6 @@ void caml_realloc_stack(asize_t required_space)
   struct stack_info *old_stack, *new_stack;
   asize_t size;
   int stack_used;
-  CAMLnoalloc;
 
   old_stack = save_stack();
 
