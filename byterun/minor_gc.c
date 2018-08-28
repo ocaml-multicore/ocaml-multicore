@@ -196,13 +196,14 @@ static void oldify_one (void* st_v, value v, value *p)
     st->oldest_promoted = (value)Hp_val(v);
   }
 
+#define Lock_hd(v) if (!__sync_bool_compare_and_swap(Hp_val(v), Hd_val(v), 0)) abort()
   if (tag == Cont_tag) {
     struct stack_info* stk = Ptr_val(Op_val(v)[0]);
     CAMLassert(Wosize_hd(hd) == 1 && infix_offset == 0);
     result = alloc_shared(1, Cont_tag);
     *p = result;
     Op_val(result)[0] = Val_ptr(stk);
-    Hd_val (v) = 0;
+    Lock_hd(v);
     Op_val(v)[0] = result;
     if (stk != NULL)
       caml_scan_stack(&oldify_one, st, stk);
@@ -214,7 +215,7 @@ static void oldify_one (void* st_v, value v, value *p)
     *p = result + infix_offset;
     field0 = Op_val(v)[0];
     CAMLassert (!Is_debug_tag(field0));
-    Hd_val (v) = 0;            /* Set forward flag */
+    Lock_hd(v);            /* Set forward flag */
     Op_val(v)[0] = result;     /*  and forward pointer. */
     if (sz > 1){
       Op_val (result)[0] = field0;
@@ -234,7 +235,7 @@ static void oldify_one (void* st_v, value v, value *p)
       value curr = Op_val(v)[i];
       Op_val (result)[i] = curr;
     }
-    Hd_val (v) = 0;            /* Set forward flag */
+    Lock_hd(v);            /* Set forward flag */
     Op_val (v)[0] = result;    /*  and forward pointer. */
     CAMLassert (infix_offset == 0);
     *p = result;
@@ -255,7 +256,7 @@ static void oldify_one (void* st_v, value v, value *p)
       st->live_bytes += Bhsize_hd(hd);
       result = alloc_shared (1, Forward_tag);
       *p = result;
-      Hd_val (v) = 0;             /* Set (GC) forward flag */
+      Lock_hd(v);             /* Set (GC) forward flag */
       Op_val (v)[0] = result;      /*  and forward pointer. */
       p = Op_val (result);
       v = f;
