@@ -82,7 +82,8 @@ CAMLexport void caml_modify_field (value obj, int field, value val)
 #if defined(COLLECT_STATS) && defined(NATIVE_CODE)
   Caml_state->mutable_stores++;
 #endif
-  Op_val(obj)[field] = val;
+  __atomic_exchange_n(&Op_val(obj)[field], val, __ATOMIC_SEQ_CST);
+  //Op_val(obj)[field] = val;
 }
 
 CAMLexport void caml_initialize_field (value obj, int field, value val)
