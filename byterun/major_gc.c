@@ -456,11 +456,13 @@ static intnat do_some_marking(struct mark_stack* stk, intnat budget) {
           e = stk->stack[--stk->count];
         } else if (Tag_hd(hd) < No_scan_tag) {
           mark_entry child = {v, 0, Wosize_hd(hd)};
-          Hd_val(v) = With_status_hd(hd, global.MARKED);
+          __atomic_exchange_n(&Hd_val(v), With_status_hd(hd, global.MARKED), __ATOMIC_SEQ_CST);
+          //Hd_val(v) = With_status_hd(hd, global.MARKED);
           mark_stack_push(stk, e);
           e = child;
         } else {
-          Hd_val(v) = With_status_hd(hd, global.MARKED);
+          __atomic_exchange_n(&Hd_val(v), With_status_hd(hd, global.MARKED), __ATOMIC_SEQ_CST);
+          //Hd_val(v) = With_status_hd(hd, global.MARKED);
         }
       }
     }
@@ -525,10 +527,12 @@ void caml_darken(void* state, value v, value* ignored) {
       caml_darken_cont(v);
     } else if (Tag_hd(hd) < No_scan_tag) {
       mark_entry e = {v, 0, Wosize_val(v)};
-      Hd_val(v) = With_status_hd(hd, global.MARKED);
+      __atomic_exchange_n(&Hd_val(v), With_status_hd(hd, global.MARKED), __ATOMIC_SEQ_CST);
+      //Hd_val(v) = With_status_hd(hd, global.MARKED);
       mark_stack_push(Caml_state->mark_stack, e);
     } else {
-      Hd_val(v) = With_status_hd(hd, global.MARKED);
+      __atomic_exchange_n(&Hd_val(v), With_status_hd(hd, global.MARKED), __ATOMIC_SEQ_CST);
+      //Hd_val(v) = With_status_hd(hd, global.MARKED);
     }
   }
 }
