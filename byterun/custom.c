@@ -38,6 +38,7 @@ CAMLexport value caml_alloc_custom(const struct custom_operations * ops,
     result = caml_alloc_small(wosize, Custom_tag);
     Custom_ops_val(result) = ops;
     if (ops->finalize != NULL || mem != 0) {
+      Caml_state->youngest_escaped = result;
       /* Remember that the block needs processing after minor GC. */
       add_to_custom_table (&Caml_state->minor_tables->custom, result, mem, max);
 #if 0 /* XXX TODO KC */

@@ -47,6 +47,8 @@ static void write_barrier(value obj, int field, value old_val, value new_val)
     caml_darken(0, old_val, 0);
 
     if (Is_block(new_val) && Is_young(new_val)) {
+      if (new_val < Caml_state->youngest_escaped)
+        Caml_state->youngest_escaped = new_val;
 
       /* If old_val is young, then `Op_val(obj)+field` is already in
        * major_ref. We can safely skip adding it again. */
@@ -57,6 +59,8 @@ static void write_barrier(value obj, int field, value old_val, value new_val)
       Ref_table_add(&domain_state->minor_tables->major_ref, Op_val(obj) + field);
     }
   } else if (Is_young(new_val) && new_val < obj) {
+    if (new_val < Caml_state->youngest_escaped)
+      Caml_state->youngest_escaped = new_val;
 
     /* Both obj and new_val are young and new_val is more recent than obj.
       * If old_val is also young, and younger than obj, then it must be the

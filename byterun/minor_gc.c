@@ -649,6 +649,8 @@ void caml_empty_minor_heap_domain (struct domain* domain)
     clear_table ((struct generic_table *)&minor_tables->custom);
 
     domain_state->young_ptr = domain_state->young_end;
+    domain_state->young_limit = domain_state->young_end - 8192;
+    domain_state->youngest_escaped = Val_hp(domain_state->young_end);
     domain_state->stat_minor_words += Wsize_bsize (minor_allocated_bytes);
     domain_state->stat_minor_collections++;
     domain_state->stat_promoted_words += domain_state->allocated_words - prev_alloc_words;
@@ -769,4 +771,102 @@ void caml_realloc_custom_table (struct caml_custom_table *tbl)
      "custom_table threshold crossed\n",
      "Growing custom_table to %" ARCH_INTNAT_PRINTF_FORMAT "dk bytes\n",
      "custom_table overflow");
+}
+
+
+
+struct l1_rootlist {
+  header_t *start, *end;
+  uintnat nroots;
+  uintnat nconsidered;
+  value* roots[64];
+};
+static void add_root(void* rootlist, value v, value* p)
+{
+  struct l1_rootlist* rs = rootlist;
+  uintnat n;
+  rs->nconsidered++;
+  if (Is_block(v) && rs->start <= Hp_val(v) && Hp_val(v) < rs->end) {
+    rs->nroots++;
+    if (n < sizeof(rs->roots)/sizeof(rs->roots[0])) rs->roots[n] = p;
+  }
+}
+
+int64_t caml_time_counter(void);
+void caml_l1gc()
+{
+  header_t* start = (header_t*)Caml_state->young_ptr;
+  header_t* end;
+  struct l1_rootlist rs = {0};
+
+  int64_t t_overhead = caml_time_counter();
+  int64_t t_start = caml_time_counter();
+
+  end = (header_t*)Caml_state->young_end;
+  if (start + 8192/sizeof(header_t*) < end)
+    end = start + 8192/sizeof(header_t*);
+  if (Hp_val(Caml_state->youngest_escaped) < end)
+    end = Hp_val(Caml_state->youngest_escaped);
+  if (end - start < 400) return;
+  rs.start = start;
+  rs.end = end;
+  caml_do_local_roots(&add_root, &rs, caml_domain_self(), 0);
+  caml_scan_stack(&add_root, &rs, Caml_state->current_stack);
+  if (rs.nroots > sizeof(rs.roots) / sizeof(rs.roots[0]))
+    return;
+  if (rs.nroots == 0) {
+    fprintf(stderr, "cutting young ptr\n");
+    memset(Caml_state->young_ptr, 0x42, sizeof(header_t) * (end - start));
+    Caml_state->young_ptr = (char*)end;
+    return;
+  }
+
+  enum { Long_bits = sizeof(unsigned long) * 8,
+         Max_words = 1024 };
+  if (end - start > Max_words) abort();
+  unsigned long mark[Max_words/Long_bits] = {0};
+  for (int i = 0; i < rs.nroots; i++) {
+    unsigned idx = Hp_val(*rs.roots[i]) - start;
+    mark[idx / Long_bits] |= 1ul << (idx % Long_bits);
+  }
+  int64_t t_scanned = caml_time_counter();
+
+  uintnat used_words = 0;
+  uintnat blocks = 0;
+  uintnat inside = 0;
+  // FIXME Infix_tag
+  int markw = 0;
+  while (markw < Max_words / Long_bits) {
+    if (mark[markw] == 0) { markw++; continue; }
+    int i = markw * Long_bits + __builtin_ctzl(mark[markw]);
+    mark[markw] &= mark[markw] - 1;
+
+    value v = Val_hp(start + i);
+    header_t hd = Hd_val(v);
+    used_words += Whsize_hd(hd);
+    if (Tag_hd(hd) == Infix_tag || Tag_hd(hd) == Cont_tag) {
+      fprintf(stderr, "infix/cont\n");
+      return;
+    } else if (Tag_hd(hd) < No_scan_tag) {
+      for (int f = 0; f < Wosize_hd(hd); f++) {
+        value field = Op_val(v)[f];
+        //if (Is_block(field)) blocks++;
+        //if (start <= Hp_val(field) && Hp_val(field) < end) inside++;
+
+        if (!Is_block(field)) continue;
+        uintnat idx = Hp_val(field) - start;
+        if (idx > end - start) continue;
+
+        CAMLassert(field >= v);
+        mark[idx / Long_bits] |= 1ul << (idx % Long_bits);
+      }
+    }
+  }
+  int64_t t_marked = caml_time_counter();
+  fprintf(stderr, "%p-%p: %lu relevant roots of %lu in %lu words\n",
+          start, end, rs.nroots, rs.nconsidered, end - start);
+
+  fprintf(stderr, "%lu/%lu words (%lu block, %lu inside) used. %ldns stackscan, %ldns mark, %ldns oh\n",
+          used_words, end-start, blocks, inside,
+          t_scanned - t_start, t_marked - t_scanned, t_start - t_overhead);
 }

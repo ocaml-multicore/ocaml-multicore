@@ -157,6 +157,8 @@ void caml_reallocate_minor_heap(asize_t wsize)
   domain_state->young_start = (char*)domain_self->minor_heap_area;
   domain_state->young_end = (char*)(domain_self->minor_heap_area + Bsize_wsize(wsize));
   domain_state->young_ptr = domain_state->young_end;
+  domain_state->young_limit = domain_state->young_ptr - 8192;
+  domain_state->youngest_escaped = Val_hp(domain_state->young_end);
 }
 
 /* must be run on the domain's thread */
@@ -574,6 +576,7 @@ void caml_urge_major_slice (void)
   caml_interrupt_self();
 }
 
+void caml_l1gc();
 void caml_handle_gc_interrupt() {
   atomic_uintnat* young_limit = domain_self->interrupt_word_address;
   CAMLalloc_point_here;
@@ -590,7 +593,13 @@ void caml_handle_gc_interrupt() {
     caml_ev_end("handle_interrupt");
   }
 
-  if (((uintnat)Caml_state->young_ptr - Bhsize_wosize(Max_young_wosize) <
+  if (Caml_state->young_ptr - Bhsize_wosize(Max_young_wosize) < Caml_state->young_limit &&
+      Caml_state->young_limit != domain_self->minor_heap_area) {
+    caml_l1gc();
+    Caml_state->young_limit = Caml_state->young_ptr - 8192;
+    if (Caml_state->young_limit < domain_self->minor_heap_area + Bhsize_wosize(Max_young_wosize))
+      Caml_state->young_limit = domain_self->minor_heap_area;
+  } else if (((uintnat)Caml_state->young_ptr - Bhsize_wosize(Max_young_wosize) <
        domain_self->minor_heap_area) ||
       Caml_state->force_major_slice) {
     /* out of minor heap or collection forced */
