@@ -632,6 +632,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
         for (i = 0; i < nvars; i++) {
           Init_field(accu, var_offset + i, sp[i]);
         }
+        Caml_state->youngest_escaped = accu;
       } else {
         /* PR#6385: must allocate in major heap */
         accu = caml_alloc_shr(blksize, Closure_tag);
