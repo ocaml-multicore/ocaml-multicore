@@ -429,18 +429,24 @@ CAMLextern value caml_set_oo_id(value obj);
 /* Field access macros and functions */
 
 static inline value Field_imm(value x, int i) {
+  Assert (x > (1 << 16));
   Assert (Hd_val(x));
   Assert (Tag_val(x) == Infix_tag || i < Wosize_val(x));
+  Assert (Wosize_val(x) < (1 << 20));
   value v = Op_val(x)[i];
   Assert (!Is_foreign(v));
+  if (Is_block(v)) Assert(v > (1 << 16));
   return v;
 }
 
 CAMLextern value caml_read_barrier(value, int);
 static inline value Field(value x, int i) {
+  Assert (x > (1 << 16));
   Assert (Hd_val(x));
+  Assert (Wosize_val(x) < (1 << 20));
   value v = (((value*)x))[i];
   //if (Is_young(v)) Assert(young_ptr < (char*)v);
+  if (Is_block(v)) Assert(v > (1 << 16));
   return Is_foreign(v) ? caml_read_barrier(x, i) : v;
 }
 

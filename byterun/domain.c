@@ -596,7 +596,6 @@ void caml_handle_gc_interrupt() {
   if (Caml_state->young_ptr - Bhsize_wosize(Max_young_wosize) < Caml_state->young_limit &&
       Caml_state->young_limit != domain_self->minor_heap_area) {
     caml_l1gc();
-    Caml_state->young_limit = Caml_state->young_ptr - 8192;
     if (Caml_state->young_limit < domain_self->minor_heap_area + Bhsize_wosize(Max_young_wosize))
       Caml_state->young_limit = domain_self->minor_heap_area;
   } else if (((uintnat)Caml_state->young_ptr - Bhsize_wosize(Max_young_wosize) <

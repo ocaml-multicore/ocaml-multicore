@@ -37,6 +37,10 @@
 #include "caml/shared_heap.h"
 #include "caml/signals.h"
 #include "caml/weak.h"
+#include "caml/startup_aux.h"
+
+enum { Long_bits = sizeof(unsigned long) * 8,
+       Max_words = 1024 };
 
 extern value caml_ephe_none; /* See weak.c */
 struct generic_table CAML_TABLE_STRUCT(char);
@@ -479,6 +483,7 @@ CAMLexport value caml_promote(struct domain* domain, value root)
       value curr = Val_hp(iter);
       if (hd != 0) {
         tag_t tag = Tag_hd (hd);
+        CAMLassert(Wosize_hd(hd) <= Max_young_wosize);
         if (tag == Cont_tag) {
           struct stack_info* stk = Ptr_val(Op_val(curr)[0]);
           if (stk != NULL)
@@ -650,7 +655,7 @@ void caml_empty_minor_heap_domain (struct domain* domain)
     clear_table ((struct generic_table *)&minor_tables->custom);
 
     domain_state->young_ptr = domain_state->young_end;
-    domain_state->young_limit = domain_state->young_end - 8192;
+    domain_state->young_limit = domain_state->young_end - Max_words * sizeof(value);
     domain_state->youngest_escaped = Val_hp(domain_state->young_end);
     domain_state->stat_minor_words += Wsize_bsize (minor_allocated_bytes);
     domain_state->stat_minor_collections++;
@@ -786,9 +791,11 @@ void caml_realloc_custom_table (struct caml_custom_table *tbl)
      (which are small), but that's enough for here */
 static inline header_t hd_of_ptr(void* p)
 {
-  const uintnat signbit = ((uintnat)-1) ^ (((uintnat)-1) >> 1);
-  CAMLassert(((header_t)p & 1) == 0); /* must be aligned */
-  return (header_t)(signbit | (((uintnat)p) >> 1));
+  //const uintnat signbit = ((uintnat)-1) ^ (((uintnat)-1) >> 1);
+  //CAMLassert(((header_t)p & 1) == 0); /* must be aligned */
+  //return (header_t)(signbit | (((uintnat)p) >> 1));
+  uintnat hd = (uintnat)p | 1;
+  return (hd << 63) | (hd >> 1);
 }
 
 static inline int hd_is_ptr(header_t hd)
@@ -802,115 +809,78 @@ static inline void* ptr_of_hd(header_t hd)
   return (void*)(((uintnat)hd) << 1);
 }
 
-enum { Long_bits = sizeof(unsigned long) * 8,
-       Max_words = 1024 };
+static uintnat val_offset(header_t* start, value f)
+{
+  uintnat diff = (uintnat)Hp_val(f) - (uintnat)start;
+  // FIXME 32 bit
+  diff = (diff << 61) | (diff >> 3);
+  return diff;
+}
 
 struct l1_rootlist {
   header_t *start, *end;
   uintnat nroots;
   uintnat nconsidered;
+  value* roots[128];
   unsigned long mark[Max_words/Long_bits];
 };
 
 static void add_root(void* rootlist, value rootv, value* rootp)
 {
-  // FIXME: Infix_tag. Cont_tag. Cycles?
-
   struct l1_rootlist* rs = rootlist;
   header_t* start = rs->start;
   header_t* end = rs->end;
   rs->nconsidered++;
-  if (!Is_block(rootv))
+  uintnat idx = val_offset(start, rootv);
+  if (idx >= end-start)
     return;
-  if (!(start <= Hp_val(rootv) && Hp_val(rootv) < end))
+  uintnat n = rs->nroots++;
+  if (n > sizeof(rs->roots)/sizeof(rs->roots[0]))
     return;
-  rs->nroots++;
+  rs->roots[n] = rootp;
 
-  enum { Prev_null = (1<<20) };
-  uintnat prev_idx = Prev_null;
-  uintnat offset = 0;
-  value curr = rootv;
-  header_t curr_hd = Hd_val(curr);
+  // FIXME?
+  if (Tag_val(rootv) == Infix_tag || Tag_hd(rootv) == Cont_tag) abort();
 
-  if (Tag_hd(curr_hd) == Infix_tag || Tag_hd(curr_hd) == Cont_tag) abort();
-
-  // goto into loop?
-  if (!hd_is_ptr(curr_hd)) {
-    { uintnat curr_idx = Hp_val(curr) - start;
-      rs->mark[curr_idx / Long_bits] |= 1ul << (curr_idx % Long_bits);
-    }    
-    if (Tag_hd(curr_hd) < No_scan_tag)
-  while (1) {
-    value field;
-    header_t field_hd;
-
-    if (offset < Wosize_hd(curr_hd)) {
-      field = Op_val(curr)[offset];
-      if (!Is_block(field)) { offset++; continue; }
-      if (!(start <= Hp_val(field) && Hp_val(field) < end)) { offset++; continue; }
-
-      field_hd = Hd_val(field);
-      if (!hd_is_ptr(field_hd) && (Tag_hd(field_hd) == Infix_tag || Tag_hd(field_hd) == Cont_tag)) abort();
-
-      if (!hd_is_ptr(field_hd)) {
-        uintnat field_idx = Hp_val(field) - start;
-        rs->mark[field_idx / Long_bits] |= 1ul << (field_idx % Long_bits);
-        if (Tag_hd(field_hd) < No_scan_tag) {
-          // need to recurse into this object. Push offset and prev to stack.
-          uintnat prev_link = (prev_idx << 9) | offset; // FIXME magic constant 9
-          Op_val(curr)[offset] = (value)prev_link;
-          prev_idx = (header_t*)&Op_val(curr)[offset] - start;
-          curr = field;
-          curr_hd = field_hd;
-          offset = 0;
-          continue;
-        }
-      }
-    } else {
-      // finished this object
-      CAMLassert(offset == Wosize_hd(curr_hd));
-      CAMLassert(Hd_val(curr) == curr_hd);
-      if (prev_idx == Prev_null)
-        break; // all done
-      // otherwise, pop stack
-      field = curr;
-      field_hd = curr_hd;
-      uintnat prev_link = start[prev_idx];
-      offset = prev_link & 0x1ff;
-      curr = (value)(start + prev_idx - offset);
-      curr_hd = Hd_val(curr);
-      prev_idx = prev_link >> 9;
-    }
-
-    // cons to reversed pointer list
-    Op_val(curr)[offset] = field_hd;
-    Hd_val(field) = hd_of_ptr(&Op_val(curr)[offset]);
-    offset++;
-  }}
+  rs->mark[idx / Long_bits] |= 1ul << (idx % Long_bits);
 
   // cons
-  CAMLassert(curr == rootv);
-  *rootp = (value)curr_hd;
-  Hd_val(curr) = hd_of_ptr(rootp);
+//  *rootp = (value)Hd_val(rootv);
+//  Hd_val(rootv) = hd_of_ptr(rootp);
 }
 
 
 int64_t caml_time_counter(void);
 void caml_l1gc()
 {
+  if (!caml_params->parser_trace) {
+    Caml_state->youngest_escaped = Val_hp(Caml_state->young_ptr);
+    return;
+  }
   header_t* start = (header_t*)Caml_state->young_ptr;
-  header_t* end;
+  header_t* end = Hp_val(Caml_state->youngest_escaped);
   struct l1_rootlist rs = {0};
 
   int64_t t_overhead = caml_time_counter();
   int64_t t_start = caml_time_counter();
 
-  end = (header_t*)Caml_state->young_end;
-//  if (start + 8192/sizeof(header_t*) < end)
-//    end = start + 8192/sizeof(header_t*);
-  if (Hp_val(Caml_state->youngest_escaped) < end)
-    end = Hp_val(Caml_state->youngest_escaped);
-  if (end - start < 400) return;
+  CAMLassert(start <= end);
+  if (end - start < 400) {
+    fprintf(stderr, "region too short: only %ld words\n", end - start);
+    Caml_state->young_limit = (char*)Caml_state->youngest_escaped - Max_words * sizeof(value);
+    return;
+  }
+
+  if (end - start > Max_words) {
+    fprintf(stderr, "region too long!! %ld words\n", end - start);
+    //abort();
+    // hack!
+    Caml_state->youngest_escaped = Val_hp(Caml_state->young_ptr);
+    Caml_state->young_limit = (char*)Caml_state->youngest_escaped - Max_words * sizeof(value);
+    return;
+  }
+
+
   rs.start = start;
   rs.end = end;
   caml_do_local_roots(&add_root, &rs, caml_domain_self(), 0);
@@ -919,59 +889,113 @@ void caml_l1gc()
     fprintf(stderr, "cutting young ptr\n");
     memset(Caml_state->young_ptr, 0x42, sizeof(header_t) * (end - start));
     Caml_state->young_ptr = (char*)end;
+    Caml_state->young_limit = (char*)Caml_state->youngest_escaped - Max_words * sizeof(value);
+    return;
+  } else if (rs.nroots > sizeof(rs.roots)/sizeof(rs.roots[0])) {
+    fprintf(stderr, "roots overflow - %d/%d\n", rs.nroots, rs.nconsidered);
+    // hack!
+    Caml_state->youngest_escaped = Val_hp(start);
+    Caml_state->young_limit = (char*)Caml_state->youngest_escaped - Max_words * sizeof(value);
     return;
   }
 
-  if (end - start > Max_words) abort();
-  unsigned long* mark = rs.mark;
   int64_t t_marked = caml_time_counter();
+  // reverse roots
+  for (int i=0; i<rs.nroots; i++) {
+    value* p = rs.roots[i];
+    value v = *p;
+    *p = (value)Hd_val(v);
+    Hd_val(v) = hd_of_ptr(p);
+  }
 
-  fprintf(stderr, "%p-%p: %lu relevant roots of %lu in %lu words\n",
-          start, end, rs.nroots, rs.nconsidered, end - start);
+  // compact left
+  unsigned long* mark = rs.mark;
 
-  uintnat used_words = 0;
-  uintnat blocks = 0;
-  uintnat inside = 0;
-  header_t* alloc_ptr = end;
-  // FIXME Infix_tag
-  // for each set bit, starting at the highest
-  for (int markw_idx = Max_words / Long_bits - 1; markw_idx >= 0; markw_idx--) {
-    unsigned long markw = mark[markw_idx];
-    while (markw) {
-      int bit = Long_bits - 1 - __builtin_clzl(markw);
-      markw ^= 1ul << bit;
-      int i = markw_idx * Long_bits + bit;
 
-      /* move object */
-      /* fuck */
-      value v = Val_hp(start + i);
-      header_t hd = Hd_val(v);
-      while (hd_is_ptr(hd)) hd = *(header_t*)ptr_of_hd(hd);
-      alloc_ptr -= Wosize_val(hd);
-      *alloc_ptr = hd;
-      value newv = Val_hp(alloc_ptr);
-      for (int i = Wosize_val(hd) - 1; i >= 0; i--) {
-        Op_val(newv)[i] = Op_val(v)[i];
+  uintnat markw = 0;
+  header_t* out = start;
+  while (markw < Max_words / Long_bits) {
+    if (mark[markw] == 0) { markw++; continue; }
+    uintnat i = markw * Long_bits + __builtin_ctzl(mark[markw]);
+    mark[markw] &= mark[markw] - 1;
+
+    value v = Val_hp(start + i);
+    value newv = Val_hp(out);
+    header_t hd = Hd_val(v);
+    CAMLassert(hd_is_ptr(hd));
+    // un-reverse pointers
+    do {
+      value* ref = ptr_of_hd(hd);
+      hd = (header_t)*ref;
+      *ref = newv;
+    } while (hd_is_ptr(hd));
+    Hd_val(newv) = hd;
+    // scan and move
+    uintnat length = Wosize_hd(hd);
+    out += 1 + length;
+    CAMLassert(length <= Max_young_wosize);
+    if (Tag_hd(hd) < No_scan_tag) {
+      for (uintnat j = 0; j < length; j++) {
+        value field = Op_val(v)[j];
+        uintnat idx = val_offset(start, field);
+        if (idx < (end - start)) {
+          CAMLassert(Hp_val(newv) < Hp_val(field));
+          header_t field_hd = Hd_val(field);
+          // seems to be faster not to branch here. More benchmarking!
+          //if (!hd_is_ptr(field_hd))
+            mark[idx/Long_bits] |= 1ul << (idx % Long_bits);
+          Hd_val(field) = hd_of_ptr(&Op_val(newv)[j]);
+          field = (value)field_hd;
+        }
+        Op_val(newv)[j] = field;
       }
-
-      /* un-reverse pointers */
-      hd = Hd_val(v);
-      CAMLassert(hd_is_ptr(hd));
-      do {
-        value* field = ptr_of_hd(hd);
-        hd = (header_t)*field;
-        *field = newv;
-      } while (hd_is_ptr(hd));
-      CAMLassert(Wosize_hd(hd) <= Max_young_wosize);
-      used_words += Wosize_hd(hd);
+    } else {
+      for (uintnat j = 0; j < length; j++)
+        Op_val(newv)[j] = Op_val(v)[j];
     }
   }
 
   int64_t t_compacted = caml_time_counter();
 
-  fprintf(stderr, "%lu/%lu words (%lu block, %lu inside) used. %ldns mark, %ldns compact, %ldns oh\n",
-          used_words, end-start, blocks, inside,
-          t_marked - t_start, t_compacted - t_marked, t_start - t_overhead);
-  Caml_state->young_ptr = (char*)alloc_ptr;
-  Caml_state->youngest_escaped = Caml_state->young_ptr;
+  uintnat live_len = out-start;
+  out = end - live_len;
+  uintnat delta = (uintnat)out - (uintnat)start;
+  CAMLassert(delta % sizeof(value) == 0 && delta / sizeof(value) < Max_words);
+  for (intnat i = live_len - 1; i >= 0; i--){
+    value v = start[i];
+    if (val_offset(start, v) < end-start)
+      v += delta;
+    out[i] = v;
+  }
+  for (int i = 0; i < rs.nroots; i++) {
+    CAMLassert(val_offset(start, *rs.roots[i]) < end-start);
+    *rs.roots[i] += delta;
+  }
+
+  int64_t t_relocated = caml_time_counter();
+
+  fprintf(stderr, "%p-%p: %lu relevant roots of %lu in %lu words\n",
+          start, end, rs.nroots, rs.nconsidered, end - start);
+
+  fprintf(stderr, "% 3lu/% 4lu words used.% 5ldns stack,% 5ldns compact,% 5ldns relocate, %ldns oh\n",
+          live_len, end-start,
+          t_marked - t_start, t_compacted - t_marked, t_relocated - t_compacted, t_start - t_overhead);
+
+  Caml_state->young_ptr = (char*)out;
+  Caml_state->youngest_escaped = Val_hp(Caml_state->young_ptr);
+  Caml_state->young_limit = (char*)Caml_state->youngest_escaped - Max_words * sizeof(value);
+
+
+  // consistency check
+#ifdef DEBUG
+  /* Scan newer objects */
+  value iter;
+  for (iter = (value)Caml_state->young_ptr;
+       iter < Caml_state->young_end;
+       iter = next_minor_block(Caml_state, iter)) {
+    value hd = Hd_hp(iter);
+    CAMLassert(hd == 0 || (1 <= Wosize_hd(hd) && Wosize_hd(hd) <= Max_young_wosize));
+  }
+#endif
+
 }

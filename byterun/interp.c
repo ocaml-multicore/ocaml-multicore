@@ -123,6 +123,7 @@ sp is a local copy of the global variable caml_extern_sp. */
 #define Accu_field(i) do {                    \
     int idx = (i);                            \
     value field_contents = Op_val(accu)[idx]; \
+    if (Is_block(field_contents)) Assert (field_contents > (1<<16)); \
     if (Is_foreign(field_contents)) {         \
       Setup_for_gc;                           \
       value r = caml_read_barrier(accu, idx); \
@@ -316,6 +317,12 @@ value caml_interprete(code_t prog, asize_t prog_size)
 
     Assert(!Is_foreign(accu));
     Assert(!Is_foreign(env));
+    if (Is_block(accu)) {
+      Assert(accu > (1 << 16));
+      if (Is_young(accu)) {
+        Assert(1 <= Wosize_val(accu) && Wosize_val(accu) <= Max_young_wosize);
+      }
+    }
 
     caml_bcodcount++;
     if (caml_icount-- == 0) caml_stop_here ();
