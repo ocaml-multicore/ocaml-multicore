@@ -200,71 +200,6 @@ type wait_flag =
     WNOHANG
   | WUNTRACED
 
-external execv : string -> string array -> 'a = "unix_execv"
-external execve : string -> string array -> string array -> 'a = "unix_execve"
-external execvp : string -> string array -> 'a = "unix_execvp"
-external execvpe_c :
-            string -> string array -> string array -> 'a = "unix_execvpe"
-
-let execvpe_ml name args env =
-  (* Try to execute the given file *)
-  let exec file =
-    try
-      execve file args env
-    with Unix_error(ENOEXEC, _, _) ->
-      (* Assume this is a script and try to execute through the shell *)
-      let argc = Array.length args in
-      (* Drop the original args.(0) if it is there *)
-      let new_args = Array.append
-        [| "/bin/sh"; file |]
-        (if argc = 0 then args else Array.sub args 1 (argc - 1)) in
-      execve new_args.(0) new_args env in
-  (* Try each path element in turn *)
-  let rec scan_dir eacces = function
-  | [] ->
-      (* No matching file was found (if [eacces = false]) or
-         a matching file was found but we got a "permission denied"
-         error while trying to execute it (if [eacces = true]).
-         Raise the error appropriate to each case. *)
-      raise (Unix_error((if eacces then EACCES else ENOENT),
-                        "execvpe", name))
-  | dir :: rem ->
-      let dir =  (* an empty path element means the current directory *)
-        if dir = "" then Filename.current_dir_name else dir in
-      try
-        exec (Filename.concat dir name)
-      with Unix_error(err, _, _) as exn ->
-        match err with
-        (* The following errors are treated as nonfatal, meaning that
-           we will ignore them and continue searching in the path.
-           Among those errors, EACCES is recorded specially so as
-           to produce the correct exception in the end.
-           To determine which errors are nonfatal, we looked at the
-           execvpe() sources in Glibc and in OpenBSD. *)
-        | EACCES ->
-            scan_dir true rem
-        | EISDIR|ELOOP|ENAMETOOLONG|ENODEV|ENOENT|ENOTDIR|ETIMEDOUT ->
-            scan_dir eacces rem
-        (* Other errors, e.g. E2BIG, are fatal and abort the search. *)
-        | _ ->
-            raise exn in
-  if String.contains name '/' then
-    (* If the command name contains "/" characters, don't search in path *)
-    exec name
-  else
-    (* Split path into elements and search in these elements *)
-    (try unsafe_getenv "PATH" with Not_found -> "/bin:/usr/bin")
-    |> String.split_on_char ':'
-    |> scan_dir false
-      (* [unsafe_getenv] and not [getenv] to be consistent with [execvp],
-         which looks up the PATH environment variable whether SUID or not. *)
-
-let execvpe name args env =
-  try
-    execvpe_c name args env
-  with Unix_error(ENOSYS, _, _) ->
-    execvpe_ml name args env
-
 external fork : unit -> int = "unix_fork"
 external wait : unit -> int * process_status = "unix_wait"
 external waitpid : wait_flag list -> int -> int * process_status
@@ -379,6 +314,76 @@ external isatty : file_descr -> bool = "unix_isatty"
 external unlink : string -> unit = "unix_unlink"
 external rename : string -> string -> unit = "unix_rename"
 external link : string -> string -> unit = "unix_link"
+
+external execv : string -> string array -> 'a = "unix_execv"
+external execve : string -> string array -> string array -> 'a = "unix_execve"
+external execvp : string -> string array -> 'a = "unix_execvp"
+external execvpe_c :
+            string -> string array -> string array -> 'a = "unix_execvpe"
+
+let ck_execvpe f name args env =
+  let test_exec file =
+    try
+      f file args env
+    with
+    | Unix_error(ENOEXEC, _, _) ->
+      (* Assume this is a script and try to execute through the shell *)
+      let argc = Array.length args in
+      let shell = "/bin/sh" in
+      (* Drop the original args.(0) if it is there *)
+      let new_args = Array.append
+        [| shell; file |]
+        (if argc = 0 then args else Array.sub args 1 (argc - 1))
+      in
+      f shell new_args env
+  in
+  let rec scan_dir eacces = function
+  | [] ->
+      (* No matching file was found (if [eacces = false]) or
+         a matching file was found but we got a "permission denied"
+         error while trying to execute it (if [eacces = true]).
+         Raise the error appropriate to each case. *)
+      raise (Unix_error((if eacces then EACCES else ENOENT),
+                        "execvpe", name))
+  | dir :: rem ->
+      let dir =  (* an empty path element means the current directory *)
+        if dir = "" then Filename.current_dir_name else dir
+      in
+      try
+        test_exec (Filename.concat dir name)
+      with
+      | Unix_error(err, _, _) as exn ->
+          match err with
+            (* The following errors are treated as nonfatal, meaning that
+               we will ignore them and continue searching in the path.
+               Among those errors, EACCES is recorded specially so as
+               to produce the correct exception in the end.
+               To determine which errors are nonfatal, we looked at the
+               execvpe() sources in Glibc and in OpenBSD. *)
+          | EACCES ->
+              scan_dir true rem
+          | EISDIR|ELOOP|ENAMETOOLONG|ENODEV|ENOENT|ENOTDIR|ETIMEDOUT ->
+              scan_dir eacces rem
+            (* Other errors, e.g. E2BIG, are fatal and abort the search. *)
+          | _ ->
+              raise exn
+   in
+  if String.contains name '/' then
+    (* If the command name contains "/" characters, don't search in path *)
+    test_exec name
+  else
+    (* [unsafe_getenv] and not [getenv] to be consistent with [execvp],
+         which looks up the PATH environment variable whether SUID or not. *)
+    (try unsafe_getenv "PATH" with Not_found -> "/bin:/usr/bin")
+    (* Split path into elements and search in these elements *)
+    |> String.split_on_char ':'
+    |> scan_dir false
+
+let execvpe name args env =
+  try
+    execvpe_c name args env
+  with Unix_error(ENOSYS, _, _) ->
+    ck_execvpe execve name args env
 
 module LargeFile =
   struct
@@ -938,65 +943,47 @@ let rec waitpid_non_intr pid =
 
 external sys_exit : int -> 'a = "caml_sys_exit"
 
+external fork_and_execvp:
+  string -> string array -> file_descr -> file_descr -> file_descr -> int =
+    "unix_fork_and_execvp"
+
+external fork_and_execvpe:
+  string -> string array -> string array -> file_descr -> file_descr ->
+  file_descr -> int =
+    "unix_fork_and_execvpe_bytecode"
+    "unix_fork_and_execvpe"
+
+external fork_and_execve:
+  string -> string array -> string array -> file_descr -> file_descr ->
+  file_descr -> int =
+    "unix_fork_and_execve_bytecode"
+    "unix_fork_and_execve"
+
+let create_process = fork_and_execvp
+
+let create_process_env path args envs stdin stdout stderr =
+  try
+    fork_and_execvpe path args envs stdin stdout stderr
+  with
+  | Unix_error(ENOSYS, _, _) ->
+      let check name args _ =
+        let st = stat name in
+        if st.st_kind <> S_REG || st.st_perm land 0o100 == 0 then
+          raise (Unix_error (ENOEXEC, "create_process_env", name));
+        name, args
+      in
+      let name, args = ck_execvpe check path args envs in
+      fork_and_execve name args envs stdin stdout stderr
+
+let create_shell_aux ?env cmd stdin stdout stderr =
+  let shell = "/bin/sh" in
+  let argv = [| shell; "-c"; cmd |] in
+  match env with
+  | None -> fork_and_execvp shell argv stdin stdout stderr
+  | Some env -> fork_and_execve shell argv env stdin stdout stderr
+
 let system cmd =
-  match fork() with
-     0 -> begin try
-            execv "/bin/sh" [| "/bin/sh"; "-c"; cmd |]
-          with _ ->
-            sys_exit 127
-          end
-  | id -> snd(waitpid_non_intr id)
-
-(* Duplicate [fd] if needed to make sure it isn't one of the
-   standard descriptors (stdin, stdout, stderr).
-   Note that this function always leaves the standard descriptors open,
-   the caller must take care of closing them if needed.
-   The "cloexec" mode doesn't matter, because
-   the descriptor returned by [dup] will be closed before the [exec],
-   and because no other thread is running concurrently
-   (we are in the child process of a fork).
- *)
-let rec file_descr_not_standard fd =
-  if fd >= 3 then fd else file_descr_not_standard (dup fd)
-
-let safe_close fd =
-  try close fd with Unix_error(_,_,_) -> ()
-
-let perform_redirections new_stdin new_stdout new_stderr =
-  let new_stdin = file_descr_not_standard new_stdin in
-  let new_stdout = file_descr_not_standard new_stdout in
-  let new_stderr = file_descr_not_standard new_stderr in
-  (*  The three dup2 close the original stdin, stdout, stderr,
-      which are the descriptors possibly left open
-      by file_descr_not_standard *)
-  dup2 ~cloexec:false new_stdin stdin;
-  dup2 ~cloexec:false new_stdout stdout;
-  dup2 ~cloexec:false new_stderr stderr;
-  safe_close new_stdin;
-  safe_close new_stdout;
-  safe_close new_stderr
-
-let create_process cmd args new_stdin new_stdout new_stderr =
-  match fork() with
-    0 ->
-      begin try
-        perform_redirections new_stdin new_stdout new_stderr;
-        execvp cmd args
-      with _ ->
-        sys_exit 127
-      end
-  | id -> id
-
-let create_process_env cmd args env new_stdin new_stdout new_stderr =
-  match fork() with
-    0 ->
-      begin try
-        perform_redirections new_stdin new_stdout new_stderr;
-        execvpe cmd args env
-      with _ ->
-        sys_exit 127
-      end
-  | id -> id
+  snd (waitpid_non_intr (create_shell_aux cmd stdin stdout stderr))
 
 type popen_process =
     Process of in_channel * out_channel
@@ -1006,26 +993,16 @@ type popen_process =
 
 let popen_processes = (Hashtbl.create 7 : (popen_process, int) Hashtbl.t)
 
-let open_proc cmd envopt proc input output error =
-   match fork() with
-     0 -> perform_redirections input output error;
-          let shell = "/bin/sh" in
-          let argv = [| shell; "-c"; cmd |] in
-          begin try
-            match envopt with
-            | Some env -> execve shell argv env
-            | None     -> execv shell argv
-          with _ ->
-            sys_exit 127
-          end
-   | id -> Hashtbl.add popen_processes proc id
+let open_process_aux ?env cmd proc stdin stdout stderr =
+  let pid = create_shell_aux ?env cmd stdin stdout stderr in
+  Hashtbl.add popen_processes proc pid
 
 let open_process_in cmd =
   let (in_read, in_write) = pipe ~cloexec:true () in
   let inchan = in_channel_of_descr in_read in
   begin
     try
-      open_proc cmd None (Process_in inchan) stdin in_write stderr
+      open_process_aux cmd (Process_in inchan) stdin in_write stderr
     with e ->
       close_in inchan;
       close in_write;
@@ -1039,7 +1016,7 @@ let open_process_out cmd =
   let outchan = out_channel_of_descr out_write in
   begin
     try
-      open_proc cmd None (Process_out outchan) out_read stdout stderr
+      open_process_aux cmd (Process_out outchan) out_read stdout stderr
     with e ->
     close_out outchan;
     close out_read;
@@ -1057,7 +1034,7 @@ let open_process cmd =
   let outchan = out_channel_of_descr out_write in
   begin
     try
-      open_proc cmd None (Process(inchan, outchan)) out_read in_write stderr
+      open_process_aux cmd (Process (inchan, outchan)) out_read in_write stderr
     with e ->
       close out_read; close out_write;
       close in_read; close in_write;
@@ -1081,7 +1058,7 @@ let open_process_full cmd env =
   let errchan = in_channel_of_descr err_read in
   begin
     try
-      open_proc cmd (Some env) (Process_full(inchan, outchan, errchan))
+      open_process_aux ~env cmd (Process_full(inchan, outchan, errchan))
                 out_read in_write err_write
     with e ->
       close out_read; close out_write;
