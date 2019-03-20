@@ -40,22 +40,27 @@ CAMLprim value caml_obj_is_block(value arg)
 
 CAMLprim value caml_obj_tag(value arg)
 {
-  if (Is_long (arg)){
-    return Val_int (1000);   /* int_tag */
-  }else if ((long) arg & (sizeof (value) - 1)){
-    return Val_int (1002);   /* unaligned_tag */
-  }else{
+  if (Is_long(arg))
+  {
+    return Val_int(1000); /* int_tag */
+  }
+  else if ((long)arg & (sizeof(value) - 1))
+  {
+    return Val_int(1002); /* unaligned_tag */
+  }
+  else
+  {
     return Val_int(Tag_val(arg));
   }
 }
 
-CAMLprim value caml_obj_set_tag (value arg, value new_tag)
+CAMLprim value caml_obj_set_tag(value arg, value new_tag)
 {
-  Tag_val (arg) = Int_val (new_tag);
+  Tag_val(arg) = Int_val(new_tag);
   return Val_unit;
 }
 
-CAMLprim value caml_obj_cas_tag (value arg, value old_tag, value new_tag)
+CAMLprim value caml_obj_cas_tag(value arg, value old_tag, value new_tag)
 {
   header_t hd;
   tag_t tag;
@@ -63,18 +68,26 @@ CAMLprim value caml_obj_cas_tag (value arg, value old_tag, value new_tag)
 again:
   hd = Hd_val(arg);
   tag = Tag_hd(hd);
-  if (tag == Int_val(old_tag)) {
-    if (caml_domain_alone()) {
-      Tag_val (arg) = Int_val (new_tag);
+  if (tag == Int_val(old_tag))
+  {
+    if (caml_domain_alone())
+    {
+      Tag_val(arg) = Int_val(new_tag);
       return Val_unit;
-    } else if (atomic_compare_exchange_strong(Hp_atomic_val(arg), &hd,
-                                       (hd & ~0xFF) | Int_val(new_tag))) {
+    }
+    else if (atomic_compare_exchange_strong(Hp_atomic_val(arg), &hd,
+                                            (hd & ~0xFF) | Int_val(new_tag)))
+    {
       return Val_unit;
-    } else {
+    }
+    else
+    {
       goto again;
     }
-  } else {
-    caml_invalid_argument ("unexpected tag");
+  }
+  else
+  {
+    caml_invalid_argument("unexpected tag");
   }
 }
 
@@ -87,34 +100,42 @@ CAMLprim value caml_obj_block(value tag, value size)
 /* Spacetime profiling assumes that this function is only called from OCaml. */
 CAMLprim value caml_obj_dup(value arg)
 {
-  CAMLparam1 (arg);
-  CAMLlocal2 (res, x);
+  CAMLparam1(arg);
+  CAMLlocal2(res, x);
   mlsize_t sz, i;
   tag_t tg;
 
   sz = Wosize_val(arg);
-  if (sz == 0) CAMLreturn (arg);
+  if (sz == 0)
+    CAMLreturn(arg);
   tg = Tag_val(arg);
-  if (tg >= No_scan_tag) {
+  if (tg >= No_scan_tag)
+  {
     res = caml_alloc(sz, tg);
     memcpy(Bp_val(res), Bp_val(arg), sz * sizeof(value));
-  } else if (sz <= Max_young_wosize) {
+  }
+  else if (sz <= Max_young_wosize)
+  {
     uintnat profinfo;
     Get_my_profinfo_with_cached_backtrace(profinfo, sz);
     res = caml_alloc_small_with_my_or_given_profinfo(sz, tg, profinfo);
-    for (i = 0; i < sz; i++) {
+    for (i = 0; i < sz; i++)
+    {
       caml_read_field(arg, i, &x);
       caml_initialize_field(res, i, x);
     }
-  } else {
+  }
+  else
+  {
     res = caml_alloc(sz, tg);
-    for (i = 0; i < sz; i++) {
+    for (i = 0; i < sz; i++)
+    {
       caml_read_field(arg, i, &x);
       caml_initialize_field(res, i, x);
     }
   }
 
-  CAMLreturn (res);
+  CAMLreturn(res);
 }
 
 /* Shorten the given block to the given size and return void.
@@ -133,35 +154,56 @@ CAMLprim value caml_obj_dup(value arg)
    [newsize] is a value encoding a number of fields (words, except
    for float arrays on 32-bit architectures).
 */
-CAMLprim value caml_obj_truncate (value v, value newsize)
+CAMLprim value caml_obj_truncate(value v, value newsize)
 {
   caml_failwith("Obj.truncate not supported");
 }
 
-CAMLprim value caml_obj_add_offset (value v, value offset)
+CAMLprim value caml_obj_add_offset(value v, value offset)
 {
-  return v + (unsigned long) Int32_val (offset);
+  return v + (unsigned long)Int32_val(offset);
 }
 
-CAMLprim value caml_obj_compare_and_swap (value v, value f, value oldv, value newv)
+CAMLprim value caml_obj_compare_and_swap(value v, value f, value oldv, value newv)
 {
   int res = caml_atomic_cas_field(v, Int_val(f), oldv, newv);
   caml_check_urgent_gc(Val_unit);
   return Val_int(res);
 }
 
-/* caml_promote_to(obj, upto) promotes obj to be as least as shared as upto */
-CAMLprim value caml_obj_promote_to (value obj, value upto)
+/* caml_promote_to(obj, upto) may promote obj to be as least as shared as upto.
+   Skips promotion if there is only a single domain. This should only be used in
+   situations where there is a performance need to 'front-load' the promotion
+   across domains, such as for queues. If you need to guarantee promotion to the
+   major heap for correctness, use caml_obj_force_promote_to. */
+CAMLprim value caml_obj_promote_to(value obj, value upto)
 {
-  if (Is_block(upto) && Is_minor(upto)) {
+  if (Is_block(upto) && (Is_minor(upto) || caml_domain_alone()))
+  {
     /* upto is local, obj is already as shared as upto is */
     return obj;
-  } else {
+  }
+  else
+  {
     return caml_promote(caml_domain_self(), obj);
   }
 }
 
-CAMLprim value caml_obj_is_shared (value obj)
+/* caml_force_promote_to(obj, upto) force promotes obj to be as least as shared as upto */
+CAMLprim value caml_obj_force_promote_to(value obj, value upto)
+{
+  if (Is_block(upto) && Is_minor(upto))
+  {
+    /* upto is local, obj is already as shared as upto is */
+    return obj;
+  }
+  else
+  {
+    return caml_promote(caml_domain_self(), obj);
+  }
+}
+
+CAMLprim value caml_obj_is_shared(value obj)
 {
   return Val_int(Is_long(obj) || !Is_minor(obj));
 }
@@ -171,40 +213,46 @@ CAMLprim value caml_obj_is_shared (value obj)
    to the GC.
  */
 
-CAMLprim value caml_lazy_follow_forward (value v)
+CAMLprim value caml_lazy_follow_forward(value v)
 {
-  if (Is_block (v) && Tag_val (v) == Forward_tag){
-    return Forward_val (v);
-  }else{
+  if (Is_block(v) && Tag_val(v) == Forward_tag)
+  {
+    return Forward_val(v);
+  }
+  else
+  {
     return v;
   }
 }
 
-CAMLprim value caml_lazy_make_forward (value v)
+CAMLprim value caml_lazy_make_forward(value v)
 {
-  CAMLparam1 (v);
-  CAMLlocal1 (res);
+  CAMLparam1(v);
+  CAMLlocal1(res);
 
-  res = caml_alloc_small (1, Forward_tag);
-  caml_initialize_field (res, 0, v);
-  CAMLreturn (res);
+  res = caml_alloc_small(1, Forward_tag);
+  caml_initialize_field(res, 0, v);
+  CAMLreturn(res);
 }
 
 /* For mlvalues.h and camlinternalOO.ml
    See also GETPUBMET in interp.c
  */
 
-CAMLprim value caml_get_public_method (value obj, value tag)
+CAMLprim value caml_get_public_method(value obj, value tag)
 {
   value meths = Field_imm(obj, 0);
-  int li = 3, hi = Field_imm(meths,0), mi;
-  while (li < hi) {
-    mi = ((li+hi) >> 1) | 1;
-    if (tag < Field_imm(meths,mi)) hi = mi-2;
-    else li = mi;
+  int li = 3, hi = Field_imm(meths, 0), mi;
+  while (li < hi)
+  {
+    mi = ((li + hi) >> 1) | 1;
+    if (tag < Field_imm(meths, mi))
+      hi = mi - 2;
+    else
+      li = mi;
   }
   /* return 0 if tag is not there */
-  return (tag == Field_imm(meths,li) ? Field_imm (meths, li-1) : 0);
+  return (tag == Field_imm(meths, li) ? Field_imm(meths, li - 1) : 0);
 }
 
 /* Allocate OO ids in chunks, to avoid contention */
@@ -212,22 +260,26 @@ CAMLprim value caml_get_public_method (value obj, value tag)
 
 static atomic_uintnat oo_next_id;
 
-CAMLprim value caml_fresh_oo_id (value v) {
-  if (Caml_state->oo_next_id_local % Id_chunk == 0) {
+CAMLprim value caml_fresh_oo_id(value v)
+{
+  if (Caml_state->oo_next_id_local % Id_chunk == 0)
+  {
     Caml_state->oo_next_id_local =
-      atomic_fetch_add(&oo_next_id, Id_chunk);
+        atomic_fetch_add(&oo_next_id, Id_chunk);
   }
   v = Val_long(Caml_state->oo_next_id_local++);
   return v;
 }
 
-CAMLprim value caml_set_oo_id (value obj) {
+CAMLprim value caml_set_oo_id(value obj)
+{
   value v = Val_unit;
   Op_val(obj)[1] = caml_fresh_oo_id(v);
   return obj;
 }
 
-CAMLprim value caml_int_as_pointer (value n) {
+CAMLprim value caml_int_as_pointer(value n)
+{
   return n - 1;
 }
 
@@ -235,11 +287,11 @@ CAMLprim value caml_int_as_pointer (value n) {
    from a given value */
 
 #define ENTRIES_PER_QUEUE_CHUNK 4096
-struct queue_chunk {
+struct queue_chunk
+{
   struct queue_chunk *next;
   value entries[ENTRIES_PER_QUEUE_CHUNK];
 };
-
 
 CAMLprim value caml_obj_reachable_words(value v)
 {
