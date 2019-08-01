@@ -61,6 +61,8 @@ let rec spin f =
 let cas r vold vnew =
   if not (Atomic.compare_and_set r vold vnew) then raise Retry
 
+
+exception Spawn_failure of string
 let spawn f =
   let state = Atomic.make Running in
   let body () =
@@ -80,7 +82,12 @@ let spawn f =
          Raw.interrupt d
       | Joined | Finished _ ->
          failwith "internal error: I'm already finished?") in
-  { domain = Raw.spawn body; state }
+  let domain =
+    try
+      Raw.spawn body
+    with Failure msg ->
+      raise @@ Spawn_failure (": Failure: " ^ msg) in
+  { domain; state }
 
 let join { domain ; state } =
   let res = spin (fun () ->

@@ -215,6 +215,21 @@ static void create_domain(uintnat initial_minor_heap_wsize) {
 
     /* FIXME: code below does not handle failure to allocate memory
        early in a domain's lifetime correctly */
+#ifndef NATIVE_CODE
+    volatile value raise_exn_bucket = Val_unit;
+    struct longjmp_buffer raise_buf;
+    struct caml_exception_context exception_ctx =
+        {&raise_buf, domain_state->local_roots, &raise_exn_bucket};
+    if (sigsetjmp(raise_buf.buf, 0))
+    {
+      // TODO: What other cleanup needs to happen here?
+      domain_self = NULL; 
+      goto raise_exception;
+    }
+    domain_state->external_raise = &exception_ctx;
+
+    domain_state->trap_sp_off = 1;
+#endif
 
     caml_init_signal_stack();
 
@@ -230,6 +245,7 @@ static void create_domain(uintnat initial_minor_heap_wsize) {
 
     domain_state->backtrace_buffer = NULL;
 #ifndef NATIVE_CODE
+raise_exception:
     domain_state->external_raise = NULL;
     domain_state->trap_sp_off = 1;
 #endif

@@ -2,9 +2,12 @@ type 'a t
 (** A domain of type ['a t] runs independently, eventually producing a
     result of type 'a, or an exception *)
 
+exception Spawn_failure of string
 val spawn : (unit -> 'a) -> 'a t
 (** [spawn f] creates a new domain that runs in parallel with the
-    current domain. *)
+    current domain.
+    Raises Spawn_failure if an error occurs during the creation
+    of the domain *)
 
 val join : 'a t -> 'a
 (** [join d] blocks until domain [d] runs to completion.
