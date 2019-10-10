@@ -276,24 +276,30 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
       default:
         /* Mix in the tag and size, but do not count this towards [num] */
         h = caml_hash_mix_uint32(h, Whitehd_hd(Hd_val(v)));
-        /* Copy fields into queue, not exceeding the total size [sz] */
-        /* initialize any elements of the queue that are uninitialized */
 
+        /* Copy fields into queue, not exceeding the total size [sz].
+           We lazily initialise the value array [queue] to avoid having to
+           register a large number of local roots when not necessary.
+        */
+        
         len = Wosize_val(v);
 
-        /* we may have more fields than the maximum to use for the hash */
+        /* we may have more fields than the total size [sz] we can use for the hash */
         j = wr+len > sz ? sz : wr+len;
 
+        /* initialise the new entries in the value array [queue] */
         for( i = wr ; i < j; i++ ) {
           queue[i] = Val_unit;
         }
+
         /* let the GC know about these now too */
         CAMLxparamNextend(queue, j);
 
-        for (i = 0; i < len; i++) {
-          if (wr >= sz) break;
-          caml_read_field(v, i, &queue[wr++]);
+        /* now read the new fields in to the queue */
+        for( ; wr < j; wr++ ) {
+          caml_read_field(v, i, &queue[wr]);
         }
+
         break;
       }
     }
