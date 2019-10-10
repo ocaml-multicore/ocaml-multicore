@@ -296,7 +296,7 @@ CAMLprim value caml_hash(value count, value limit, value seed, value obj)
         CAMLxparamNextend(queue, j);
 
         /* now read the new fields in to the queue */
-        for( ; wr < j; wr++ ) {
+        for( i = 0; wr < j; i++, wr++ ) {
           caml_read_field(v, i, &queue[wr]);
         }
 
