@@ -1,0 +1,10 @@
+Gc.minor ()
+x.lzy=<not forced> [shared=true]
+x is setup on major heap
+
+updating: false
+x.lzy=<not forced> [shared=false]
+forcing x.lzy [0.152944] false 250
+x.lzy=0.152944 [shared=false]
+Gc.minor ()
+x.lzy=0.152944 [shared=true]
