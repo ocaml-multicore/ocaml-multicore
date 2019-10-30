@@ -631,6 +631,7 @@ void caml_empty_minor_heap_domain (struct domain* domain)
       }
     }
     CAMLassert (!caml_domain_alone() || rewrite_failures == 0);
+    reset_table((struct generic_table *)&major_ref_rewrites);
     caml_ev_end("minor_gc/update_minor_tables");
 
     caml_ev_begin("minor_gc/finalisers");
