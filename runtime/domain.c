@@ -57,6 +57,7 @@ struct interruptor {
 
   int running;
   int terminating;
+  int blocking_section;
   /* unlike the domain ID, this ID number is not reused */
   uintnat unique_id;
 
@@ -822,6 +823,9 @@ CAMLexport void (*caml_leave_blocking_section_hook)(void) =
 
 CAMLexport void caml_leave_blocking_section() {
   caml_plat_lock(&domain_self->roots_lock);
+  caml_plat_lock(&domain_self->interruptor.lock);
+  domain_self->interruptor.blocking_section = 0;
+  caml_plat_unlock(&domain_self->interruptor.lock);
   caml_leave_blocking_section_hook();
   caml_process_pending_signals();
 }
@@ -829,6 +833,9 @@ CAMLexport void caml_leave_blocking_section() {
 CAMLexport void caml_enter_blocking_section() {
   caml_process_pending_signals();
   caml_enter_blocking_section_hook();
+  caml_plat_lock(&domain_self->interruptor.lock);
+  domain_self->interruptor.blocking_section = 1;
+  caml_plat_unlock(&domain_self->interruptor.lock);
   caml_plat_unlock(&domain_self->roots_lock);
 }
 
@@ -1131,7 +1138,7 @@ int caml_send_partial_interrupt(struct interruptor* self,
   req->next = NULL;
 
   caml_plat_lock(&target->lock);
-  if (!target->running) {
+  if (!target->running || target->blocking_section) {
     caml_plat_unlock(&target->lock);
     return 0;
   }
