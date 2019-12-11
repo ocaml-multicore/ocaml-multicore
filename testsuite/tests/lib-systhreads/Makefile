@@ -14,10 +14,10 @@
 #**************************************************************************
 
 BASEDIR=../..
-LIBRARIES=unix threads
-ADD_COMPFLAGS=-thread -I $(OTOPDIR)/otherlibs/systhreads \
+LIBRARIES=unix dthreads
+ADD_COMPFLAGS=-I $(OTOPDIR)/otherlibs/dthreads \
 	      -I $(OTOPDIR)/otherlibs/$(UNIXLIBVAR)unix
-LD_PATH=$(TOPDIR)/otherlibs/systhreads:$(TOPDIR)/otherlibs/$(UNIXLIBVAR)unix
+LD_PATH=$(TOPDIR)/otherlibs/dthreads:$(TOPDIR)/otherlibs/$(UNIXLIBVAR)unix
 
 include $(BASEDIR)/makefiles/Makefile.several
 include $(BASEDIR)/makefiles/Makefile.common
