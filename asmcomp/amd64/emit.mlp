@@ -615,14 +615,17 @@ let emit_instr fallthrough i =
         end;
         cfi_remember_state ();
         I.mov (domain_field Domainstate.Domain_c_stack) rsp;
-        (* FIXME: CFI *)
-        (* cfi_def_cfa_offset 8; *)
+        cfi_def_cfa_offset 8;
+        I.push rbp;
+        cfi_adjust_cfa_offset 8;
         emit_call func;
         (* FIXME KC:
         if Config.spacetime then begin
           record_frame Reg.Set.empty false i.dbg ~label:label_after
         end
         *)
+        I.pop rbp;
+        cfi_adjust_cfa_offset (-8);
         I.mov rbp rsp;
         cfi_restore_state ();
       end
