@@ -618,15 +618,18 @@ let emit_instr fallthrough i =
         cfi_def_cfa_offset 8;
         I.push rbp;
         cfi_adjust_cfa_offset 8;
+        I.sub (int 8) rsp;
+        cfi_adjust_cfa_offset 8;
         emit_call func;
         (* FIXME KC:
         if Config.spacetime then begin
           record_frame Reg.Set.empty false i.dbg ~label:label_after
         end
         *)
-        I.pop rbp;
+        I.add (int 8) rsp;
         cfi_adjust_cfa_offset (-8);
-        I.mov rbp rsp;
+        I.pop rsp;
+        cfi_adjust_cfa_offset (-8);
         cfi_restore_state ();
       end
   | Lop(Istackoffset n) ->
