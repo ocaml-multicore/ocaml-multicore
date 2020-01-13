@@ -66,8 +66,12 @@ let cfi_remember_state () =
 let cfi_restore_state () =
   if Config.asm_cfi_supported then D.cfi_restore_state ()
 
+let cfi_def_cfa reg =
+  if Config.asm_cfi_supported then D.cfi_def_cfa reg
+
 let cfi_def_cfa_offset n =
   if Config.asm_cfi_supported then D.cfi_def_cfa_offset n
+
 
 let emit_debug_info dbg =
   emit_debug_info_gen dbg D.file D.loc
@@ -613,18 +617,14 @@ let emit_instr fallthrough i =
         if Config.stats then begin
           I.inc (domain_field Domainstate.Domain_extcall_noalloc);
         end;
-        cfi_remember_state ();
         I.mov (domain_field Domainstate.Domain_c_stack) rsp;
-        (* FIXME: CFI *)
-        (* cfi_def_cfa_offset 8; *)
+        cfi_def_cfa "rsp";
+        I.sub (int 16) rsp;
+        cfi_def_cfa_offset 16;
         emit_call func;
-        (* FIXME KC:
-        if Config.spacetime then begin
-          record_frame Reg.Set.empty false i.dbg ~label:label_after
-        end
-        *)
+        I.add (int 16) rsp;
+        cfi_def_cfa_offset 16;
         I.mov rbp rsp;
-        cfi_restore_state ();
       end
   | Lop(Istackoffset n) ->
       if n < 0
