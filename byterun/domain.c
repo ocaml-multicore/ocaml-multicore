@@ -922,7 +922,7 @@ static void domain_terminate()
   caml_free_minor_tables(domain_state->minor_tables);
   domain_state->minor_tables = 0;
   caml_free_signal_stack();
-  
+
   if(domain_state->current_stack != NULL) {
     caml_free_stack(domain_state->current_stack);
   }
@@ -1032,7 +1032,7 @@ CAMLprim value caml_ml_domain_yield(value unused)
       caml_plat_wait(&s->cond);
     } else {
       caml_plat_unlock(&s->lock);
-      caml_major_collection_slice(Chunk_size, &left);
+      caml_opportunistic_major_collection_slice(Chunk_size, &left);
       if (left == Chunk_size)
         found_work = 0;
       caml_plat_lock(&s->lock);
@@ -1109,7 +1109,7 @@ CAMLprim value caml_ml_domain_yield_until(value t)
       }
     } else {
       caml_plat_unlock(&s->lock);
-      caml_major_collection_slice(Chunk_size, &left);
+      caml_opportunistic_major_collection_slice(Chunk_size, &left);
       if (left == Chunk_size)
         found_work = 0;
       caml_plat_lock(&s->lock);
