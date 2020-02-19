@@ -1057,6 +1057,11 @@ static intnat major_collection_slice(intnat howmuch,
   uintnat saved_ephe_cycle;
   uintnat saved_major_cycle;
 
+  /* shortcut out if there is no opportunistic work to be done
+   * NB: needed particularly to avoid caml_ev spam when polling */
+  if (opportunistic && domain_state->sweeping_done && domain_state->marking_done)
+    return computed_work;
+
   caml_ev_begin("major_gc/slice");
 
   if (!domain_state->sweeping_done) {
