@@ -124,11 +124,12 @@
    generated.
 */
 
-static void write_barrier(value obj, int field, value old_val, value new_val) __attribute__((always_inline));
+static void write_barrier(value obj, intnat field, value old_val, value new_val) __attribute__((always_inline));
+
 
 /* The write barrier does not read or write the heap, it just
    modifies domain-local data structures. */
-static void write_barrier(value obj, int field, value old_val, value new_val)
+static void write_barrier(value obj, intnat field, value old_val, value new_val)
 {
   caml_domain_state* domain_state = Caml_state;
 
@@ -162,7 +163,7 @@ static void write_barrier(value obj, int field, value old_val, value new_val)
   }
 }
 
-CAMLexport void caml_modify_field (value obj, int field, value val)
+CAMLexport void caml_modify_field (value obj, intnat field, value val)
 {
   Assert (Is_block(obj));
   Assert (!Is_foreign(obj));
@@ -180,7 +181,7 @@ CAMLexport void caml_modify_field (value obj, int field, value val)
                         memory_order_release);
 }
 
-CAMLexport void caml_initialize_field (value obj, int field, value val)
+CAMLexport void caml_initialize_field (value obj, intnat field, value val)
 {
   Assert(Is_block(obj));
   Assert(!Is_foreign(obj));
@@ -204,7 +205,7 @@ CAMLexport void caml_initialize_field (value obj, int field, value val)
   Op_val(obj)[field] = val;
 }
 
-CAMLexport int caml_atomic_cas_field (value obj, int field, value oldval, value newval)
+CAMLexport int caml_atomic_cas_field (value obj, intnat field, value oldval, value newval)
 {
   if (Is_young(obj) || caml_domain_alone()) {
     /* non-atomic CAS since only this thread can access the object */
@@ -455,7 +456,7 @@ static void send_read_fault(struct read_fault_req* req)
   }
 }
 
-CAMLexport value caml_read_barrier(value obj, int field)
+CAMLexport value caml_read_barrier(value obj, intnat field)
 {
   /* A GC may occur just before or just after sending a fault. The obj value
      must be root. The orig value must *not* be a root, since it may contain a
