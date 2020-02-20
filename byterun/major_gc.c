@@ -1060,7 +1060,10 @@ static intnat major_collection_slice(intnat howmuch,
   /* shortcut out if there is no opportunistic work to be done
    * NB: needed particularly to avoid caml_ev spam when polling */
   if (opportunistic && domain_state->sweeping_done && domain_state->marking_done)
+  {
+    if (budget_left) *budget_left = budget;
     return computed_work;
+  }
 
   caml_ev_begin("major_gc/slice");
 
