@@ -633,9 +633,11 @@ void caml_handle_gc_interrupt() {
   if (((uintnat)Caml_state->young_ptr - Bhsize_wosize(Max_young_wosize) <
        domain_self->minor_heap_area) ||
       Caml_state->force_major_slice) {
+    caml_ev_begin("dispatch");
     /* out of minor heap or collection forced */
     Caml_state->force_major_slice = 0;
     caml_minor_collection();
+    caml_ev_end("dispatch");
   }
 }
 
@@ -922,7 +924,7 @@ static void domain_terminate()
   caml_free_minor_tables(domain_state->minor_tables);
   domain_state->minor_tables = 0;
   caml_free_signal_stack();
-  
+
   if(domain_state->current_stack != NULL) {
     caml_free_stack(domain_state->current_stack);
   }
