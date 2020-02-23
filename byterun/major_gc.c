@@ -1202,8 +1202,13 @@ mark_again:
               (unsigned long)(domain_state->stat_blocks_marked - blocks_marked_before));
   domain_state->stat_major_words += domain_state->allocated_words;
   domain_state->allocated_words = 0;
-  if (opportunistic)
-  domain_state->opportunistic_work += computed_work - budget;
+  if (opportunistic) {
+    domain_state->opportunistic_work += computed_work - budget;
+  } else {
+    if (budget < 0)
+      domain_state->opportunistic_work += -budget;
+  }
+
 
   if (!opportunistic && is_complete_phase_sweep_ephe(d)) {
     saved_major_cycle = caml_major_cycles_completed;
