@@ -218,11 +218,7 @@ static pool* pool_find(struct caml_heap_state* local, sizeclass sz) {
     domain_state->opportunistic_work +=
       pool_sweep(local, &local->unswept_avail_pools[sz], sz);
   }
-  while (!local->avail_pools[sz] && local->unswept_full_pools[sz]) {
-    caml_domain_state* domain_state = caml_domain_self()->state;
-    domain_state->opportunistic_work +=
-      pool_sweep(local, &local->unswept_full_pools[sz], sz);
-  }
+
   r = local->avail_pools[sz];
   if (r) return r;
 
