@@ -515,18 +515,7 @@ static void mark_stack_push(struct mark_stack* stk, mark_entry e)
   CAMLassert(Tag_val(e.block) != Infix_tag);
   CAMLassert(Tag_val(e.block) != Cont_tag);
   CAMLassert(Tag_val(e.block) < No_scan_tag);
-  while (1) {
-    if (e.offset == e.end)
-      /* nothing left to mark */
-      return;
-    v = Op_val(e.block)[e.offset];
-    if (Is_markable(v))
-      /* found something to mark */
-      break;
-    else
-      /* keep going */
-      e.offset++;
-  }
+
   if (stk->count == stk->size)
     realloc_mark_stack(stk);
 
