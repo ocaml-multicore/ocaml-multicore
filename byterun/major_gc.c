@@ -510,11 +510,12 @@ static void realloc_mark_stack (struct mark_stack* stk)
 
 static void mark_stack_push(struct mark_stack* stk, mark_entry e)
 {
-  value v;
   CAMLassert(Is_block(e.block) && !Is_young(e.block));
   CAMLassert(Tag_val(e.block) != Infix_tag);
   CAMLassert(Tag_val(e.block) != Cont_tag);
   CAMLassert(Tag_val(e.block) < No_scan_tag);
+
+  if (e.offset == e.end) return;
 
   if (stk->count == stk->size)
     realloc_mark_stack(stk);
