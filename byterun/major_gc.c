@@ -511,11 +511,16 @@ static void realloc_mark_stack (struct mark_stack* stk)
 static void mark_stack_push(struct mark_stack* stk, mark_entry e)
 {
   value v;
+  int i;
+
   CAMLassert(Is_block(e.block) && !Is_young(e.block));
   CAMLassert(Tag_val(e.block) != Infix_tag);
   CAMLassert(Tag_val(e.block) != Cont_tag);
   CAMLassert(Tag_val(e.block) < No_scan_tag);
-  while (1) {
+
+  /* Optimisation to avoid pushing small, unmarkable objects such as [Some 42]
+   * into the mark stack. */
+  for (i = 0; i < 16; i++) {
     if (e.offset == e.end)
       /* nothing left to mark */
       return;
@@ -527,6 +532,11 @@ static void mark_stack_push(struct mark_stack* stk, mark_entry e)
       /* keep going */
       e.offset++;
   }
+
+  if (e.offset == e.end)
+    /* nothing left to mark */
+    return;
+
   if (stk->count == stk->size)
     realloc_mark_stack(stk);
 
