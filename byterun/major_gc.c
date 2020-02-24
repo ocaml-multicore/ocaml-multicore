@@ -533,6 +533,10 @@ static void mark_stack_push(struct mark_stack* stk, mark_entry e)
       e.offset++;
   }
 
+  if (e.offset == e.end)
+    /* nothing left to mark */
+    return;
+
   if (stk->count == stk->size)
     realloc_mark_stack(stk);
 
