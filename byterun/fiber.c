@@ -235,6 +235,19 @@ void caml_scan_stack(scanning_action f, void* fdata, struct stack_info* stack)
   Used by the interpreter to allocate stack space.
 */
 
+/* Update absolute exception pointers for new stack*/
+static void rewrite_exception_stack(struct stack_info *old_stack, value* exn_ptr, struct stack_info *new_stack)
+{
+  while (Stack_base(old_stack) < *exn_ptr && *exn_ptr <= Stack_high(old_stack)) {
+    *exn_ptr = Stack_high(new_stack) - (Stack_high(old_stack) - (value*)*exn_ptr);
+
+    CAMLassert(Stack_base(new_stack) < (value*)*exn_ptr);
+    CAMLassert((value*)*exn_ptr <= Stack_high(new_stack));
+
+    exn_ptr = (char*)*exn_ptr;
+  }
+}
+
 int caml_try_realloc_stack(asize_t required_space)
 {
   struct stack_info *old_stack, *new_stack;
@@ -275,10 +288,7 @@ int caml_try_realloc_stack(asize_t required_space)
   new_stack->sp = Stack_high(new_stack) - stack_used;
   Stack_parent(new_stack) = Stack_parent(old_stack);
 #ifdef NATIVE_CODE
-  CAMLassert(Stack_base(old_stack) < (value*)Caml_state->exn_handler &&
-             (value*)Caml_state->exn_handler <= Stack_high(old_stack));
-  Caml_state->exn_handler =
-    Stack_high(new_stack) - (Stack_high(old_stack) - (value*)Caml_state->exn_handler);
+  rewrite_exception_stack(old_stack, &Caml_state->exn_handler, new_stack);
 #endif
 
   /* Update stack pointers in Caml_state->c_stack */
@@ -337,6 +347,7 @@ CAMLprim value caml_clone_continuation (value cont)
   intnat stack_used;
   struct stack_info *source, *orig_source, *target, *ret_stack;
   struct stack_info **link = &ret_stack;
+  value* exn_start;
 
   new_cont = caml_alloc_1(Cont_tag, Val_ptr(NULL));
   orig_source = source = Ptr_val(caml_continuation_use(cont));
@@ -350,6 +361,10 @@ CAMLprim value caml_clone_continuation (value cont)
     if (!target) caml_raise_out_of_memory();
     memcpy(Stack_high(target) - stack_used, Stack_high(source) - stack_used,
            stack_used * sizeof(value));
+#ifdef NATIVE_CODE
+    exn_start = Stack_high(target) - (Stack_high(orig_source) - (value*)Caml_state->exn_handler);
+    rewrite_exception_stack(source, exn_start, target);
+#endif
     target->sp = Stack_high(target) - stack_used;
     *link = target;
     link = &Stack_parent(target);
