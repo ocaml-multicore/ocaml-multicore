@@ -238,14 +238,22 @@ void caml_scan_stack(scanning_action f, void* fdata, struct stack_info* stack)
 /* Update absolute exception pointers for new stack*/
 static void rewrite_exception_stack(struct stack_info *old_stack, value* exn_ptr, struct stack_info *new_stack)
 {
+  caml_gc_log ("Old [%lu, %lu]", Stack_base(old_stack), Stack_high(old_stack));
+  caml_gc_log ("New [%lu, %lu]", Stack_base(new_stack), Stack_high(new_stack));
+  caml_gc_log ("exn_ptr=%lu", *exn_ptr);
+
   while (Stack_base(old_stack) < *exn_ptr && *exn_ptr <= Stack_high(old_stack)) {
+    value old_val = *exn_ptr;
     *exn_ptr = Stack_high(new_stack) - (Stack_high(old_stack) - (value*)*exn_ptr);
+
+    caml_gc_log ("Rewriting %lu to %lu", old_val, *exn_ptr);
 
     CAMLassert(Stack_base(new_stack) < (value*)*exn_ptr);
     CAMLassert((value*)*exn_ptr <= Stack_high(new_stack));
 
     exn_ptr = (char*)*exn_ptr;
   }
+  caml_gc_log ("finished with exn_ptr=%lu", *exn_ptr);
 }
 
 int caml_try_realloc_stack(asize_t required_space)
