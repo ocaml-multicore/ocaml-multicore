@@ -1068,6 +1068,7 @@ static intnat major_collection_slice(intnat howmuch,
   int was_marking = 0;
   uintnat saved_ephe_cycle;
   uintnat saved_major_cycle;
+  int log_events = !opportunistic || (caml_params->verb_gc & 0x40);
 
   /* shortcut out if there is no opportunistic work to be done
    * NB: needed particularly to avoid caml_ev spam when polling */
@@ -1077,10 +1078,10 @@ static intnat major_collection_slice(intnat howmuch,
     return computed_work;
   }
 
-  caml_ev_begin("major_gc/slice");
+  if (log_events) caml_ev_begin("major_gc/slice");
 
   if (!domain_state->sweeping_done) {
-    caml_ev_begin("major_gc/sweep");
+    if (log_events) caml_ev_begin("major_gc/sweep");
 
     sweep_work = budget;
     do {
@@ -1100,7 +1101,7 @@ static intnat major_collection_slice(intnat howmuch,
       atomic_fetch_add_verify_ge0(&num_domains_to_sweep, -1);
     }
 
-    caml_ev_end("major_gc/sweep");
+    if (log_events) caml_ev_end("major_gc/sweep");
     sweep_work -= budget;
 
     /*
@@ -1116,7 +1117,7 @@ mark_again:
   while (budget > 0) {
     if (!domain_state->marking_done) {
       if (!was_marking) {
-        caml_ev_begin("major_gc/mark");
+        if (log_events) caml_ev_begin("major_gc/mark");
         was_marking = 1;
       }
       available = budget > Chunk_size ? Chunk_size : budget;
@@ -1130,19 +1131,19 @@ mark_again:
       */
     } else if (0) {
       if (was_marking) {
-        caml_ev_end("major_gc/mark");
+        if (log_events) caml_ev_end("major_gc/mark");
         was_marking = 0;
       }
-      caml_ev_begin("major_gc/steal");
+      if (log_events) caml_ev_begin("major_gc/steal");
       steal_result = steal_mark_work();
-      caml_ev_end("major_gc/steal");
+      if (log_events) caml_ev_end("major_gc/steal");
       if (steal_result == -1) break;
     } else {
       break;
     }
   }
   if (was_marking) {
-    caml_ev_end("major_gc/mark");
+    if (log_events) caml_ev_end("major_gc/mark");
     was_marking = 0;
   }
   mark_work -= budget;
@@ -1204,7 +1205,7 @@ mark_again:
     }
   }
 
-  caml_ev_end("major_gc/slice");
+  if (log_events) caml_ev_end("major_gc/slice");
 
   if (budget_left)
     *budget_left = budget;
