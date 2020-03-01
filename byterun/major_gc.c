@@ -1037,6 +1037,7 @@ static int is_complete_phase_sweep_ephe (struct domain *d)
 
 static void try_complete_gc_phase (struct domain* domain, void* unused)
 {
+  caml_ev_begin("major_gc/phase_change");
   barrier_status b;
 
   b = caml_global_barrier_begin ();
@@ -1049,6 +1050,7 @@ static void try_complete_gc_phase (struct domain* domain, void* unused)
   }
   caml_global_barrier_end(b);
   domain->state->opportunistic_work = 0;
+  caml_ev_end("major_gc/phase_change");
 }
 
 #define Chunk_size 0x4000
@@ -1195,13 +1197,11 @@ mark_again:
     /* Complete GC phase */
     if (is_complete_phase_sweep_and_mark_main(d) ||
         is_complete_phase_mark_final (d)) {
-      caml_ev_begin("major_gc/phase_change");
       if (from_barrier) {
         try_complete_gc_phase (d, (void*)0);
       } else {
         caml_try_run_on_all_domains (&try_complete_gc_phase, 0);
       }
-      caml_ev_end("major_gc/phase_change");
       if (budget > 0) goto mark_again;
     }
   }
