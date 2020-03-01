@@ -849,6 +849,8 @@ static void cycle_all_domains_callback(struct domain* domain, void* unused)
 {
   uintnat num_domains_in_stw;
 
+  caml_ev_begin("major_gc/cycle_domains");
+
   CAMLassert(domain == caml_domain_self());
   CAMLassert(atomic_load_acq(&ephe_cycle_info.num_domains_todo) ==
              atomic_load_acq(&ephe_cycle_info.num_domains_done));
@@ -992,6 +994,7 @@ static void cycle_all_domains_callback(struct domain* domain, void* unused)
   domain->state->final_info->updated_last = 0;
 
   caml_ev_end("major_gc/stw");
+  caml_ev_end("major_gc/cycle_domains");
 }
 
 static int is_complete_phase_sweep_and_mark_main (struct domain *d)
@@ -1037,6 +1040,7 @@ static int is_complete_phase_sweep_ephe (struct domain *d)
 
 static void try_complete_gc_phase (struct domain* domain, void* unused)
 {
+  caml_ev_begin("major_gc/phase_change");
   barrier_status b;
 
   b = caml_global_barrier_begin ();
@@ -1049,6 +1053,7 @@ static void try_complete_gc_phase (struct domain* domain, void* unused)
   }
   caml_global_barrier_end(b);
   domain->state->opportunistic_work = 0;
+  caml_ev_end("major_gc/phase_change");
 }
 
 #define Chunk_size 0x4000
@@ -1195,13 +1200,11 @@ mark_again:
     /* Complete GC phase */
     if (is_complete_phase_sweep_and_mark_main(d) ||
         is_complete_phase_mark_final (d)) {
-      caml_ev_begin("major_gc/phase_change");
       if (from_barrier) {
         try_complete_gc_phase (d, (void*)0);
       } else {
         caml_try_run_on_all_domains (&try_complete_gc_phase, 0);
       }
-      caml_ev_end("major_gc/phase_change");
       if (budget > 0) goto mark_again;
     }
   }
@@ -1231,13 +1234,11 @@ mark_again:
       cycle simultaneously, we loop until the current cycle has ended,
       ignoring whether caml_try_run_on_all_domains succeeds. */
     while (saved_major_cycle == caml_major_cycles_completed) {
-      caml_ev_begin("major_gc/phase_change");
       if (from_barrier) {
         cycle_all_domains_callback(d, (void*)0);
       } else {
         caml_try_run_on_all_domains(&cycle_all_domains_callback, 0);
       }
-      caml_ev_end("major_gc/phase_change");
     }
   }
 
