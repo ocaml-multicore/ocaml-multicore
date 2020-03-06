@@ -100,7 +100,7 @@ OBJS=$(addsuffix .$(O), \
   compare ints floats str array io extern intern \
   hash sys meta parsing gc_ctrl terminfo md5 obj \
   lexing callback debugger weak finalise custom \
-	domain platform eventlog fiber shared_heap addrmap \
+	domain platform eventlog fiber lockfree shared_heap addrmap \
   dynlink spacetime afl $(UNIX_OR_WIN32) bigarray main)
 
 DOBJS=$(OBJS:.$(O)=.$(DBGO)) instrtrace.$(DBGO)

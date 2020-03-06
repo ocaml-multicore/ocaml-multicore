@@ -790,7 +790,43 @@ intnat ephe_sweep (struct domain* d, intnat budget)
    at the end of the most recently completed GC cycle */
 static struct gc_stats sampled_gc_stats[2][Max_domains];
 
-void caml_accum_heap_stats(struct heap_stats* acc, const struct heap_stats* h)
+void set_max(atomic_uintnat* to, atomic_uintnat* from) {
+  while(1) {
+    uintnat to_val = atomic_load_acq(to);
+    uintnat from_val = atomic_load_acq(from);
+
+    if( from_val <= to_val || atomic_compare_exchange_strong(to, &to_val, from_val) ) {
+      break;
+    }
+  }
+}
+
+void caml_atomic_accum_heap_stats(struct atomic_heap_stats* acc, struct heap_stats* h)
+{
+  atomic_fetch_add_explicit(&acc->pool_words, h->pool_words, memory_order_release);
+  
+  set_max(&acc->pool_max_words, &h->pool_max_words);
+  
+  atomic_fetch_add_explicit(&acc->pool_live_words, h->pool_live_words, memory_order_release);
+  atomic_fetch_add_explicit(&acc->pool_live_blocks, h->pool_live_blocks, memory_order_release); 
+  atomic_fetch_add_explicit(&acc->pool_frag_words, h->pool_frag_words, memory_order_release); 
+  
+  atomic_fetch_add_explicit(&acc->large_words, h->large_words, memory_order_release);
+  set_max(&acc->large_max_words, &h->large_max_words);    
+  atomic_fetch_add_explicit(&acc->large_blocks, h->large_blocks, memory_order_release); 
+}
+
+void caml_atomic_remove_heap_stats(struct atomic_heap_stats* acc, struct heap_stats* h)
+{
+  atomic_fetch_sub_explicit(&acc->pool_words, h->pool_words, memory_order_release);
+  atomic_fetch_sub_explicit(&acc->pool_live_words, h->pool_live_words, memory_order_release);
+  atomic_fetch_sub_explicit(&acc->pool_live_blocks, h->pool_live_blocks, memory_order_release);
+  atomic_fetch_sub_explicit(&acc->pool_frag_words, h->pool_frag_words, memory_order_release);
+  atomic_fetch_sub_explicit(&acc->large_words, h->large_words, memory_order_release);
+  atomic_fetch_sub_explicit(&acc->large_blocks, h->large_blocks, memory_order_release);
+}
+
+void caml_accum_heap_stats(struct heap_stats* acc, struct heap_stats* h)
 {
   acc->pool_words += h->pool_words;
   if (acc->pool_max_words < h->pool_max_words)
@@ -804,7 +840,7 @@ void caml_accum_heap_stats(struct heap_stats* acc, const struct heap_stats* h)
   acc->large_blocks += h->large_blocks;
 }
 
-void caml_remove_heap_stats(struct heap_stats* acc, const struct heap_stats* h)
+void caml_remove_heap_stats(struct heap_stats* acc, struct heap_stats* h)
 {
   acc->pool_words -= h->pool_words;
   acc->pool_live_words -= h->pool_live_words;
@@ -813,7 +849,6 @@ void caml_remove_heap_stats(struct heap_stats* acc, const struct heap_stats* h)
   acc->large_words -= h->large_words;
   acc->large_blocks -= h->large_blocks;
 }
-
 
 void caml_sample_gc_stats(struct gc_stats* buf)
 {

@@ -21,7 +21,7 @@ LINKEDFILES=misc.c major_gc.c minor_gc.c memory.c alloc.c array.c \
   weak.c finalise.c meta.c custom.c main.c roots.c globroots.c \
   $(UNIX_OR_WIN32).c dynlink.c signals.c debugger.c addrmap.c \
   domain.c platform.c eventlog.c backtrace.c startup_aux.c \
-	afl.c bigarray.c fiber.c shared_heap.c
+	afl.c bigarray.c fiber.c shared_heap.c lockfree.c
 
 # The following variable stores the list of files for which dependencies
 # should be computed. It includes even the files that won't actually be
@@ -80,7 +80,7 @@ COBJS=startup_aux.$(O) startup.$(O) main.$(O) fail.$(O)		\
   clambda_checks.$(O) spacetime.$(O) spacetime_snapshot.$(O)		\
   spacetime_offline.$(O) afl.$(O) bigarray.$(O) addrmap.$(O) \
   domain.$(O) platform.$(O) eventlog.$(O) shared_heap.$(O) \
-	fiber.$(O) frame_descriptors.$(O)
+	fiber.$(O) frame_descriptors.$(O) lockfree.$(O)
 
 OBJS=$(COBJS) $(ASMOBJS)
 

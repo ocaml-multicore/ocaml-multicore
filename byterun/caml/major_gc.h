@@ -48,18 +48,33 @@ void caml_add_orphaned_finalisers (struct caml_final_info*);
 void caml_final_domain_terminate (caml_domain_state *domain_state);
 void caml_adopt_orphaned_work (void);
 
-struct heap_stats {
-  intnat pool_words;
-  intnat pool_max_words;
-  intnat pool_live_words;
-  intnat pool_live_blocks;
-  intnat pool_frag_words;
-  intnat large_words;
-  intnat large_max_words;
-  intnat large_blocks;
+struct atomic_heap_stats {
+  atomic_uintnat pool_words;
+  atomic_uintnat pool_max_words;
+  atomic_uintnat pool_live_words;
+  atomic_uintnat pool_live_blocks;
+  atomic_uintnat pool_frag_words;
+  atomic_uintnat large_words;
+  atomic_uintnat large_max_words;
+  atomic_uintnat large_blocks;
 };
-void caml_accum_heap_stats(struct heap_stats* acc, const struct heap_stats* s);
-void caml_remove_heap_stats(struct heap_stats* acc, const struct heap_stats* s);
+
+struct heap_stats {
+  uintnat pool_words;
+  uintnat pool_max_words;
+  uintnat pool_live_words;
+  uintnat pool_live_blocks;
+  uintnat pool_frag_words;
+  uintnat large_words;
+  uintnat large_max_words;
+  uintnat large_blocks;
+};
+
+void caml_atomic_accum_heap_stats(struct atomic_heap_stats* acc, struct heap_stats* s);
+void caml_atomic_remove_heap_stats(struct atomic_heap_stats* acc, struct heap_stats* s);
+
+void caml_accum_heap_stats(struct heap_stats* acc, struct heap_stats* s);
+void caml_remove_heap_stats(struct heap_stats* acc, struct heap_stats* s);
 
 struct gc_stats {
   uint64_t minor_words;

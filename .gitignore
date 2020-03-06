@@ -79,6 +79,7 @@ _ocamltest
 /asmrun/ints.c
 /asmrun/io.c
 /asmrun/lexing.c
+/asmrun/lockfree.c
 /asmrun/main.c
 /asmrun/major_gc.c
 /asmrun/md5.c
