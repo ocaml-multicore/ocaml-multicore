@@ -878,7 +878,10 @@ CFI_STARTPROC
         subq    $16, %r11
         leaq    LBL(fiber_exn_handler)(%rip), %r10
         movq    %r10, 8(%r11)
-        movq    $0, 0(%r11) /* dummy previous trap frame */
+    /* load the previous context exn_handler so that copying stacks works */
+        movq    Caml_state(current_stack), %r10
+        movq    (%r10), %r10
+        movq    %r10, 0(%r11)
         movq    %r11, Caml_state(exn_handler)
     /* Switch to the new stack */
         movq    %r11, %rsp

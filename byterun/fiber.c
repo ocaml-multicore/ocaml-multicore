@@ -240,20 +240,24 @@ static void rewrite_exception_stack(struct stack_info *old_stack, value* exn_ptr
 {
   caml_gc_log ("Old [%lu, %lu]", Stack_base(old_stack), Stack_high(old_stack));
   caml_gc_log ("New [%lu, %lu]", Stack_base(new_stack), Stack_high(new_stack));
-  caml_gc_log ("exn_ptr=%lu", *exn_ptr);
+  if(exn_ptr) {
+    caml_gc_log ("exn_ptr=%lu", *exn_ptr);
 
-  while (Stack_base(old_stack) < *exn_ptr && *exn_ptr <= Stack_high(old_stack)) {
-    value old_val = *exn_ptr;
-    *exn_ptr = Stack_high(new_stack) - (Stack_high(old_stack) - (value*)*exn_ptr);
+    while (Stack_base(old_stack) < *exn_ptr && *exn_ptr <= Stack_high(old_stack)) {
+      value old_val = *exn_ptr;
+      *exn_ptr = Stack_high(new_stack) - (Stack_high(old_stack) - (value*)*exn_ptr);
 
-    caml_gc_log ("Rewriting %lu to %lu", old_val, *exn_ptr);
+      caml_gc_log ("Rewriting %lu to %lu", old_val, *exn_ptr);
 
-    CAMLassert(Stack_base(new_stack) < (value*)*exn_ptr);
-    CAMLassert((value*)*exn_ptr <= Stack_high(new_stack));
+      CAMLassert(Stack_base(new_stack) < (value*)*exn_ptr);
+      CAMLassert((value*)*exn_ptr <= Stack_high(new_stack));
 
-    exn_ptr = (char*)*exn_ptr;
+      exn_ptr = (char*)*exn_ptr;
+    }
+    caml_gc_log ("finished with exn_ptr=%lu", *exn_ptr);
+  } else {
+    caml_gc_log ("exn_ptr is null");
   }
-  caml_gc_log ("finished with exn_ptr=%lu", *exn_ptr);
 }
 
 int caml_try_realloc_stack(asize_t required_space)
@@ -370,7 +374,8 @@ CAMLprim value caml_clone_continuation (value cont)
     memcpy(Stack_high(target) - stack_used, Stack_high(source) - stack_used,
            stack_used * sizeof(value));
 #ifdef NATIVE_CODE
-    exn_start = Stack_high(target) - (Stack_high(orig_source) - (value*)Caml_state->exn_handler);
+    /* pull out the exception pointer from the caml context on the stack */
+    exn_start = Stack_high(target) - (Stack_high(source) - (value*)source->sp);
     rewrite_exception_stack(source, exn_start, target);
 #endif
     target->sp = Stack_high(target) - stack_used;
