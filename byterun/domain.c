@@ -1014,7 +1014,7 @@ CAMLprim value caml_ml_domain_critical_section(value delta)
   return Val_unit;
 }
 
-#define Chunk_size 0x10000
+#define Chunk_size 0x400
 
 CAMLprim value caml_ml_domain_yield(value unused)
 {
