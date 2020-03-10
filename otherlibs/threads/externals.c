@@ -16,24 +16,24 @@
 
 /* Hooks for caml_enter_blocking_section and caml_leave_blocking_section */
 
-static void caml_dthreads_enter_blocking_section(void)
+static void caml_threads_enter_blocking_section(void)
 {
   static const value *f = NULL;
-  if (f == NULL) f = caml_named_value("dthreads_enter_blocking_section");
+  if (f == NULL) f = caml_named_value("threads_enter_blocking_section");
   if (f != NULL) caml_callback_exn(*f, Val_unit);
 }
 
-static void caml_dthreads_leave_blocking_section(void)
+static void caml_threads_leave_blocking_section(void)
 {
   static const value *f = NULL;
-  if (f == NULL) f = caml_named_value("dthreads_leave_blocking_section");
+  if (f == NULL) f = caml_named_value("threads_leave_blocking_section");
   if (f != NULL) caml_callback_exn(*f, Val_unit);
 }
 
-CAMLprim value caml_dthreads_init(value unit)
+CAMLprim value caml_threads_init(value unit)
 {
-  caml_enter_blocking_section_hook = caml_dthreads_enter_blocking_section;
-  caml_leave_blocking_section_hook = caml_dthreads_leave_blocking_section;
+  caml_enter_blocking_section_hook = caml_threads_enter_blocking_section;
+  caml_leave_blocking_section_hook = caml_threads_leave_blocking_section;
 
   return Val_unit;
 }

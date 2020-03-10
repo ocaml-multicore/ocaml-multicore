@@ -282,7 +282,7 @@ module Internal = struct
           s.threads <- Id_map.remove id s.threads
   end
 
-  external initialize: unit -> unit = "caml_dthreads_init"
+  external initialize: unit -> unit = "caml_threads_init"
 
   (* move this into Interlock *)
   let _ =
@@ -321,8 +321,8 @@ module Internal = struct
           if n == 1 then Domain.Sync.critical_section leave_aux
     in
     if not Interlock.never then begin
-      Callback.register "dthreads_enter_blocking_section" enter;
-      Callback.register "dthreads_leave_blocking_section" leave
+      Callback.register "threads_enter_blocking_section" enter;
+      Callback.register "threads_leave_blocking_section" leave
     end;
     initialize ()
 end
