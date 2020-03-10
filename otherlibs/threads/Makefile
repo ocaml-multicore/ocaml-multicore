@@ -1,140 +1,138 @@
-#**************************************************************************
-#*                                                                        *
-#*                                 OCaml                                  *
-#*                                                                        *
-#*            Xavier Leroy, projet Cristal, INRIA Rocquencourt            *
-#*                                                                        *
-#*   Copyright 1999 Institut National de Recherche en Informatique et     *
-#*     en Automatique.                                                    *
-#*                                                                        *
-#*   All rights reserved.  This file is distributed under the terms of    *
-#*   the GNU Lesser General Public License version 2.1, with the          *
-#*   special exception on linking described in the file LICENSE.          *
-#*                                                                        *
-#**************************************************************************
-
-# FIXME reduce redundancy by including ../Makefile
-
-include ../../config/Makefile
-CAMLRUN ?= ../../boot/ocamlrun
-CAMLYACC ?= ../../boot/ocamlyacc
-
-CFLAGS += $(SHAREDCCCOMPOPTS)
-CPPFLAGS += -I../../byterun
 ROOTDIR=../..
-CAMLC=$(CAMLRUN) $(ROOTDIR)/ocamlc -nostdlib \
-      -I $(ROOTDIR)/stdlib -I $(ROOTDIR)/otherlibs/unix
-MKLIB=$(CAMLRUN) ../../tools/ocamlmklib
-COMPFLAGS=-w +33..39 -warn-error A -bin-annot -g -safe-string
 
-C_OBJS=scheduler.o
+include $(ROOTDIR)/config/Makefile
 
-CAML_OBJS=thread.cmo mutex.cmo condition.cmo event.cmo threadUnix.cmo
+LIBNAME=threads
 
-LIB=../../stdlib
+LIBS=-nostdlib -I $(ROOTDIR)/stdlib -I $(ROOTDIR)/otherlibs/$(UNIXLIB)
 
-LIB_OBJS=$(LIB)/camlinternalFormatBasics.cmo pervasives.cmo		\
-  $(LIB)/array.cmo $(LIB)/list.cmo $(LIB)/char.cmo $(LIB)/bytes.cmo	\
-  $(LIB)/string.cmo $(LIB)/sys.cmo $(LIB)/sort.cmo marshal.cmo		\
-  $(LIB)/obj.cmo $(LIB)/int32.cmo $(LIB)/int64.cmo			\
-  $(LIB)/nativeint.cmo $(LIB)/lexing.cmo $(LIB)/parsing.cmo		\
-  $(LIB)/set.cmo $(LIB)/map.cmo $(LIB)/stack.cmo $(LIB)/queue.cmo	\
-  $(LIB)/camlinternalLazy.cmo $(LIB)/lazy.cmo $(LIB)/stream.cmo		\
-  $(LIB)/buffer.cmo $(LIB)/camlinternalFormat.cmo $(LIB)/printf.cmo	\
-  $(LIB)/arg.cmo $(LIB)/printexc.cmo $(LIB)/gc.cmo $(LIB)/digest.cmo	\
-  $(LIB)/random.cmo $(LIB)/hashtbl.cmo $(LIB)/format.cmo		\
-  $(LIB)/scanf.cmo $(LIB)/callback.cmo $(LIB)/camlinternalOO.cmo	\
-  $(LIB)/oo.cmo $(LIB)/camlinternalMod.cmo $(LIB)/genlex.cmo		\
-  $(LIB)/weak.cmo $(LIB)/ephemeron.cmo $(LIB)/filename.cmo		\
-  $(LIB)/complex.cmo $(LIB)/arrayLabels.cmo $(LIB)/listLabels.cmo	\
-  $(LIB)/bytesLabels.cmo $(LIB)/stringLabels.cmo			\
-  $(LIB)/moreLabels.cmo $(LIB)/stdLabels.cmo $(LIB)/domain.cmo
+OCAMLRUN?=$(ROOTDIR)/boot/ocamlrun
+OCAMLC=$(OCAMLRUN) $(ROOTDIR)/ocamlc $(LIBS)
+OCAMLOPT=$(OCAMLRUN) $(ROOTDIR)/ocamlopt $(LIBS)
+OCAMLMKLIB=$(OCAMLRUN) $(ROOTDIR)/tools/ocamlmklib
 
-UNIXLIB=../unix
+COMPFLAGS=-w +33..39 -warn-error A -g -bin-annot -safe-string
+ifeq "$(FLAMBDA)" "true"
+OPTCOMPFLAGS=-O3
+else
+OPTCOMPFLAGS=
+endif
 
-UNIXLIB_OBJS=unix.cmo $(UNIXLIB)/unixLabels.cmo
+MLFILES=thread.ml mutex.ml condition.ml event.ml
+MLIFILES=thread.mli mutex.mli condition.mli event.mli
 
-all: libvmthreads.a threads.cma stdlib.cma unix.cma
+CMIFILES=$(MLIFILES:.mli=.cmi)
+CMOFILES=$(MLFILES:.ml=.cmo)
+CMXFILES=$(MLFILES:.ml=.cmx)
 
-allopt:
+ifeq "$(UNIX_OR_WIN32)" "unix"
+HEADER = externals-posix.h
+else # Windows
+HEADER = externals-win32.h
+endif
 
-libvmthreads.a: $(C_OBJS)
-	$(MKLIB) -o threads -oc vmthreads $(C_OBJS)
+# Note: the header on which object files produced from externals.c
+# should actually depend is known for sure only at compile-time.
+# That's why this dependency is handled in the Makefile directly
+# and removed from the output of the C compiler during make depend
 
-threads.cma: $(CAML_OBJS)
-	$(MKLIB) -ocamlc '$(CAMLC)' -o threads -oc vmthreads $(CAML_OBJS)
+BYTECODE_C_OBJS=externals-bytecode.$(O)
+NATIVECODE_C_OBJS=externals-native.$(O)
 
-stdlib.cma: $(LIB_OBJS)
-	$(CAMLC) -a -o stdlib.cma $(LIB_OBJS)
+all: lib$(LIBNAME).$(A) $(LIBNAME).cma $(CMIFILES)
 
-unix.cma: $(UNIXLIB_OBJS)
-	$(MKLIB) -ocamlc '$(CAMLC)' -o unix -linkall $(UNIXLIB_OBJS)
+allopt: lib$(LIBNAME)nat.$(A) $(LIBNAME).cmxa $(CMIFILES)
 
-pervasives.cmo: pervasives.mli pervasives.cmi pervasives.ml
-	$(CAMLC) ${COMPFLAGS} -nopervasives -c pervasives.ml
+lib$(LIBNAME).$(A): $(BYTECODE_C_OBJS)
+	$(OCAMLMKLIB) -o $(LIBNAME) $(BYTECODE_C_OBJS) $(PTHREAD_LINK)
 
-pervasives.mli: $(LIB)/pervasives.mli
-	ln -s $(LIB)/pervasives.mli pervasives.mli
+lib$(LIBNAME)nat.$(A): $(NATIVECODE_C_OBJS)
+	$(OCAMLMKLIB) -o $(LIBNAME)nat $^
 
-pervasives.cmi: $(LIB)/pervasives.cmi
-	ln -s $(LIB)/pervasives.cmi pervasives.cmi
+$(LIBNAME).cma: $(CMOFILES)
+ifeq "$(UNIX_OR_WIN32)" "unix"
+	$(OCAMLMKLIB) -o $(LIBNAME) -ocamlc '$(OCAMLC)' -cclib -lunix -linkall $(PTHREAD_CAML_LINK) $^
+# TODO: Figure out why -cclib -lunix is used here.
+# It may be because of the threadsUnix module which is deprecated.
+# It may hence be good to figure out whether this module shouldn't be
+# removed, and then -cclib -lunix arguments.
+else # Windows
+	$(OCAMLMKLIB) -o $(LIBNAME) -ocamlc "$(OCAMLC)" -linkall $(PTHREAD_CAML_LINK) $^
+endif
 
-marshal.cmo: marshal.mli marshal.cmi marshal.ml
-	$(CAMLC) ${COMPFLAGS} -c marshal.ml
+# See remark above: force static linking of lib$(LIBNAME)nat.a
+$(LIBNAME).cmxa: $(CMXFILES)
+	$(OCAMLOPT) -linkall -a -cclib -l$(LIBNAME)nat $(PTHREAD_CAML_LINK) -o $@ $^
 
-marshal.mli: $(LIB)/marshal.mli
-	ln -s $(LIB)/marshal.mli marshal.mli
+# Note: I removed "-cclib -lunix" from the line above.
+# Indeed, if we link threads.cmxa, then we must also link unix.cmxa,
+# which itself will pass -lunix to the C linker.  It seems more
+# modular to me this way. -- Alain
 
-marshal.cmi: $(LIB)/marshal.cmi
-	ln -s $(LIB)/marshal.cmi marshal.cmi
+# The following lines produce two object files externals-bytecode.$(O) and
+# externals-native.$(O) from the same source file externals.c (it is compiled
+# twice, each time with different options).
 
-unix.mli: $(UNIXLIB)/unix.mli
-	ln -s -f $(UNIXLIB)/unix.mli unix.mli
+externals-bytecode.$(O): externals.c $(HEADER)
+	$(CC) -c $(CFLAGS) $(CPPFLAGS) -I$(ROOTDIR)/byterun  \
+	  $(SHAREDCCCOMPOPTS) $(OUTPUTOBJ)$@ $<
 
-unix.cmi: $(UNIXLIB)/unix.cmi
-	ln -s -f $(UNIXLIB)/unix.cmi unix.cmi
-
-unix.cmo: unix.mli unix.cmi $(UNIXLIB)/unixLabels.cmo
-	$(CAMLC) ${COMPFLAGS} -c unix.ml
+externals-native.$(O): externals.c $(HEADER)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -I$(ROOTDIR)/asmrun -I$(ROOTDIR)/byterun \
+	  $(SHAREDCCCOMPOPTS) -DNATIVE_CODE \
+	  -DTARGET_$(ARCH) -DMODEL_$(MODEL) -DSYS_$(SYSTEM) \
+	  $(OUTPUTOBJ)$@ -c $<
 
 partialclean:
 	rm -f *.cm*
 
 clean: partialclean
-	rm -f libvmthreads.a dllvmthreads.so *.o
-	rm -f pervasives.mli marshal.mli unix.mli
+	rm -f dll$(LIBNAME)*$(EXT_DLL) *.$(A) *.$(O)
 
 INSTALL_LIBDIR=$(DESTDIR)$(LIBDIR)
+THREADS_LIBDIR=$(INSTALL_LIBDIR)/$(LIBNAME)
 INSTALL_STUBLIBDIR=$(DESTDIR)$(STUBLIBDIR)
 
-CMIFILES=thread.cmi mutex.cmi condition.cmi event.cmi threadUnix.cmi
-
 install:
-	if test -f dllvmthreads.so; then \
-	  cp dllvmthreads.so "$(INSTALL_STUBLIBDIR)"; \
-	fi
-	mkdir -p "$(INSTALL_LIBDIR)/vmthreads"
-	cp libvmthreads.a "$(INSTALL_LIBDIR)/vmthreads"
-	cd "$(INSTALL_LIBDIR)/vmthreads"; $(RANLIB) libvmthreads.a
-	cp $(CMIFILES) $(CMIFILES:.cmi=.mli) $(CMIFILES:.cmi=.cmti) \
-	   threads.cma stdlib.cma unix.cma "$(INSTALL_LIBDIR)/vmthreads"
+	if test -f dll$(LIBNAME)$(EXT_DLL); then \
+	  cp dll$(LIBNAME)$(EXT_DLL) "$(INSTALL_STUBLIBDIR)/dll$(LIBNAME)$(EXT_DLL)"; fi
+	cp lib$(LIBNAME).$(A) "$(INSTALL_LIBDIR)"
+	cd "$(INSTALL_LIBDIR)"; $(RANLIB) lib$(LIBNAME).$(A)
+	mkdir -p "$(THREADS_LIBDIR)"
+	cp $(CMIFILES) $(CMIFILES:.cmi=.cmti) $(LIBNAME).cma "$(THREADS_LIBDIR)"
+	cp $(MLIFILES) "$(INSTALL_LIBDIR)"
+	cp threads.h "$(INSTALL_LIBDIR)/caml"
 
 installopt:
+	cp lib$(LIBNAME)nat.$(A) "$(INSTALL_LIBDIR)"
+	cd "$(INSTALL_LIBDIR)"; $(RANLIB) lib$(LIBNAME)nat.$(A)
+	cp $(CMXFILES) $(LIBNAME).cmxa $(LIBNAME).$(A) "$(THREADS_LIBDIR)"
+	cd "$(THREADS_LIBDIR)" && $(RANLIB) $(LIBNAME).$(A)
 
 .SUFFIXES: .ml .mli .cmo .cmi .cmx
 
 .mli.cmi:
-	$(CAMLC) -c $(COMPFLAGS) $<
+	$(OCAMLC) -c $(COMPFLAGS) $<
 
 .ml.cmo:
-	$(CAMLC) -c $(COMPFLAGS) $<
+	$(OCAMLC) -c $(COMPFLAGS) $<
+
+.ml.cmx:
+	$(OCAMLOPT) -c $(COMPFLAGS) $(OPTCOMPFLAGS) $<
 
 .PHONY: depend
-depend:
 ifeq "$(TOOLCHAIN)" "msvc"
+depend:
 	$(error Dependencies cannot be regenerated using the MSVC ports)
 else
-	$(CC) -MM $(CPPFLAGS) *.c > .depend
+depend:
+	$(CC) -MM $(CPPFLAGS) -I$(ROOTDIR)/byterun externals.c \
+	  | sed -e 's/externals\.o/externals-bytecode.$$(O)/' \
+	  -e 's/ st_\(posix\|win32\)\.h//g' > .depend
+	$(CC) -MM $(CPPFLAGS) -I$(ROOTDIR)/asmrun -I$(ROOTDIR)/byterun \
+	  -DNATIVE_CODE -DTARGET_$(ARCH) -DMODEL_$(MODEL) -DSYS_$(SYSTEM) \
+	  externals.c | sed -e 's/externals\.o/externals-native.$$(O)/' \
+	  -e 's/ st_\(posix\|win32\)\.h//g' >> .depend
 	$(CAMLRUN) ../../tools/ocamldep -slash *.mli *.ml >> .depend
 endif
 

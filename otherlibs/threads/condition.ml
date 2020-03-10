@@ -1,35 +1,73 @@
-(**************************************************************************)
-(*                                                                        *)
-(*                                 OCaml                                  *)
-(*                                                                        *)
-(*          Xavier Leroy and Damien Doligez, INRIA Rocquencourt           *)
-(*                                                                        *)
-(*   Copyright 1996 Institut National de Recherche en Informatique et     *)
-(*     en Automatique.                                                    *)
-(*                                                                        *)
-(*   All rights reserved.  This file is distributed under the terms of    *)
-(*   the GNU Lesser General Public License version 2.1, with the          *)
-(*   special exception on linking described in the file LICENSE.          *)
-(*                                                                        *)
-(**************************************************************************)
+module Internal = struct
+  open Thread.Internal
 
-type t = { mutable waiting: Thread.t list }
+  let log = Verbose.log ~m:__MODULE__
 
-let create () = { waiting = [] }
+  type condition = Condition of {
+    spin: spin;
+    waiting: Domain.id Queue.t;
+  }
 
-let wait cond mut =
-  Thread.critical_section := true;
-  Mutex.unlock mut;
-  cond.waiting <- Thread.self() :: cond.waiting;
-  Thread.sleep();
-  Mutex.lock mut
+  let create () =
+    let spin = Spin.create Full and waiting = Queue.create () in
+    Condition { spin; waiting }
 
-let signal cond =
-  match cond.waiting with               (* atomic *)
-    [] -> ()
-  | th :: rem -> cond.waiting <- rem (* atomic *); Thread.wakeup th
+  let obtain (Condition c) =
+    Spin.obtain c.spin && begin
+      let result = Interlock.obtain () in
+      if not result then Spin.release c.spin;
+      result
+    end
 
-let broadcast cond =
-  let w = cond.waiting in                  (* atomic *)
-  cond.waiting <- [];                      (* atomic *)
-  List.iter Thread.wakeup w
+  let release (Condition c) =
+    Interlock.release ();
+    Spin.release c.spin
+end
+
+open Thread.Internal
+open Internal
+
+type t = condition
+
+let create = create
+
+let wait (Condition c) m =
+  let log = log "wait" in
+  log '>';
+  Mutex.Internal.wait m c.spin c.waiting;
+  log '<'
+
+let signal (Condition c as c0) =
+  let log = log "signal" in
+  log '>';
+  let aux () =
+    if not (obtain c0) then raise Domain.Sync.Retry;
+    let self = Domain.self () in
+    let ready =
+      if Queue.is_empty c.waiting then begin
+        log 'E';
+        self
+      end
+      else begin
+        log 'Y';
+        Queue.pop c.waiting
+      end
+    in
+    release c0;
+    if self != ready then Verbose.notify ready
+  in
+  Domain.Sync.critical_section aux;
+  log '<'
+
+let broadcast (Condition c as c0) =
+  let log = log "broadcast" in
+  log '>';
+  let aux () =
+    if not (obtain c0) then raise Domain.Sync.Retry;
+    let ready = Queue.create () in
+    Queue.transfer c.waiting ready;
+    release c0;
+    Queue.iter Verbose.notify ready
+  in
+  Domain.Sync.critical_section aux;
+  log '<'

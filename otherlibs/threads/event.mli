@@ -59,18 +59,18 @@ val wrap_abort : 'a event -> (unit -> unit) -> 'a event
 
 val guard : (unit -> 'a event) -> 'a event
 (** [guard fn] returns the event that, when synchronized, computes
-   [fn()] and behaves as the resulting event. This allows events with
-   side-effects to be computed at the time of the synchronization
+   [fn()] and behaves as the resulting event. This allows to
+   compute events with side-effects at the time of the synchronization
    operation. *)
 
 val sync : 'a event -> 'a
-(** ``Synchronize'' on an event: offer all the communication
+(** 'Synchronize' on an event: offer all the communication
    possibilities specified in the event to the outside world,
    and block until one of the communications succeed. The result
    value of that communication is returned. *)
 
 val select : 'a event list -> 'a
-(** ``Synchronize'' on an alternative of events.
+(** 'Synchronize' on an alternative of events.
    [select evl] is shorthand for [sync(choose evl)]. *)
 
 val poll : 'a event -> 'a option
