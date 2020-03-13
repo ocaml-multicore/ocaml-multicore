@@ -325,31 +325,15 @@ CAMLexport void caml_blit_fields (value src, int srcoff, value dst, int dstoff, 
      for instance, they may copy a byte at a time */
   if (src == dst && srcoff < dstoff) {
     /* copy descending */
-    if (Is_young(dst)) {
-      /* dst is young, we copy fields directly. This cannot create old->young
-         ptrs, nor break incremental GC of the shared heap */
-      for (i = n; i > 0; i--) {
-        Op_val(dst)[dstoff + i - 1] = Op_val(src)[srcoff + i - 1];
-      }
-    } else {
-      for (i = n; i > 0; i--) {
-        caml_read_field(src, srcoff + i - 1, &x);
-        caml_modify_field(dst, dstoff + i - 1, x);
-      }
+    for (i = n; i > 0; i--) {
+      caml_read_field(src, srcoff + i - 1, &x);
+      caml_modify_field(dst, dstoff + i - 1, x);
     }
   } else {
     /* copy ascending */
-    if (Is_young(dst)) {
-      /* see comment above */
-      for (i = 0; i < n; i++) {
-        caml_read_field(src, srcoff + i, &x);
-        Op_val(dst)[dstoff + i] = x;
-      }
-    } else {
-      for (i = 0; i < n; i++) {
-        caml_read_field(src, srcoff + i, &x);
-        caml_modify_field(dst, dstoff + i, x);
-      }
+    for (i = 0; i < n; i++) {
+      caml_read_field(src, srcoff + i, &x);
+      caml_modify_field(dst, dstoff + i, x);
     }
   }
   CAMLreturn0;
