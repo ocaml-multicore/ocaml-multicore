@@ -80,12 +80,9 @@ struct caml_heap_state* caml_init_shared_heap() {
   // the queues
   if( caml_domain_alone() ) {
     for (i = 0; i<NUM_SIZECLASSES; i++) {
-      caml_gc_log("initializing pools for sz: %d", i);
       lockfree_queue_init(&pool_freelist.global_avail_pools[i]);
       lockfree_queue_init(&pool_freelist.global_full_pools[i]);
     }
-
-    caml_gc_log("initializing free pools\n");
     lockfree_queue_init(&pool_freelist.free);
   }
 
