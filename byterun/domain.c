@@ -1056,6 +1056,9 @@ static void domain_terminate()
   }
   caml_plat_unlock(&domain_self->roots_lock);
   caml_plat_assert_all_locks_unlocked();
+  /* This is the last thing we do because we need to be able to rely
+     on caml_domain_alone (which uses num_domains_running) in at least
+     the shared_heap lockfree fast paths */
   atomic_fetch_add(&num_domains_running, -1);
 }
 
