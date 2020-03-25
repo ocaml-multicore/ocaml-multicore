@@ -1031,7 +1031,6 @@ static void domain_terminate()
       finished = 1;
       s->terminating = 0;
       s->running = 0;
-      atomic_fetch_add(&num_domains_running, -1);
       s->unique_id += Max_domains;
     }
     caml_plat_unlock(&s->lock);
@@ -1057,6 +1056,7 @@ static void domain_terminate()
   }
   caml_plat_unlock(&domain_self->roots_lock);
   caml_plat_assert_all_locks_unlocked();
+  atomic_fetch_add(&num_domains_running, -1);
 }
 
 void caml_handle_incoming_interrupts()
