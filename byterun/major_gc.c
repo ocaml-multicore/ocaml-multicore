@@ -790,10 +790,10 @@ intnat ephe_sweep (struct domain* d, intnat budget)
    at the end of the most recently completed GC cycle */
 static struct gc_stats sampled_gc_stats[2][Max_domains];
 
-void set_max(atomic_uintnat* to, atomic_uintnat* from) {
+void set_max(atomic_uintnat* to, uintnat* from) {
   while(1) {
     uintnat to_val = atomic_load_acq(to);
-    uintnat from_val = atomic_load_acq(from);
+    uintnat from_val = *from;
 
     if( from_val <= to_val || atomic_compare_exchange_strong(to, &to_val, from_val) ) {
       break;
