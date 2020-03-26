@@ -241,10 +241,6 @@ and pattern i ppf x =
   | Ppat_exception p ->
       line i ppf "Ppat_exception\n";
       pattern i ppf p
-  | Ppat_effect(p1, p2) ->
-      line i ppf "Ppat_effect\n";
-      pattern i ppf p1;
-      pattern i ppf p2
   | Ppat_open (m,p) ->
       line i ppf "Ppat_open \"%a\"\n" fmt_longident_loc m;
       pattern i ppf p
@@ -470,24 +466,6 @@ and extension_constructor_kind i ppf x =
         line i ppf "Pext_rebind\n";
         line (i+1) ppf "%a\n" fmt_longident_loc li;
 
-and effect_constructor i ppf x =
-  line i ppf "effect_constructor %a\n" fmt_location x.peff_loc;
-  attributes i ppf x.peff_attributes;
-  let i = i + 1 in
-  line i ppf "peff_name = \"%s\"\n" x.peff_name.txt;
-  line i ppf "peff_kind =\n";
-  effect_constructor_kind (i + 1) ppf x.peff_kind;
-
-and effect_constructor_kind i ppf x =
-  match x with
-      Peff_decl(a, r) ->
-        line i ppf "Peff_decl\n";
-        list (i+1) core_type ppf a;
-        core_type (i + 1) ppf r;
-    | Peff_rebind li ->
-        line i ppf "Peff_rebind\n";
-        line (i+1) ppf "%a\n" fmt_longident_loc li;
-
 and class_type i ppf x =
   line i ppf "class_type %a\n" fmt_location x.pcty_loc;
   attributes i ppf x.pcty_attributes;
@@ -701,9 +679,6 @@ and signature_item i ppf x =
   | Psig_exception ext ->
       line i ppf "Psig_exception\n";
       extension_constructor i ppf ext;
-  | Psig_effect ext ->
-      line i ppf "Psig_effect\n";
-      effect_constructor i ppf ext;
   | Psig_module pmd ->
       line i ppf "Psig_module %a\n" fmt_string_loc pmd.pmd_name;
       attributes i ppf pmd.pmd_attributes;
@@ -812,9 +787,6 @@ and structure_item i ppf x =
   | Pstr_exception ext ->
       line i ppf "Pstr_exception\n";
       extension_constructor i ppf ext;
-  | Pstr_effect ext ->
-      line i ppf "Pstr_effect\n";
-      effect_constructor i ppf ext;
   | Pstr_module x ->
       line i ppf "Pstr_module\n";
       module_binding i ppf x

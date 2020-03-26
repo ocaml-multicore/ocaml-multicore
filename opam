@@ -14,7 +14,7 @@
 
    Subsequent installs are done with:
 
-      opam install --assume-built ocaml-variants
+      opam install --assume-built -y ocaml-variants
 
 *)
 

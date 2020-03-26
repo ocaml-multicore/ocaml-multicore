@@ -42,7 +42,6 @@ type iterator = {
   expr: iterator -> expression -> unit;
   extension: iterator -> extension -> unit;
   extension_constructor: iterator -> extension_constructor -> unit;
-  effect_constructor: iterator -> effect_constructor -> unit;
   include_declaration: iterator -> include_declaration -> unit;
   include_description: iterator -> include_description -> unit;
   label_declaration: iterator -> label_declaration -> unit;
@@ -172,21 +171,6 @@ module T = struct
     sub.location sub pext_loc;
     sub.attributes sub pext_attributes
 
-  let iter_effect_constructor_kind sub = function
-      Peff_decl(ctl, cto) ->
-        List.iter (sub.typ sub) ctl; sub.typ sub cto
-    | Peff_rebind li ->
-        iter_loc sub li
-
-  let iter_effect_constructor sub
-      {peff_name;
-       peff_kind;
-       peff_loc;
-       peff_attributes} =
-    iter_loc sub peff_name;
-    iter_effect_constructor_kind sub peff_kind;
-    sub.location sub peff_loc;
-    sub.attributes sub peff_attributes
 end
 
 module CT = struct
@@ -260,7 +244,6 @@ module MT = struct
     | Psig_type (_rf, l) -> List.iter (sub.type_declaration sub) l
     | Psig_typext te -> sub.type_extension sub te
     | Psig_exception ed -> sub.extension_constructor sub ed
-    | Psig_effect ed -> sub.effect_constructor sub ed
     | Psig_module x -> sub.module_declaration sub x
     | Psig_recmodule l ->
         List.iter (sub.module_declaration sub) l
@@ -306,7 +289,6 @@ module M = struct
     | Pstr_type (_rf, l) -> List.iter (sub.type_declaration sub) l
     | Pstr_typext te -> sub.type_extension sub te
     | Pstr_exception ed -> sub.extension_constructor sub ed
-    | Pstr_effect ed -> sub.effect_constructor sub ed
     | Pstr_module x -> sub.module_binding sub x
     | Pstr_recmodule l -> List.iter (sub.module_binding sub) l
     | Pstr_modtype x -> sub.module_type_declaration sub x
@@ -422,7 +404,6 @@ module P = struct
     | Ppat_lazy p -> sub.pat sub p
     | Ppat_unpack s -> iter_loc sub s
     | Ppat_exception p -> sub.pat sub p
-    | Ppat_effect (p1,p2) -> sub.pat sub p1; sub.pat sub p2
     | Ppat_extension x -> sub.extension sub x
     | Ppat_open (lid, p) ->
         iter_loc sub lid; sub.pat sub p
@@ -517,7 +498,6 @@ let default_iterator =
     typ = T.iter;
     type_extension = T.iter_type_extension;
     extension_constructor = T.iter_extension_constructor;
-    effect_constructor = T.iter_effect_constructor;
     value_description =
       (fun this {pval_name; pval_type; pval_prim = _; pval_loc;
                  pval_attributes} ->

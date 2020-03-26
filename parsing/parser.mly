@@ -440,7 +440,6 @@ let package_type_of_module_type pmty =
 %token DOT
 %token DOTDOT
 %token DOWNTO
-%token EFFECT
 %token ELSE
 %token END
 %token EOF
@@ -786,8 +785,6 @@ structure_item:
       { let (l, ext) = $1 in mkstr_ext (Pstr_typext l) ext }
   | str_exception_declaration
       { let (l, ext) = $1 in mkstr_ext (Pstr_exception l) ext }
-  | EFFECT effect_declaration
-      { mkstr(Pstr_effect $2) }
   | module_binding
       { let (body, ext) = $1 in mkstr_ext (Pstr_module body) ext }
   | rec_module_bindings
@@ -898,8 +895,6 @@ signature_item:
       { let (l, ext) = $1 in mksig_ext (Psig_typext l) ext }
   | sig_exception_declaration
       { let (l, ext) = $1 in mksig_ext (Psig_exception l) ext }
-  | EFFECT effect_constructor_declaration
-      { mksig(Psig_effect $2) }
   | module_declaration
       { let (body, ext) = $1 in mksig_ext (Psig_module body) ext }
   | module_alias
@@ -1769,8 +1764,6 @@ pattern:
       { expecting 3 "pattern" }
   | EXCEPTION ext_attributes pattern %prec prec_constr_appl
       { mkpat_attrs (Ppat_exception $3) $2}
-  | EFFECT simple_pattern simple_pattern
-      { mkpat(Ppat_effect($2,$3)) }
   | pattern attribute
       { Pat.attr $1 $2 }
   | pattern_gen { $1 }
@@ -2067,25 +2060,6 @@ let_exception_declaration:
     constr_ident generalized_constructor_arguments attributes
       { let args, res = $2 in
         Te.decl (mkrhs $1 1) ~args ?res ~attrs:$3 ~loc:(symbol_rloc()) }
-;
-
-effect_declaration:
-  | effect_constructor_declaration      { $1 }
-  | effect_constructor_rebind           { $1 }
-;
-effect_constructor_declaration:
-  | constr_ident attributes COLON core_type_list MINUSGREATER simple_core_type
-      post_item_attributes
-      { Te.effect_decl (mkrhs $1 1) $6 ~args:(List.rev $4)
-          ~loc:(symbol_rloc()) ~attrs:($7 @ $2) }
-  | constr_ident attributes COLON simple_core_type post_item_attributes
-      { Te.effect_decl (mkrhs $1 1) $4
-          ~loc:(symbol_rloc()) ~attrs:($5 @ $2) }
-;
-effect_constructor_rebind:
-  | constr_ident attributes EQUAL constr_longident post_item_attributes
-      { Te.effect_rebind (mkrhs $1 1) (mkrhs $4 4)
-          ~loc:(symbol_rloc()) ~attrs:($5 @ $2) }
 ;
 
 generalized_constructor_arguments:

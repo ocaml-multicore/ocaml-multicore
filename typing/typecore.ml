@@ -209,7 +209,6 @@ let iter_expression f e =
     | Pstr_type _
     | Pstr_typext _
     | Pstr_exception _
-    | Pstr_effect _
     | Pstr_modtype _
     | Pstr_open _
     | Pstr_class_type _
@@ -1413,8 +1412,6 @@ and type_pat_aux ~constrs ~labels ~no_existentials ~mode ~explode ~env
       )
   | Ppat_exception _ ->
       raise (Error (loc, !env, Exception_pattern_below_toplevel))
-  | Ppat_effect _ ->
-      raise (Error (loc, !env, Effect_pattern_below_toplevel))
   | Ppat_extension ext ->
       raise (Error_forward (Builtin_attributes.error_of_extension ext))
 
@@ -2526,7 +2523,7 @@ let iter_ppat f p =
   | Ppat_extension _
   | Ppat_type _ | Ppat_unpack _ -> ()
   | Ppat_array pats -> List.iter f pats
-  | Ppat_or (p1,p2) | Ppat_effect(p1, p2) -> f p1; f p2
+  | Ppat_or (p1,p2) -> f p1; f p2
   | Ppat_variant (_, arg) | Ppat_construct (_, arg) -> may f arg
   | Ppat_tuple lst ->  List.iter f lst
   | Ppat_exception p | Ppat_alias (p,_)
@@ -2857,9 +2854,6 @@ and type_expect_ ?in_function ?(recarg=Rejected) env sexp ty_expected =
         | [] -> List.rev valc, List.rev exnc, List.rev effc, List.rev conts
         | {pc_lhs = {ppat_desc=Ppat_exception p}} as c :: rest ->
             split_cases valc ({c with pc_lhs = p} :: exnc) effc conts rest
-        | {pc_lhs = {ppat_desc=Ppat_effect(p1, p2)}} as c :: rest ->
-            split_cases valc exnc
-              (({c with pc_lhs = p1}) :: effc) (p2 :: conts) rest
         | c :: rest ->
             split_cases (c :: valc) exnc effc conts rest
       in
@@ -2891,9 +2885,6 @@ and type_expect_ ?in_function ?(recarg=Rejected) env sexp ty_expected =
       let body = type_expect env sbody ty_expected in
       let rec split_cases exnc effc conts = function
         | [] -> List.rev exnc, List.rev effc, List.rev conts
-        | {pc_lhs = {ppat_desc=Ppat_effect(p1, p2)}} as c :: rest ->
-            split_cases exnc
-              (({c with pc_lhs = p1}) :: effc) (p2 :: conts) rest
         | c :: rest ->
             split_cases (c :: exnc) effc conts rest
       in

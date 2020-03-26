@@ -40,8 +40,6 @@ type mapper = {
   expr: mapper -> T.expression -> expression;
   extension_constructor: mapper -> T.extension_constructor
                          -> extension_constructor;
-  effect_constructor: mapper -> T.extension_constructor
-                         -> effect_constructor;
   include_declaration: mapper -> T.include_declaration -> include_declaration;
   include_description: mapper -> T.include_description -> include_description;
   label_declaration: mapper -> T.label_declaration -> label_declaration;
@@ -155,8 +153,7 @@ let structure_item sub item =
         Pstr_typext (sub.type_extension sub tyext)
     | Tstr_exception ext ->
         Pstr_exception (sub.extension_constructor sub ext)
-    | Tstr_effect ext ->
-        Pstr_effect (sub.effect_constructor sub ext)
+    | Tstr_effect _ -> failwith "untypast.structure_item: Tstr_effect"
     | Tstr_module mb ->
         Pstr_module (sub.module_binding sub mb)
     | Tstr_recmodule list ->
@@ -260,18 +257,6 @@ let extension_constructor sub ext =
           Pext_decl (constructor_arguments sub args,
                      map_opt (sub.typ sub) ret)
       | Text_rebind (_p, lid) -> Pext_rebind (map_loc sub lid)
-    )
-
-let effect_constructor sub ext =
-  let loc = sub.location sub ext.ext_loc; in
-  let attrs = sub.attributes sub ext.ext_attributes in
-  Te.effect_constructor ~loc ~attrs
-    (map_loc sub ext.ext_name)
-    (match ext.ext_kind with
-      | Text_decl (Cstr_tuple l, Some ret) ->
-          Peff_decl (List.map (sub.typ sub) l, (sub.typ sub) ret)
-      | Text_rebind (_p, lid) -> Peff_rebind (map_loc sub lid)
-      | _ -> failwith "Untypast.effect_constructor"
     )
 
 let pattern sub pat =
@@ -402,7 +387,7 @@ let expression sub exp =
                 None -> list
               | Some exp -> (label, sub.expr sub exp) :: list
           ) list [])
-    | Texp_match (exp, cases, exn_cases, eff_cases, _) ->
+    | Texp_match (exp, cases, exn_cases, _eff_cases, _) ->
       let merged_cases = sub.cases sub cases
         @ (List.map
             (fun c ->
@@ -412,29 +397,10 @@ let expression sub exp =
               in
               { uc with pc_lhs = pat })
             exn_cases)
-        @ List.map
-          (fun c ->
-            let uc = sub.case sub c in
-            let pat = { uc.pc_lhs
-                        (* XXX KC: The 2nd argument of Ppat_effect is wrong *)
-                        with ppat_desc = Ppat_effect (uc.pc_lhs, uc.pc_lhs) }
-            in
-            { uc with pc_lhs = pat })
-          eff_cases
       in
       Pexp_match (sub.expr sub exp, merged_cases)
-    | Texp_try (exp, exn_cases, eff_cases) ->
-        let merged_cases = sub.cases sub exn_cases
-        @ List.map
-          (fun c ->
-            let uc = sub.case sub c in
-            let pat = { uc.pc_lhs
-                        (* XXX KC: The 2nd argument of Ppat_effect is wrong *)
-                        with ppat_desc = Ppat_effect (uc.pc_lhs, uc.pc_lhs) }
-            in
-            { uc with pc_lhs = pat })
-          eff_cases
-        in
+    | Texp_try (exp, exn_cases, _eff_cases) ->
+        let merged_cases = sub.cases sub exn_cases in
         Pexp_try (sub.expr sub exp, merged_cases)
     | Texp_tuple list ->
         Pexp_tuple (List.map (sub.expr sub) list)
@@ -538,8 +504,6 @@ let signature_item sub item =
         Psig_typext (sub.type_extension sub tyext)
     | Tsig_exception ext ->
         Psig_exception (sub.extension_constructor sub ext)
-    | Tsig_effect ext ->
-        Psig_effect (sub.effect_constructor sub ext)
     | Tsig_module md ->
         Psig_module (sub.module_declaration sub md)
     | Tsig_recmodule list ->
@@ -556,6 +520,7 @@ let signature_item sub item =
         Psig_class_type (List.map (sub.class_type_declaration sub) list)
     | Tsig_attribute x ->
         Psig_attribute x
+    | Tsig_effect _ -> failwith "Untypeast.signature_item: Tsig_effect"
   in
   Sig.mk ~loc desc
 
@@ -835,7 +800,6 @@ let default_mapper =
     typ = core_type;
     type_extension = type_extension;
     extension_constructor = extension_constructor;
-    effect_constructor = effect_constructor;
     value_description = value_description;
     pat = pattern;
     expr = expression;

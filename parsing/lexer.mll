@@ -46,7 +46,6 @@ let keyword_table =
     "do", DO;
     "done", DONE;
     "downto", DOWNTO;
-    "effect", EFFECT;
     "else", ELSE;
     "end", END;
     "exception", EXCEPTION;
