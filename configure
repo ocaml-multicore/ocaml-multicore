@@ -673,6 +673,7 @@ CFLAGS
 LIBTOOL
 ac_ct_LD
 LD
+WINDOWS_UNICODE_MODE
 PARTIALLD
 target_os
 target_vendor
@@ -867,6 +868,7 @@ target_alias
 AS
 ASPP
 PARTIALLD
+WINDOWS_UNICODE_MODE
 CC
 CFLAGS
 LDFLAGS
@@ -1560,6 +1562,8 @@ Some influential environment variables:
   AS          which assembler to use
   ASPP        which assembler (with preprocessor) to use
   PARTIALLD   how to build partial (relocatable) object files
+  WINDOWS_UNICODE_MODE
+              how to handle Unicode under Windows: ansi, compatible
   CC          C compiler command
   CFLAGS      C compiler flags
   LDFLAGS     linker flags, e.g. -L<lib dir> if you have libraries in a
@@ -2966,7 +2970,7 @@ case $host in #(
   syslib='-l$(1)' ;;
 esac
 
-# Environment variables that are taken into acocunt
+# Environment variables that are taken into account
 
 
 
@@ -3140,6 +3144,8 @@ fi
 if test "${with_reserved_header_bits+set}" = set; then :
   withval=$with_reserved_header_bits;
 fi
+
+
 
 
 # There are two configure-time string safety options,
@@ -3316,6 +3322,11 @@ esac
   fi
 fi
 
+# libtool expects host_os=mingw for native Windows
+old_host_os=$host_os
+if test x"$host_os" = "xwindows"; then :
+  host_os=mingw
+fi
 case `pwd` in
   *\ * | *\	*)
     { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: Libtool does not cope well with whitespace in \`pwd\`" >&5
@@ -11122,7 +11133,7 @@ fi
   # before this can be enabled.
   hardcode_into_libs=yes
 
-  # Ideally, we could use ldconfig to report *all* directores which are
+  # Ideally, we could use ldconfig to report *all* directories which are
   # searched for libraries, however this is still not possible.  Aside from not
   # being certain /sbin/ldconfig is available, command
   # 'ldconfig -N -X -v | grep ^/' on 64bit Fedora does not report /usr/lib64,
@@ -12161,6 +12172,7 @@ CC=$lt_save_CC
 # Only expand once:
 
 
+host_os=$old_host_os
 
 # Extracting information from libtool's configuration
 if test -n "$RANLIB" ; then :
@@ -12304,7 +12316,6 @@ esac
 case $host in #(
   *-*-mingw32|*-pc-windows) :
     unix_or_win32="win32"
-    exeext=".exe"
     unixlib="win32unix"
     graphlib="win32graph"
     cc_profile='' ;; #(
@@ -12313,6 +12324,12 @@ case $host in #(
   unixlib="unix"
   graphlib="graph"
   cc_profile='-pg' ;;
+esac
+case $host in #(
+  *-*-cygwin*|*-*-mingw32|*-pc-windows) :
+    exeext=".exe" ;; #(
+  *) :
+    exeext='' ;;
 esac
 
 otherlibraries="dynlink"
@@ -12515,6 +12532,16 @@ case $host in #(
 esac
 
 # Adjust according to target
+
+# On Windows we do not take $enable_shared because it does not seem
+# to work. This should be better understood later
+#AS_CASE([$target],
+#  [*-pc-windows],
+#    [enable_shared=yes])
+
+if test x"$enable_shared" = "xno"; then :
+  with_sharedlibs=false
+fi
 
 case $CC,$host in #(
   *,*-*-darwin*) :
@@ -13262,7 +13289,7 @@ $as_echo "$ac_cv_c_bigendian" >&6; }
 
      ;; #(
    *)
-     as_fn_error $? "could not determine endiannes." "$LINENO" 5 ;;
+     as_fn_error $? "could not determine endianness." "$LINENO" 5 ;;
  esac
 
 
@@ -13368,6 +13395,18 @@ if test x"$enable_shared" != "xno"; then :
     mksharedlib="$CC -shared -flat_namespace -undefined suppress \
                    -Wl,-no_compact_unwind"
       shared_libraries_supported=true ;; #(
+  *-*-mingw32) :
+    mksharedlib='$(FLEXLINK)'
+      mkmaindll='$(FLEXLINK) -maindll'
+      shared_libraries_supported=$with_sharedlibs ;; #(
+  *-pc-windows) :
+    mksharedlib='$(FLEXLINK)'
+      mkmaindll='$(FLEXLINK) -maindll'
+      shared_libraries_supported=$with_sharedlibs ;; #(
+  *-*-cygwin*) :
+    mksharedlib="$flexlink"
+      mkmaindll="$flexlink -maindll"
+      shared_libraries_supported=true ;; #(
   *-*-linux*|*-*-freebsd[3-9]*|*-*-freebsd[1-9][0-9]*\
     |*-*-openbsd*|*-*-netbsd*|*-*-dragonfly*|*-*-gnu*|*-*-haiku*) :
     sharedlib_cflags="-fPIC"
@@ -13382,25 +13421,6 @@ if test x"$enable_shared" != "xno"; then :
 esac
 fi
 
-# On Windows we do not take $enable_shared because it does not seem
-# to work. This should be better understood later
-case $host in #(
-  *-*-cygwin*) :
-    mksharedlib="$flexlink"
-    mkmaindll="$flexlink -maindll"
-    shared_libraries_supported=$with_sharedlibs ;; #(
-  *-*-mingw32) :
-    mksharedlib='$(FLEXLINK)'
-    mkmaindll='$(FLEXLINK) -maindll'
-    shared_libraries_supported=$with_sharedlibs ;; #(
-  *-pc-windows) :
-    mksharedlib='$(FLEXLINK)'
-    mkmaindll='$(FLEXLINK) -maindll'
-    shared_libraries_supported=$with_sharedlibs ;; #(
-  *) :
-     ;;
-esac
-
 if test -z "$mkmaindll"; then :
   mkmaindll=$mksharedlib
 fi
@@ -13409,7 +13429,7 @@ fi
 
 natdynlink=false
 
-if test x"$enable_shared" != "no"; then :
+if test x"$enable_shared" != "xno"; then :
   case "$host" in #(
   *-*-cygwin*) :
     natdynlink=true ;; #(
@@ -14680,7 +14700,8 @@ fi
 esac
 
 ## shared library support
-case $host in #(
+if $shared_libraries_supported; then :
+  case $host in #(
   *-*-mingw32|*-pc-windows) :
     supports_shared_libraries=$shared_libraries_supported; dllibs="" ;; #(
   *) :
@@ -14733,6 +14754,9 @@ fi
 fi
  ;;
 esac
+else
+  supports_shared_libraries=false
+fi
 
 if $supports_shared_libraries; then :
   { $as_echo "$as_me:${as_lineno-$LINENO}: Dynamic loading of shared libraries is supported." >&5
@@ -16900,13 +16924,14 @@ else
   ocamldoc=ocamldoc
 fi
 
-if test x"$enable_flambda" = "xyes"
+if test x"$enable_flambda" = "xyes"; then :
   flambda=true
   if test x"$enable_flambda_invariants" = "xyes"; then :
   flambda_invariants=true
 else
   flambda_invariants=false
-fi; then :
+fi
+else
   flambda=false
   flambda_invariants=false
 fi
@@ -16970,7 +16995,14 @@ fi
 case $host in #(
   *-*-mingw32|*-pc-windows) :
     max_testsuite_dir_retries=1
+    case $WINDOWS_UNICODE_MODE in #(
+  ansi) :
+    windows_unicode=0 ;; #(
+  compatible|"") :
     windows_unicode=1 ;; #(
+  *) :
+    as_fn_error $? "unexpected windows unicode mode" "$LINENO" 5 ;;
+esac ;; #(
   *) :
     max_testsuite_dir_retries=0
   windows_unicode=0 ;;
