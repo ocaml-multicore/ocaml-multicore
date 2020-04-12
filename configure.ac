@@ -420,15 +420,8 @@ AS_CASE([$host],
 # let the CPP variable untouched, except for the MSVC port where we set it
 # manually to make sure the backward compatibility is preserved
 AS_CASE([$host],
-#<<<<<<< HEAD
-#  [*-pc-windows], [CPP="$CC -nologo -EP"],
-#  [CPP=$DIRECT_CPP])
-#  TODO: why can we not use $DIRECT_CPP in multicore, fix this?
-#  [CPP="$CC -E -P"])
-#=======
   [*-pc-windows],
     [CPP="$CC -nologo -EP"])
-#>>>>>>> b23e894542ff396094cd5168e70d66233418415a
 
 # Libraries to build depending on the host
 
