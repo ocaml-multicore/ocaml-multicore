@@ -104,7 +104,6 @@ AC_SUBST([oc_cflags])
 AC_SUBST([oc_cppflags])
 AC_SUBST([oc_ldflags])
 AC_SUBST([bytecclibs])
-AC_SUBST([dllibs])
 AC_SUBST([nativecclibs])
 AC_SUBST([ocamlc_cflags])
 AC_SUBST([ocamlc_cppflags])
@@ -212,11 +211,8 @@ AC_ARG_ENABLE([debugger],
   [],
   [enable_debugger=auto])
 
-AC_ARG_WITH([dllibs],
-  [AS_HELP_STRING([--with-dllibs=LIBS],
-    [use LIBS (in addition to dl) to load dynamic libs @<:@default=""@:>@])],
-  [otherdllibs=$withval],
-  [otherdllibs=""])
+AC_ARG_VAR([DLLIBS],
+  [which libraries to use (in addition to -ldl) to load dynamic libs])
 
 AC_ARG_ENABLE([instrumented-runtime],
   [AS_HELP_STRING([--enable-instrumented-runtime],
@@ -233,12 +229,14 @@ AC_ARG_ENABLE([systhreads],
     [disable the Win32/POSIX threads library])])
 
 AC_ARG_WITH([libunwind],
-  [AS_HELP_STRING([--with-libunwind],
-    [location of the libunwind package])])
+  [AS_HELP_STRING([--without-libunwind],
+    [disable libunwind support for Spacetime profiling])])
 
-AC_ARG_WITH([libunwind-include-dir],
-  [AS_HELP_STRING([--with-libunwind-include-dir],
-    [location of header files for libunwind])])
+AC_ARG_VAR([LIBUNWIND_INCLUDE_DIR],
+  [location of header files for libunwind])
+
+AC_ARG_VAR([LIBUNWIND_LIB_DIR],
+  [location of library files for libunwind])
 
 AC_ARG_ENABLE([graph-lib],
   [AS_HELP_STRING([--disable-graph-lib],
@@ -309,16 +307,24 @@ AC_ARG_WITH([target-bindir],
   [AS_HELP_STRING([--with-target-bindir],
     [location of binary programs on target system])])
 
-AC_ARG_WITH([reserved-header-bits],
-  [AS_HELP_STRING([--with-reserved-header-bits=BITS],
-    [reserve BITS bits in block headers for profiling info])])
+AC_ARG_ENABLE([reserved-header-bits],
+  [AS_HELP_STRING([--enable-reserved-header-bits=BITS],
+  [reserve BITS (between 0 and 31) bits in block headers for profiling info])],
+  [AS_CASE([$enable_reserved_header_bits],
+    [0],
+      [with_profinfo=false
+      profinfo_width=0],
+    [[[1-9]]|1[[0-9]]|2[[0-1]]],
+      [with_profinfo=true
+      profinfo_width="$enable_reserved_header_bits"],
+    [AC_MSG_ERROR([invalid argument to --enable-reserved-header-bits])])])
 
 AC_ARG_VAR([WINDOWS_UNICODE_MODE],
   [how to handle Unicode under Windows: ansi, compatible])
 
 # There are two configure-time string safety options,
 # --(enable|disable)-force-safe-string and
-# --with-default-string=safe|unsafe that
+# DEFAULT_STRING=safe|unsafe that
 # interact with a compile-time (un)safe-string option.
 #
 # If --enable-force-safe-string is set at configure time, then the compiler
@@ -330,23 +336,21 @@ AC_ARG_VAR([WINDOWS_UNICODE_MODE],
 # If --disable-force-safe-string is set at configure-time, the compiler
 # will use the compile-time (un)safe-string option to decide whether
 # string and bytes are compatible on a per-file basis. The
-# configure-time options --with-default-string=safe|unsafe decides which
+# configuration variable DEFAULT_STRING=safe|unsafe decides which
 # setting will be chosen by default, if no compile-time option is
 # explicitly passed.
 #
 # The configure-time behavior of OCaml 4.05 and older was equivalent
-# to --disable-force-safe-string --with-default-string=unsafe. OCaml 4.06
-# and later uses --disable-force-safe-string --with-default-string=safe. We
+# to --disable-force-safe-string DEFAULT_STRING=unsafe. OCaml 4.06
+# and later use --disable-force-safe-string DEFAULT_STRING=safe. We
 # expect --enable-force-safe-string to become the default in the future.
 
 AC_ARG_ENABLE([force-safe-string],
   [AS_HELP_STRING([--enable-force-safe-string],
     [force strings to be safe])])
 
-AC_ARG_WITH([default-string],
-  [AS_HELP_STRING([--with-default-string=mode],
-    [whether strings should be safe or unsafe by default
-      @<:@default=safe@:>@])])
+AC_ARG_VAR([DEFAULT_STRING],
+  [whether strings should be safe (default) or unsafe])
 
 AC_ARG_ENABLE([flat-float-array],
   [AS_HELP_STRING([--disable-flat-float-array],
@@ -555,6 +559,11 @@ AS_CASE([$host],
     [common_cflags="-O"])])
 
 internal_cppflags="-DCAML_NAME_SPACE $internal_cppflags"
+
+# Enable SSE2 on x86 mingw to avoid using 80-bit registers.
+AS_CASE([$host],
+  [i686-*-mingw32],
+    [internal_cflags="$internal_cflags -mfpmath=sse -msse2"])
 
 # Use 64-bit file offset if possible
 # See also AC_SYS_LARGEFILE
@@ -1007,6 +1016,13 @@ AS_CASE(["$arch,$system"],
       [clang-*], [default_aspp="${toolpref}clang -c -Wno-trigraphs"],
       [default_aspp="${toolpref}gcc -c"])])
 
+AS_IF([test "$with_pic"],
+  [fpic=true
+  AC_DEFINE([CAML_WITH_FPIC])
+  internal_cflags="$internal_cflags $sharedlib_cflags"
+  default_aspp="$default_aspp $sharedlib_cflags"],
+  [fpic=false])
+
 AS_IF([test -z "$AS"], [AS="$default_as"])
 
 AS_IF([test -z "$ASPP"], [ASPP="$default_aspp"])
@@ -1350,11 +1366,11 @@ AS_CASE([$host],
 AS_IF([$shared_libraries_supported],
   [AS_CASE([$host],
     [*-*-mingw32|*-pc-windows],
-      [supports_shared_libraries=$shared_libraries_supported; dllibs=""],
+      [supports_shared_libraries=$shared_libraries_supported; DLLIBS=""],
     [AC_CHECK_FUNC([dlopen],
-      [supports_shared_libraries=true dllibs=""],
+      [supports_shared_libraries=true DLLIBS=""],
       [AC_CHECK_LIB([dl], [dlopen],
-        [supports_shared_libraries=true dllibs="-ldl $otherdllibs"],
+        [supports_shared_libraries=true DLLIBS="-ldl $DLLIBS"],
         [supports_shared_libraries=false])])])],
   [supports_shared_libraries=false])
 
@@ -1644,11 +1660,52 @@ AS_IF([test x"$enable_spacetime" != "xyes" ],
     AC_MSG_CHECKING([whether to use libunwind])
     AS_IF([test x"$with_libunwind" = "xno"],
       [AC_MSG_RESULT([disabled])],
-      [AC_CHECK_HEADER([libunwind.h],
-        [AC_DEFINE([HAS_LIBUNWIND])
-        AC_MSG_RESULT([yes])],
-        [AC_MSG_RESULT([no])])
-      ])
+      [AS_IF([test x"$with_libunwind" = "x"],
+        [libunwind_requested=false
+        AC_MSG_RESULT([if available])],
+        [libunwind_requested=true
+        AC_MSG_RESULT([requested])
+        AS_IF([test x"$with_libunwind" != "xyes"],
+          [AS_IF([test x"$LIBUNWIND_INCLUDE_DIR" = "x"],
+            [LIBUNWIND_INCLUDE_DIR="$with_libunwind/include"])
+          AS_IF([test x"$LIBUNWIND_LIB_DIR" = "x"],
+            [LIBUNWIND_LIB_DIR="$with_libunwind/lib"])
+          ])
+        ])
+      AS_IF([test "$system" = "macosx"],
+        [AS_IF([test x"$LIBUNWIND_INCLUDE_DIR" != x -o \
+                     x"$LIBUNWIND_LIB_DIR" != x],
+          [AC_MSG_WARN(m4_normalize([
+            On MacOSX, specifying paths for libunwind headers or libraries
+            is strongly discouraged.  It is recommended to rely on the
+            defaults provided by the configure script
+          ]))])])
+
+      AS_IF([test x"$LIBUNWIND_INCLUDE_DIR" != x],
+        [libunwind_include_flags="-I$LIBUNWIND_INCLUDE_DIR"],
+        [libunwind_include_flags=""])
+
+      AS_CASE(["$system"],
+        ["macosx"], [libunwind_link_flags="-framework System"],
+        [libunwind_link_flags="-lunwind -lunwind-x86_64"])
+
+      AS_IF([test x"$LIBUNWIND_LIB_DIR" != x],
+        [libunwind_link_flags="-L$LIBUNWIND_LIB_DIR $libunwind_link_flags"])
+
+      OCAML_CHECK_LIBUNWIND
+
+      AS_IF([$libunwind_requested && ! $libunwind_available],
+        [AC_MSG_ERROR([libunwind was requested but can not be found])])
+
+        # We need unwinding information at runtime, but since we use
+        # -no_compact_unwind, we also need -keep_dwarf_unwind otherwise
+        # the OS X linker will chuck away the DWARF-like (.eh_frame)
+        # information.  (Older versions of OS X don't provide this.)
+
+        AS_IF([$libunwind_available && test x"$system" = "xmacosx"],
+          [extra_flags="-Wl,-keep_dwarf_unwind"
+          mkexe="$mkexe $extra_flags"
+          mksharedlib="$mksharedlib $extra_flags"])])
     ],
     [AS_IF([test x"$enable_spacetime" = "xyes"],
       [AC_MSG_RESULT([requested but not supported])
@@ -1657,19 +1714,8 @@ AS_IF([test x"$enable_spacetime" != "xyes" ],
     ])
   ])
 
-
-
 AC_DEFINE_UNQUOTED([PROFINFO_WIDTH], [$profinfo_width])
 AS_IF([$profinfo], [AC_DEFINE([WITH_PROFINFO])])
-
-## PIC
-
-AS_IF([test "$with_pic"],
-  [fpic=true
-  AC_DEFINE([CAML_WITH_FPIC])
-  common_cflags="$common_cflags $sharedlib_cflags"
-  aspp="$aspp $sharedlib_cflags"],
-  [fpic=false])
 
 AS_IF([test x"$enable_installing_bytecode_programs" = "xno"],
   [install_bytecode_programs=false],
@@ -1705,7 +1751,7 @@ AS_IF([test x"$enable_force_safe_string" = "xyes"],
   force_safe_string=true],
   [force_safe_string=false])
 
-AS_IF([test x"$with_default_string" = "xunsafe"],
+AS_IF([test x"$DEFAULT_STRING" = "xunsafe"],
   [default_safe_string=false],
   [default_safe_string=true])
 
@@ -1724,8 +1770,8 @@ AS_CASE([$host],
   [*-pc-windows],
     [bytecclibs="advapi32.lib ws2_32.lib version.lib"
     nativecclibs="advapi32.lib ws2_32.lib version.lib"],
-  [bytecclibs="$cclibs $dllibs $pthread_link $instrumented_runtime_libs"
-  nativecclibs="$cclibs $dllibs $pthread_link"])
+  [bytecclibs="$cclibs $DLLIBS $pthread_link $instrumented_runtime_libs"
+  nativecclibs="$cclibs $DLLIBS $pthread_link"])
 
 AS_IF([test x"$libdir" = x'${exec_prefix}/lib'],
   [libdir="$libdir"/ocaml])
