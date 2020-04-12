@@ -700,6 +700,7 @@ CFI_STARTPROC
         LOAD_TL_VAR(caml_system_exnptr_offset, TRAP_OFF)
     /* Cut the stack at current trap handler */
         RESTORE_EXN_HANDLER_SYS
+
         br      TMP
 CFI_ENDPROC
         .type   caml_raise_exception, %function

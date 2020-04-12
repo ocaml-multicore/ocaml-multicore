@@ -48,9 +48,10 @@ OCaml 4.08.0
 - GPR#1909: unsharing pattern types
   (Thomas Refis, with help from Leo White, review by Jacques Garrigue)
 
-- GPR#1942: simplification of the static check for recursive definitions
+- GPR#1942, GPR#2244: simplification of the static check
+  for recursive definitions
   (Alban Reynaud and Gabriel Scherer,
-   review by Jeremy Yallop and Armaël Guéneau)
+   review by Jeremy Yallop, Armaël Guéneau and Damien Doligez)
 
 * MPR#7814, GPR#2041, GPR#2235: allow modules from include directories
   to shadow other ones, even in the toplevel
@@ -164,7 +165,7 @@ OCaml 4.08.0
   min_max_num to module Float.
   (Christophe Troestler, review by Alain Frish, Xavier Clerc and Daniel Bünzli)
 
-- GPR#1354: Add fma support to Float module.
+- GPR#1354, GPR#2177: Add fma support to Float module.
   (Laurent Thévenoux, review by Alain Frisch, Jacques-Henri Jourdan,
   Xavier Leroy)
 
@@ -204,6 +205,11 @@ OCaml 4.08.0
 - GPR#1525: Make function set_max_indent respect documentation
   (Pierre Weis, Richard Bonichon, review by Florian Angeletti)
 
+- GPR#2202: Correct Hashtbl.MakeSeeded.{add_seq,replace_seq,of_seq} to use
+  functor hash function instead of default hash function. Hashtbl.Make.of_seq
+  shouldn't create randomized hash tables.
+  (David Allsopp, review by Alain Frisch)
+
 ### Other libraries:
 
 * GPR#2104, GPR#2211, PR#4127, PR#7709: Fix Thread.sigmask. When
@@ -220,8 +226,8 @@ OCaml 4.08.0
 - GPR#2038: Deprecate vm threads
   (Jérémie Dimino)
 
-* PR#4208, PR#4229, PR#4839, PR#6462, PR#6957, PR#6950, GPR#1063, GPR#2176:
-  Make (nat)dynlink sound
+* PR#4208, PR#4229, PR#4839, PR#6462, PR#6957, PR#6950, GPR#1063, GPR#2176,
+  GPR#2297: Make (nat)dynlink sound.
   (Mark Shinwell, Leo White, Nicolás Ojeda Bär, Pierre Chambart)
 
 - GPR#2263: Delete the deprecated Bigarray.*.map_file functions in
@@ -348,6 +354,9 @@ OCaml 4.08.0
   already existed, but used to be triggered even when e was not an application.)
   (Nicolás Ojeda Bär, review by Alain Frisch and Jacques Garrigue)
 
+- GPR#2317: type_let: be more careful generalizing parts of the pattern
+  (Thomas Refis and Leo White, review by Jacques Garrigue)
+
 ### Code generation and optimizations:
 
 - MPR#7725, GPR#1754: improve AFL instrumentation for objects and lazy values.
@@ -364,7 +373,7 @@ OCaml 4.08.0
 - GPR#1917: comballoc: ensure object allocation order is preserved
   (Stephen Dolan)
 
-- MPR#6242, GPR#2143: optimize some local functions
+- MPR#6242, GPR#2143, MPR#8558, GPR#8559: optimize some local functions
   (Alain Frisch, review by Gabriel Scherer)
 
 - GPR#2239: Fix match miscompilation with flambda
@@ -401,6 +410,15 @@ OCaml 4.08.0
 - GPR#2079: Avoid page table lookup in Pervasives.compare with
   no-naked-pointers
   (Sam Goldman, review by Gabriel Scherer, David Allsopp, Stephen Dolan)
+
+- #7829, #8585: Fix pointer comparisons in freelist.c (for 32-bit platforms)
+  (David Allsopp and Damien Doligez)
+
+- #8567, #8569: on ARM64, use 32-bit loads to access caml_backtrace_active
+  (Xavier Leroy, review by Mark Shinwell and Greta Yorsh)
+
+- #8568: Fix a memory leak in mmapped bigarrays
+  (Damien Doligez, review by Xavier Leroy and Jérémie Dimino)
 
 ### Tools
 
@@ -444,9 +462,16 @@ OCaml 4.08.0
 
 ### Manual and documentation:
 
+- MPR#7548: printf example in the tutorial part of the manual
+ (Kostikova Oxana, rewiew by Gabriel Scherer, Florian Angeletti,
+ Marcello Seri and Armaël Guéneau)
+
 - MPR#7546, GPR#2020: preambles and introduction for compiler-libs.
   (Florian Angeletti, review by Daniel Bünzli, Perry E. Metzger
   and Gabriel Scherer)
+
+- MPR#7547, GPR#2273: Tutorial on Lazy expressions and patterns in OCaml Manual
+  (Ulugbek Abdullaev, review by Florian Angeletti and Gabriel Scherer)
 
 - MPR#7720, GPR#1596, precise the documentation
   of the maximum indentation limit in Format.
@@ -488,6 +513,9 @@ OCaml 4.08.0
 
 - GPR#2187: document "exception A | pat" patterns
   (Florian Angeletti, review by Perry E. Metzger and Jeremy Yallop)
+
+- GPR#8508: refresh \moduleref macro
+  (Florian Angeletti, review by Gabriel Scherer)
 
 ### Compiler distribution build system:
 
@@ -552,6 +580,24 @@ OCaml 4.08.0
 - GPR#2266: ensure Cygwin ports configure with `EXE=.exe`, or the compiler is
   unable to find the camlheader files (subtle regression of GPR#2139/2041)
   (David Allsopp, report and review by Sébastien Hinderer)
+
+- MPR#7919, GPR#2311: Fix assembler detection in configure
+  (Sébastien Hinderer, review by David Allsopp)
+
+- GPR#2295: Restore support for bytecode target XLC/AIX/Power
+  (Konstantin Romanov, review by Sébastien Hinderer and David Allsopp)
+
+- GPR#8528: get rid of the direct call to the C preprocessor in the testsuite
+  (Sébastien Hinderer, review by David Allsopp)
+
+- Issue #7938, GPR #8532: Fix alignment detection for ints on 32-bits platforms
+  (Sébastien Hinderer, review by Xavier Leroy)
+
+* GPR#8533: Remove some unused configure tests
+  (Stephen Dolan, review by David Allsopp and Sébastien Hinderer)
+
+- GPR#2207,#8604: Add opam files to allow pinning
+  (Leo White, Greta Yorsh, review by Gabriel Radanne)
 
 ### Internal/compiler-libs changes:
 
@@ -631,8 +677,9 @@ OCaml 4.08.0
   `Location.report_error` is removed, use `Location.print_report` instead
   (Armaël Guéneau, review by Thomas Refis)
 
-- MPR#7835, GPR#1980: separate scope from stamp in idents
-  (Thomas Refis, review by Leo White)
+- MPR#7835, GPR#1980, GPR#8548, GPR#8586: separate scope from stamp in idents
+  and explicitly rescope idents when substituting signatures.
+  (Thomas Refis, review by Jacques Garrigue and Leo White)
 
 - GPR#1996: expose Pprintast.longident to help compiler-libs users print
   Longident.t values.
@@ -810,6 +857,10 @@ OCaml 4.08.0
 - MPR#7929, GPR#2261: Subst.signature: call cleanup_types exactly once
   (Thomas Refis, review by Gabriel Scherer and Jacques Garrigue,
   report by Daniel Bünzli and Jon Ludlam)
+
+- #8550, #8552: Soundness issue with class generalization
+  (Jacques Garrigue, review by Leo White and Thomas Refis,
+  report by Jeremy Yallop)
 
 OCaml 4.07.1 (4 October 2018)
 -----------------------------

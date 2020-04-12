@@ -2016,7 +2016,7 @@ let list_labels env ty =
 (* Check that all univars are safe in a type *)
 let check_univars env expans kind exp ty_expected vars =
   if expans && not (is_nonexpansive exp) then
-    generalize_expansive env exp.exp_type;
+    lower_contravariant env exp.exp_type;
   (* need to expand twice? cf. Ctype.unify2 *)
   let vars = List.map (expand_head env) vars in
   let vars = List.map (expand_head env) vars in
@@ -2510,7 +2510,7 @@ and type_expect_
       begin_def ();
       let arg = type_exp env sarg in
       end_def ();
-      if not (is_nonexpansive arg) then generalize_expansive env arg.exp_type;
+      if not (is_nonexpansive arg) then lower_contravariant env arg.exp_type;
       generalize arg.exp_type;
       let rec split_cases valc effc conts = function
         | [] -> List.rev valc, List.rev effc, List.rev conts
@@ -3892,7 +3892,7 @@ and type_label_exp create env loc ty_expected
       begin_def ();
       let arg = type_exp env sarg in
       end_def ();
-      generalize_expansive env arg.exp_type;
+      lower_contravariant env arg.exp_type;
       unify_exp env arg ty_arg;
       check_univars env false "field value" arg label.lbl_arg vars;
       arg
@@ -4615,12 +4615,14 @@ and type_let
   let pat_list =
     if !Clflags.principal then begin
       end_def ();
-      List.map
-        (fun pat ->
-          iter_pattern (fun pat -> generalize_structure pat.pat_type) pat;
-          {pat with pat_type = instance pat.pat_type})
-        pat_list
-    end else pat_list in
+      iter_pattern_variables_type generalize_structure pvs;
+      List.map (fun pat ->
+        generalize_structure pat.pat_type;
+        {pat with pat_type = instance pat.pat_type}
+      ) pat_list
+    end else
+      pat_list
+  in
   (* Only bind pattern variables after generalizing *)
   List.iter (fun f -> f()) force;
   let sexp_is_fun { pvb_expr = sexp; _ } =
@@ -4762,15 +4764,26 @@ and type_let
     )
     pat_list
     (List.map2 (fun (attrs, _) e -> attrs, e) spatl exp_list);
+  let pvs = List.map (fun pv -> { pv with pv_type = instance pv.pv_type}) pvs in
   end_def();
   List.iter2
     (fun pat exp ->
        if not (is_nonexpansive exp) then
-         iter_pattern (fun pat -> generalize_expansive env pat.pat_type) pat)
+         lower_contravariant env pat.pat_type)
     pat_list exp_list;
-  List.iter
-    (fun pat -> iter_pattern (fun pat -> generalize pat.pat_type) pat)
-    pat_list;
+  iter_pattern_variables_type generalize pvs;
+  (* The next line changes the toplevel experience from:
+     {[
+       let _ = Array.get;;
+       - : '_weak1 array -> int -> '_weak1 = <fun>
+     ]}
+     to:
+     {[
+       let _ = Array.get;;
+       - : 'a array -> int -> 'a = <fun>
+     ]}
+  *)
+  List.iter (fun exp -> generalize exp.exp_type) exp_list;
   let l = List.combine pat_list exp_list in
   let l =
     List.map2
@@ -4864,7 +4877,7 @@ let type_expression env sexp =
   begin_def();
   let exp = type_exp env sexp in
   end_def();
-  if not (is_nonexpansive exp) then generalize_expansive env exp.exp_type;
+  if not (is_nonexpansive exp) then lower_contravariant env exp.exp_type;
   generalize exp.exp_type;
   match sexp.pexp_desc with
     Pexp_ident lid ->

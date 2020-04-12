@@ -73,7 +73,7 @@ AS_HAS_DEBUG_PREFIX_MAP=@as_has_debug_prefix_map@
 # our own symbols):
 OC_LDFLAGS=@oc_ldflags@
 
-### How to invoke the C preprocessor
+### How to invoke the C preprocessor through the C compiler
 CPP=@CPP@
 
 ### How to invoke ranlib

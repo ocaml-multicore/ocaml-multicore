@@ -27,6 +27,15 @@ type pty = { pv : 'a. 'a list; }
 |}];;
 
 
+type id = { id : 'a. 'a -> 'a };;
+let id x = x;;
+let {id} = id { id };;
+[%%expect {|
+type id = { id : 'a. 'a -> 'a; }
+val id : 'a -> 'a = <fun>
+val id : 'a -> 'a = <fun>
+|}];;
+
 let px = {pv = []};;
 [%%expect {|
 val px : pty = {pv = []}
@@ -1713,4 +1722,16 @@ module M :
       val h : 'a -> 'a
       val i : 'a -> 'a
     end
+|}]
+
+(* #8550 *)
+class ['a] r = let r : 'a = ref [] in object method get = r end;;
+[%%expect{|
+Line 1, characters 0-63:
+1 | class ['a] r = let r : 'a = ref [] in object method get = r end;;
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error: The type of this class,
+       class ['a] r :
+         object constraint 'a = '_weak2 list ref method get : 'a end,
+       contains type variables that cannot be generalized
 |}]

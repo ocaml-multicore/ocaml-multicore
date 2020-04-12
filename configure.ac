@@ -73,6 +73,7 @@ AC_SUBST([CC])
 # Note: This is present for the flexdll bootstrap where it exposed as the old
 # TOOLPREF variable. It would be better if flexdll where updated to require
 # WINDRES instead.
+AC_SUBST([DIRECT_CPP])
 AC_SUBST([ac_tool_prefix])
 AC_SUBST([exeext])
 AC_SUBST([OBJEXT])
@@ -407,14 +408,27 @@ AS_CASE([$host],
     mklib="rm -f \$(1) && ${AR} rc \$(1) \$(2) && ${RANLIB} \$(1)"
   ])
 
-# C preprocessor: we do not rely on AC_PROG_CPP because it returns
-# 'fcc -E' while we really need cpp
-AC_CHECK_TOOL([DIRECT_CPP],[cpp])
+# Determine how to call the C preprocessor directly.
+# Most of the time, calling the C preprocessor through the C compiler is
+# desirable and even important.
+# In some cases, though, we want to use the C preprocessor only to
+# expand macros. In such cases, it is much more convenient to be able
+# to invoke it directly rather than through the C compiler, for instance
+# because, when invoked directly, the C preprocessor does not require
+# to be invoked on a file with a '.c' extension
+# We thus figure out how to invoke the C preprocessor directly but
+# let the CPP variable untouched, except for the MSVC port where we set it
+# manually to make sure the backward compatibility is preserved
 AS_CASE([$host],
-  [*-pc-windows], [CPP="$CC -nologo -EP"],
+#<<<<<<< HEAD
+#  [*-pc-windows], [CPP="$CC -nologo -EP"],
 #  [CPP=$DIRECT_CPP])
 #  TODO: why can we not use $DIRECT_CPP in multicore, fix this?
-  [CPP="$CC -E -P"])
+#  [CPP="$CC -E -P"])
+#=======
+  [*-pc-windows],
+    [CPP="$CC -nologo -EP"])
+#>>>>>>> b23e894542ff396094cd5168e70d66233418415a
 
 # Libraries to build depending on the host
 
@@ -478,6 +492,8 @@ OCAML_CC_VENDOR
 ## Determine which flags to use for the C compiler
 
 AS_CASE([$ocaml_cv_cc_vendor],
+  [xlc-*],
+    [outputobj='-o $(EMPTY)'; gcc_warnings="-qflag=i:i"], # all warnings enabled
   [msvc-*],
     [outputobj=-Fo; CPP="cl -nologo -EP"; gcc_warnings=""],
   [outputobj='-o $(EMPTY)'; AS_CASE([AC_PACKAGE_VERSION],
@@ -540,6 +556,9 @@ AS_CASE([$host],
       internal_cppflags='-DUNICODE -D_UNICODE'
       internal_cppflags="$internal_cppflags -DWINDOWS_UNICODE="
       internal_cppflags="${internal_cppflags}\$(WINDOWS_UNICODE)"],
+    [xlc-*],
+      [common_cflags="-O5 -qtune=balanced -qnoipa -qinline $CFLAGS";
+      internal_cflags="$gcc_warnings"],
     [common_cflags="-O"])])
 
 internal_cppflags="-DCAML_NAME_SPACE $internal_cppflags"
@@ -620,7 +639,11 @@ AS_CASE([$CC,$host],
       iflexdir="-I\"$flexdir\""
       mkexedebugflag="-link -g"])],
   [*,x86_64-*-linux*],
-    AC_DEFINE([HAS_ARCH_CODE32], [1])
+    AC_DEFINE([HAS_ARCH_CODE32], [1]),
+  [xlc*,powerpc-ibm-aix*],
+    [mkexe="$mkexe "
+     oc_ldflags="-brtl -bexpfull"
+    AC_DEFINE([HAS_ARCH_CODE32], [1])],
 )
 
 
@@ -700,14 +723,13 @@ AC_CHECK_ALIGNOF([double])
 AC_CHECK_ALIGNOF([long])
 
 AS_IF([! $arch64],
-  [AS_IF([test x"$ac_cv_alignof_double" = "x8" ],
-    [AS_IF([test "$target_cpu" != "i686" ],
-      [AC_DEFINE([ARCH_ALIGN_DOUBLE], [1])])])
-  AS_IF([test x"$ac_cv_alignof_long" = "x8" ],
-    [AC_DEFINE([ARCH_ALIGN_INT64], [1])]
-  )
-  ]
-)
+  [AS_CASE([$target_cpu],
+    [i686], [],
+    [AS_IF([test "$ac_cv_alignof_double" -gt 4],
+      [AC_DEFINE([ARCH_ALIGN_DOUBLE], [1])])
+    AS_IF([test "$ac_cv_alignof_long" -gt 4],
+      [AC_DEFINE([ARCH_ALIGN_LONG], [1])])
+    ])])
 
 # Shared library support
 
@@ -736,6 +758,11 @@ AS_IF([test x"$enable_shared" != "xno"],
       [mksharedlib="$flexlink"
       mkmaindll="$flexlink -maindll"
       shared_libraries_supported=true],
+    [powerpc-ibm-aix*],
+      [AS_CASE([$CC],
+               [xlc*],
+               [mksharedlib="$CC -qmkshrobj -G"
+                shared_libraries_supported=true])],
     [[*-*-linux*|*-*-freebsd[3-9]*|*-*-freebsd[1-9][0-9]*\
     |*-*-openbsd*|*-*-netbsd*|*-*-dragonfly*|*-*-gnu*|*-*-haiku*]],
       [sharedlib_cflags="-fPIC"
@@ -946,7 +973,7 @@ AS_CASE(["$arch,$system"],
   [amd64,win64],
     [default_as="ml64 -nologo -Cp -c -Fo"],
   [amd64,macosx],
-    [AS_CASE([$ccfamily],
+    [AS_CASE([$ocaml_cv_cc_vendor],
       [clang-*],
         [default_as='clang -arch x86_64 -Wno-trigraphs -c'
         default_aspp='clang -arch x86_64 -Wno-trigraphs -c'],
@@ -983,7 +1010,7 @@ AS_CASE(["$arch,$system"],
     default_aspp="${toolpref}cc -c"],
   [amd64,*|arm,*|arm64,*|i386,*|power,bsd*|power,netbsd],
     [default_as="${toolpref}as"
-    AS_CASE([$ccfamily],
+    AS_CASE([$ocaml_cv_cc_vendor],
       [clang-*], [default_aspp="${toolpref}clang -c -Wno-trigraphs"],
       [default_aspp="${toolpref}gcc -c"])])
 
@@ -1012,7 +1039,9 @@ AS_CASE([$host],
   AS_IF([$has_c99_float_ops],
     [AC_CHECK_FUNC([hypot], [], [has_c99_float_ops=false])])
   AS_IF([$has_c99_float_ops],
-    [AC_CHECK_FUNC([fma], [], [has_c99_float_ops=false])])
+    [AC_CHECK_FUNC([fma], [
+      AS_CASE([$target],[x86_64-*-cygwin],[],[AC_DEFINE([HAS_WORKING_FMA])])],
+      [has_c99_float_ops=false])])
   AS_IF([$has_c99_float_ops],
     [AC_CHECK_FUNC([copysign], [AC_DEFINE([HAS_C99_FLOAT_OPS])])])])
 
@@ -1352,8 +1381,10 @@ AC_CHECK_HEADER([sys/mman.h],
 AC_CHECK_FUNC([pwrite], [AC_DEFINE([HAS_PWRITE])])
 
 ## -fdebug-prefix-map support by the C compiler
-AS_CASE([$host],
-  [*-*-mingw32|*-pc-windows], [cc_has_debug_prefix_map=false],
+AS_CASE([$CC,$host],
+  [*,*-*-mingw32], [cc_has_debug_prefix_map=false],
+  [*,*-pc-windows], [cc_has_debug_prefix_map=false],
+  [xlc*,powerpc-ibm-aix*], [cc_has_debug_prefix_map=false],
   [OCAML_CC_HAS_DEBUG_PREFIX_MAP])
 
 ## Does stat support nanosecond precision
