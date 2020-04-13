@@ -208,6 +208,7 @@ END {
                 printf ("\n");
             }else{
                 printf (" (totals don't add up??)");
+            }
             printf("\n");
             if (skipped != 0){
                 printf("\nList of skipped tests:\n");
