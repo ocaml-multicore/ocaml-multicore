@@ -2004,6 +2004,10 @@ and transl_prim_1 env p arg dbg =
       Cop(Craise (Lambda.Raise_reraise), [transl env arg], dbg)
   | Praise Lambda.Raise_regular ->
       raise_regular dbg (transl env arg)
+  | Pperform ->
+      let cont = make_alloc dbg Obj.cont_tag [int_const 0] in
+      Cop(Capply typ_val, [Cconst_symbol "caml_perform"; transl env arg; cont],
+          dbg)
   (* Integer operations *)
   | Pnegint ->
       Cop(Csubi, [Cconst_int 2; transl env arg], dbg)
@@ -2589,6 +2593,21 @@ and transl_prim_3 env p arg1 arg2 arg3 dbg =
   | Patomic_cas ->
      Cop (Cextcall ("caml_atomic_cas", typ_int, false, None),
           [transl env arg1; transl env arg2; transl env arg3], dbg)
+
+  | Presume ->
+      Cop (Capply typ_val, [Cconst_symbol "caml_resume"; transl env arg1;
+                            transl env arg2; transl env arg3],
+           dbg)
+
+  | Prunstack ->
+      Cop (Capply typ_val, [Cconst_symbol "caml_runstack"; transl env arg1;
+                            transl env arg2; transl env arg3],
+           dbg)
+
+  | Preperform ->
+      Cop (Capply typ_val, [Cconst_symbol "caml_reperform"; transl env arg1;
+                            transl env arg2; transl env arg3],
+           dbg)
 
   | prim ->
       fatal_errorf "Cmmgen.transl_prim_3: %a" Printlambda.primitive prim

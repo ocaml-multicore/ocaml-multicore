@@ -1013,25 +1013,6 @@ let rec close fenv cenv = function
       let dbg = Debuginfo.from_location loc in
       (Uprim(Praise k, [ulam], dbg),
        Value_unknown)
-  | Lprim(Pperform, [arg], loc) ->
-      let (arg, _approx) = close fenv cenv arg in
-      let dbg = Debuginfo.from_location loc in
-      let alloc_cont = Uprim(Pmakeblock(Obj.cont_tag, Mutable, None),
-                             [Uconst (Uconst_int 0)],
-                             dbg) in
-      (Udirect_apply ("caml_perform", [arg; alloc_cont], dbg), Value_unknown)
-  | Lprim(Presume, args, loc) ->
-      let args = close_list fenv cenv args in
-      let dbg = Debuginfo.from_location loc in
-      (Udirect_apply ("caml_resume", args, dbg), Value_unknown)
-  | Lprim(Prunstack, args, loc) ->
-      let args = close_list fenv cenv args in
-      let dbg = Debuginfo.from_location loc in
-      (Udirect_apply ("caml_runstack", args, dbg), Value_unknown)
-  | Lprim(Preperform, args, loc) ->
-      let args = close_list fenv cenv args in
-      let dbg = Debuginfo.from_location loc in
-      (Udirect_apply ("caml_reperform", args, dbg), Value_unknown)
   | Lprim(p, args, loc) ->
       let dbg = Debuginfo.from_location loc in
       simplif_prim !Clflags.float_const_prop
