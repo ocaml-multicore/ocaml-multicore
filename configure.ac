@@ -214,11 +214,12 @@ AC_ARG_ENABLE([debugger],
 AC_ARG_VAR([DLLIBS],
   [which libraries to use (in addition to -ldl) to load dynamic libs])
 
+# Disable instrumented-runtime with multicore
 AC_ARG_ENABLE([instrumented-runtime],
   [AS_HELP_STRING([--enable-instrumented-runtime],
     [build the instrumented runtime @<:@default=auto@:>@])],
   [],
-  [enable_instrumented_runtime=auto])
+  [enable_instrumented_runtime=no])
 
 AC_ARG_ENABLE([vmthreads],
   [AS_HELP_STRING([--disable-vmthreads],
