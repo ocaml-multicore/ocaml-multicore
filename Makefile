@@ -328,11 +328,9 @@ endif
 utils/config.ml: utils/config.mlp Makefile.config utils/Makefile Makefile
 	$(MAKE) -C utils config.ml
 
-ifeq "$(UNIX_OR_WIN32)" "unix"
 .PHONY: reconfigure
 reconfigure:
 	./configure $(CONFIGURE_ARGS)
-endif
 
 utils/domainstate.ml: utils/domainstate.ml.c runtime/caml/domain_state.tbl
 	$(CPP) -I runtime/caml $< > $@
@@ -603,8 +601,10 @@ ifeq "$(INSTALL_SOURCE_ARTIFACTS)" "true"
 	   "$(INSTALL_COMPLIBDIR)"
 endif
 	$(INSTALL_DATA) \
-	   compilerlibs/ocamlcommon.cma compilerlibs/ocamlbytecomp.cma \
-	   compilerlibs/ocamltoplevel.cma $(BYTESTART) $(TOPLEVELSTART) \
+	  compilerlibs/*.cma \
+	  "$(INSTALL_COMPLIBDIR)"
+	$(INSTALL_DATA) \
+	   $(BYTESTART) $(TOPLEVELSTART) \
 	   "$(INSTALL_COMPLIBDIR)"
 	$(INSTALL_PROG) expunge "$(INSTALL_LIBDIR)/expunge$(EXE)"
 	$(INSTALL_DATA) \
@@ -704,7 +704,7 @@ ifeq "$(INSTALL_SOURCE_ARTIFACTS)" "true"
 	    "$(INSTALL_COMPLIBDIR)"
 endif
 	$(INSTALL_DATA) \
-	    compilerlibs/ocamloptcomp.cma $(OPTSTART) \
+	    $(OPTSTART) \
 	    "$(INSTALL_COMPLIBDIR)"
 	if test -n "$(WITH_OCAMLDOC)"; then \
 	  $(MAKE) -C ocamldoc installopt; \
@@ -749,9 +749,9 @@ installoptopt:
 	   asmcomp/debug/*.cmx \
           "$(INSTALL_COMPLIBDIR)"
 	$(INSTALL_DATA) \
-           compilerlibs/ocamlcommon.cmxa compilerlibs/ocamlcommon.$(A) \
-	   compilerlibs/ocamlbytecomp.cmxa compilerlibs/ocamlbytecomp.$(A) \
-	   compilerlibs/ocamloptcomp.cmxa  compilerlibs/ocamloptcomp.$(A) \
+	   compilerlibs/*.cmxa compilerlibs/*.$(A) \
+	   "$(INSTALL_COMPLIBDIR)"
+	$(INSTALL_DATA) \
 	   $(BYTESTART:.cmo=.cmx) $(BYTESTART:.cmo=.$(O)) \
 	   $(OPTSTART:.cmo=.cmx) $(OPTSTART:.cmo=.$(O)) \
 	   "$(INSTALL_COMPLIBDIR)"
@@ -762,8 +762,6 @@ installoptopt:
 	     toplevel/opttopdirs.cmi \
 	     "$(INSTALL_LIBDIR)"; \
 	  $(INSTALL_DATA) \
-	     compilerlibs/ocamlopttoplevel.cmxa \
-	     compilerlibs/ocamlopttoplevel.$(A) \
 	     $(OPTTOPLEVELSTART:.cmo=.cmx) $(OPTTOPLEVELSTART:.cmo=.$(O)) \
 	     "$(INSTALL_COMPLIBDIR)"; \
 	fi
@@ -1103,10 +1101,10 @@ parsing/camlinternalMenhirLib.mli: boot/menhir/menhirLib.mli
 
 parsing/parser.ml: boot/menhir/parser.ml parsing/parser.mly \
   tools/check-parser-uptodate-or-warn.sh
-	@tools/check-parser-uptodate-or-warn.sh
-	cat $< | sed "s/MenhirLib/CamlinternalMenhirLib/g" > $@
+	@-tools/check-parser-uptodate-or-warn.sh
+	sed "s/MenhirLib/CamlinternalMenhirLib/g" $< > $@
 parsing/parser.mli: boot/menhir/parser.mli
-	cat $< | sed "s/MenhirLib/CamlinternalMenhirLib/g" > $@
+	sed "s/MenhirLib/CamlinternalMenhirLib/g" $< > $@
 
 
 partialclean:: partialclean-menhir
