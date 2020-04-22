@@ -42,6 +42,8 @@ type 'a t = 'a CamlinternalLazy.t
 
 exception Undefined
 
+exception RacyLazy
+
 (* val force : 'a t -> 'a  *)
 external force : 'a t -> 'a = "%lazy_force"
 (** [force x] forces the suspension [x] and returns its result.
@@ -49,7 +51,8 @@ external force : 'a t -> 'a = "%lazy_force"
     same value again without recomputing it.  If it raised an exception,
     the same exception is raised again.
     Raise {!Undefined} if the forcing of [x] tries to force [x] itself
-    recursively or is concurrently forced by another domain.
+    recursively.
+    Raise {!RacyLazy} if [x] is concurrently forced by another domain.
 *)
 
 val force_val : 'a t -> 'a
@@ -57,7 +60,8 @@ val force_val : 'a t -> 'a
     result.  If [x] has already been forced, [force_val x]
     returns the same value again without recomputing it.
     Raise {!Undefined} if the forcing of [x] tries to force [x] itself
-    recursively or is concurrently forced by another domain.
+    recursively.
+    Raise {!RacyLazy} if [x] is concurrently forced by another domain.
     If the computation of [x] raises an exception, it is unspecified
     whether [force_val x] raises the same exception or {!Undefined}.
 *)
