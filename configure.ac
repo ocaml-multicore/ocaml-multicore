@@ -676,7 +676,6 @@ AC_CHECK_HEADER([stdatomic.h], [AC_DEFINE([HAS_STDATOMIC_H])])
 
 ## off_t
 AC_TYPE_OFF_T
-AC_DEFINE([HAS_OFF_T])
 
 # Checks for structures
 
@@ -868,6 +867,8 @@ AS_CASE([$host],
     [arch=arm; model=armv5te; system=linux_eabi],
   [armv5*-*-linux-gnueabi],
     [arch=arm; model=armv5; system=linux_eabi],
+  [arm*-*-linux-gnueabihf],
+    [arch=arm; system=linux_eabihf],
   [arm*-*-linux-gnueabi],
     [arch=arm; system=linux_eabi],
   [arm*-*-openbsd*],
@@ -932,7 +933,7 @@ AS_IF([test $arch != "none" && $arch64 ],
 
 # Assembler
 
-AS_IF([test -n "$host_alias"], [toolpref="${host}-"], [toolpref=""])
+AS_IF([test -n "$host_alias"], [toolpref="${host_alias}-"], [toolpref=""])
 
 # We first compute default values for as and aspp
 # If values have been given by the user then they take precedence over

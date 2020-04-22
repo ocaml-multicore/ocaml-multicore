@@ -1694,6 +1694,7 @@ bytecomp/bytepackager.cmo : \
     typing/typemod.cmi \
     lambda/translmod.cmi \
     typing/subst.cmi \
+    lambda/simplif.cmi \
     lambda/printlambda.cmi \
     typing/path.cmi \
     utils/misc.cmi \
@@ -1713,6 +1714,7 @@ bytecomp/bytepackager.cmx : \
     typing/typemod.cmx \
     lambda/translmod.cmx \
     typing/subst.cmx \
+    lambda/simplif.cmx \
     lambda/printlambda.cmx \
     typing/path.cmx \
     utils/misc.cmx \
@@ -1841,7 +1843,7 @@ bytecomp/printinstr.cmi : \
 bytecomp/runtimedef.cmo :
 bytecomp/runtimedef.cmx :
 bytecomp/symtable.cmo : \
-    lambda/runtimedef.cmi \
+    bytecomp/runtimedef.cmo \
     typing/predef.cmi \
     utils/misc.cmi \
     bytecomp/meta.cmi \
@@ -1856,7 +1858,7 @@ bytecomp/symtable.cmo : \
     parsing/asttypes.cmi \
     bytecomp/symtable.cmi
 bytecomp/symtable.cmx : \
-    lambda/runtimedef.cmx \
+    bytecomp/runtimedef.cmx \
     typing/predef.cmx \
     utils/misc.cmx \
     bytecomp/meta.cmx \
@@ -2050,7 +2052,7 @@ asmcomp/asmlibrarian.cmx : \
     asmcomp/asmlibrarian.cmi
 asmcomp/asmlibrarian.cmi :
 asmcomp/asmlink.cmo : \
-    lambda/runtimedef.cmi \
+    bytecomp/runtimedef.cmo \
     utils/profile.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
@@ -2068,7 +2070,7 @@ asmcomp/asmlink.cmo : \
     asmcomp/asmgen.cmi \
     asmcomp/asmlink.cmi
 asmcomp/asmlink.cmx : \
-    lambda/runtimedef.cmx \
+    bytecomp/runtimedef.cmx \
     utils/profile.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
@@ -2091,6 +2093,7 @@ asmcomp/asmlink.cmi : \
 asmcomp/asmpackager.cmo : \
     typing/typemod.cmi \
     lambda/translmod.cmi \
+    lambda/simplif.cmi \
     utils/profile.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
@@ -2113,6 +2116,7 @@ asmcomp/asmpackager.cmo : \
 asmcomp/asmpackager.cmx : \
     typing/typemod.cmx \
     lambda/translmod.cmx \
+    lambda/simplif.cmx \
     utils/profile.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
@@ -5831,13 +5835,13 @@ driver/pparse.cmi : \
     parsing/parsetree.cmi
 toplevel/expunge.cmo : \
     bytecomp/symtable.cmi \
-    lambda/runtimedef.cmi \
+    bytecomp/runtimedef.cmo \
     utils/misc.cmi \
     typing/ident.cmi \
     bytecomp/bytesections.cmi
 toplevel/expunge.cmx : \
     bytecomp/symtable.cmx \
-    lambda/runtimedef.cmx \
+    bytecomp/runtimedef.cmx \
     utils/misc.cmx \
     typing/ident.cmx \
     bytecomp/bytesections.cmx
