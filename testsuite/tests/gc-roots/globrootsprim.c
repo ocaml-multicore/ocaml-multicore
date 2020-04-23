@@ -68,32 +68,3 @@ value gb_generational_remove(value vblock)
 {
   return gb_classic_remove(vblock);
 }
-
-value gb_static2young(value static_value, value full_major) {
-  CAMLparam2 (static_value, full_major);
-  CAMLlocal1(v);
-  int i;
-
-  root = Val_unit;
-  caml_register_generational_global_root(&root);
-
-  /* Write a static value in the root. */
-  caml_modify_generational_global_root(&root, static_value);
-
-  /* Overwrite it with a young value. */
-  v = caml_alloc_small(1, 0);
-  Field(v, 0) = Val_long(0x42);
-  caml_modify_generational_global_root(&root, v);
-
-  /* Promote the young value */
-  caml_callback(full_major, Val_unit);
-
-  /* Fill the minor heap to make sure the old block is overwritten */
-  for(i = 0; i < 1000000; i++)
-    caml_alloc_small(1, 0);
-
-  v = Field(root, 0);
-  caml_remove_generational_global_root(&root);
-
-  CAMLreturn(v);
-}
