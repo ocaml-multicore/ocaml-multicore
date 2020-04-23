@@ -147,11 +147,6 @@ static uintnat norm_pfree (uintnat p)
   return Max (p, 1);
 }
 
-/*static uintnat norm_pmax (uintnat p)
-{
-  return p;
-}*/
-
 static uintnat norm_custom_maj (uintnat p)
 {
   return Max (p, 1);
@@ -282,18 +277,8 @@ CAMLprim value caml_get_minor_free (value v)
   return Val_int (Caml_state->young_ptr - Caml_state->young_start);
 }
 
-uintnat caml_normalize_heap_increment (uintnat i)
-{
-  if (i < Bsize_wsize (Heap_chunk_min)){
-    i = Bsize_wsize (Heap_chunk_min);
-  }
-  return ((i + Page_size - 1) >> Page_log) << Page_log;
-}
-
 void caml_init_gc ()
 {
-/*  uintnat major_heap_size =
-      Bsize_wsize (caml_normalize_heap_increment (caml_params->heap_size_init)); */
 
   caml_max_stack_size = caml_params->init_max_stack_wsz;
   caml_fiber_wsz = caml_params->init_fiber_wsz;

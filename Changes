@@ -1,10 +1,13 @@
-OCaml 4.09 maintenance branch:
-------------------------------
+OCaml 4.09.1 (16 Mars 2020):
+----------------------------
 
 - #8855, #8858: Links for tools not created when installing with
   --disable-installing-byecode-programs (e.g. ocamldep.opt installed, but
   ocamldep link not created)
   (David Allsopp, report by Thomas Leonard)
+
+- #8947, #9134, #9302: fix/improve support for the BFD library
+  (Sébastien Hinderer, review by Damien Doligez and David Allsopp)
 
 - #8953, #8954: Fix error submessages in the toplevel: do not display
   dummy locations
@@ -20,6 +23,10 @@ OCaml 4.09 maintenance branch:
 - #9050, #9076: install missing compilerlibs/ocamlmiddleend archives
   (Gabriel Scherer, review by Florian Angeletti, report by Olaf Hering)
 
+- #9073, #9120: fix incorrect GC ratio multiplier when allocating custom blocks
+  with caml_alloc_custom_mem in runtime/custom.c
+  (Markus Mottl, review by Gabriel Scherer and Damien Doligez)
+
 - #9144, #9180: multiple definitions of global variables in the C runtime,
   causing problems with GCC 10.0 and possibly with other C compilers
   (Xavier Leroy, report by Jürgen Reuter, review by Mark Shinwell)
@@ -28,6 +35,13 @@ OCaml 4.09 maintenance branch:
   so as to detect problematic multiple definitions of global variables
   in the C runtime
   (Xavier Leroy, review by Mark Shinwell)
+
+- #9128: Fix a bug in bytecode mode which could lead to a segmentation
+  fault. The bug was caused by the fact that the atom table shared a
+  page with some bytecode. The fix makes sure both the atom table and
+  the minor heap have their own pages.
+  (Jacques-Henri Jourdan, review by Stephen Dolan, Xavier Leroy and
+   Gabriel Scherer)
 
 OCaml 4.09.0 (19 September 2019):
 ---------------------------------
