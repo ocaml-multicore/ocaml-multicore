@@ -3,6 +3,8 @@
    * hassysthreads
    include systhreads
    compare_programs = "false"
+   * skip
+   reason = "TODO: multicore systhreads"
    ** no-flambda
    *** native
    *** bytecode
