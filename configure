@@ -14043,7 +14043,7 @@ fi
 fi
 
 
-CPP_FLAGS="$saved_CPPFLAGS"
+CPPFLAGS="$saved_CPPFLAGS"
 
 ## issetugid
 
