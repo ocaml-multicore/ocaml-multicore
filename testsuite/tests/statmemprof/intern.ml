@@ -7,7 +7,7 @@
 
 open Gc.Memprof
 
-type t = Dummy of int (* Skip tag 0. *) | I of int | II of int * int | Cons of t
+type t = I of int | II of int * int | Cons of t
 let rec t_of_len = function
   | len when len <= 1 -> assert false
   | 2 -> I 1
@@ -41,7 +41,8 @@ let check_nosample () =
   in
   start ~callstack_size:10 ~minor_alloc_callback:cb ~major_alloc_callback:cb
         ~sampling_rate:0. ();
-  do_intern 2 3000 1 false
+  do_intern 2 3000 1 false;
+  stop ()
 
 let () = check_nosample ()
 
@@ -128,10 +129,7 @@ let check_distrib lo hi cnt rate =
     (* We also allocate the list constructor in the minor heap,
        so we filter that out. *)
     if info.unmarshalled then begin
-      begin match info.tag, info.size with
-      | 1, 1 | 2, 2 | 3, 1 -> ()
-      | _ -> assert false
-      end;
+      assert (info.size = 1 || info.size = 2);
       assert (info.n_samples > 0);
       smp := !smp + info.n_samples
     end;

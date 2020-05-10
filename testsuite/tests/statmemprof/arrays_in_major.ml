@@ -23,7 +23,8 @@ let check_nosample () =
   in
   start ~callstack_size:10 ~minor_alloc_callback:cb ~major_alloc_callback:cb
         ~sampling_rate:0. ();
-  allocate_arrays 300 3000 1 false
+  allocate_arrays 300 3000 1 false;
+  stop ()
 
 let () = check_nosample ()
 
@@ -105,7 +106,6 @@ let check_distrib lo hi cnt rate =
   let smp = ref 0 in
   start ~callstack_size:10
         ~major_alloc_callback:(fun info ->
-           assert (info.tag = 0);
            assert (info.size >= lo && info.size <= hi);
            assert (info.n_samples > 0);
            assert (not info.unmarshalled);
