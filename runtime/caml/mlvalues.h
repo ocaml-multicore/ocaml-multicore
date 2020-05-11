@@ -433,18 +433,20 @@ CAMLextern value caml_set_oo_id(value obj);
 /* Field access macros and functions */
 
 Caml_inline value Field_imm(value x, int i) {
+  value v;
   Assert (Hd_val(x));
   Assert (Tag_val(x) == Infix_tag || i < Wosize_val(x));
-  value v = Op_val(x)[i];
+  v = Op_val(x)[i];
   return v;
 }
 
 CAMLextern value caml_read_barrier(value, intnat);
 
 Caml_inline void caml_read_field(value x, intnat i, value* ret) {
+  value v;
   Assert (Hd_val(x));
   /* See Note [MM] in memory.c */
-  value v = atomic_load_explicit(&Op_atomic_val(x)[i], memory_order_relaxed);
+  v = atomic_load_explicit(&Op_atomic_val(x)[i], memory_order_relaxed);
   *ret = v;
 }
 

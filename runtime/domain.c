@@ -217,12 +217,14 @@ static void create_domain(uintnat initial_minor_heap_wsize) {
           caml_plat_unlock(&s->lock);
           break;
         }
-        caml_domain_state* domain_state =
-          (caml_domain_state*)(d->tls_area);
-        atomic_uintnat* young_limit = (atomic_uintnat*)&domain_state->young_limit;
-        d->interrupt_word_address = young_limit;
-        atomic_store_rel(young_limit, (uintnat)domain_state->young_start);
-        s->interrupt_word = young_limit;
+        {
+          caml_domain_state* domain_state = (caml_domain_state*)(d->tls_area);
+          atomic_uintnat* young_limit =
+            (atomic_uintnat*)&domain_state->young_limit;
+          d->interrupt_word_address = young_limit;
+          atomic_store_rel(young_limit, (uintnat)domain_state->young_start);
+          s->interrupt_word = young_limit;
+        }
       }
       Assert(s->qhead == NULL);
       s->running = 1;
@@ -231,11 +233,11 @@ static void create_domain(uintnat initial_minor_heap_wsize) {
     caml_plat_unlock(&s->lock);
   }
   if (d) {
+    caml_domain_state* domain_state;
     d->state.internals = d;
     domain_self = d;
     SET_Caml_state((void*)(d->tls_area));
-    caml_domain_state* domain_state =
-      (caml_domain_state*)(d->tls_area);
+    domain_state = (caml_domain_state*)(d->tls_area);
     caml_plat_lock(&d->roots_lock);
 
     domain_state->id = d->id;
@@ -463,8 +465,9 @@ int caml_domain_alone()
 }
 
 struct domain* caml_owner_of_young_block(value v) {
+  int heap_id;
   Assert(Is_minor(v));
-  int heap_id = ((uintnat)v - minor_heaps_base) /
+  heap_id = ((uintnat)v - minor_heaps_base) /
     (1 << Minor_heap_align_bits);
   return &all_domains[heap_id].state;
 }

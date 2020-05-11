@@ -362,10 +362,11 @@ CAMLprim value caml_clone_continuation (value cont)
 
 CAMLprim value caml_continuation_use (value cont)
 {
+  value v;
+
   caml_gc_log("cont: is_block(%d) tag_val(%ul) is_minor(%d)", Is_block(cont), Tag_val(cont), Is_minor(cont));
   CAMLassert(Is_block(cont) && Tag_val(cont) == Cont_tag);
 
-  value v;
   if (!Is_minor(cont) ) caml_darken_cont(cont);
 
   v = Op_val(cont)[0];

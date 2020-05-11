@@ -51,6 +51,7 @@ CAMLexport value caml_callbackN_exn(value closure, int narg, value args[])
   struct stack_info* parent_stack;
   int i;
   value res;
+  opcode_t code[7];
   caml_domain_state* domain_state = Caml_state;
   parent_stack = Stack_parent(domain_state->current_stack);
   Stack_parent(domain_state->current_stack) = NULL;
@@ -59,11 +60,13 @@ CAMLexport value caml_callbackN_exn(value closure, int narg, value args[])
   domain_state->current_stack->sp -= narg + 4;
   for (i = 0; i < narg; i++) domain_state->current_stack->sp[i] = args[i]; /* arguments */
 
-  opcode_t code[7] = {
-    callback_code[0], narg + 3,
-    callback_code[2], narg,
-    callback_code[4], callback_code[5], callback_code[6]
-  };
+  code[0] = callback_code[0];
+  code[1] = narg + 3;
+  code[2] = callback_code[2];
+  code[3] = narg;
+  code[4] = callback_code[4];
+  code[5] = callback_code[5];
+  code[6] = callback_code[6];
 
   domain_state->current_stack->sp[narg] = Val_pc (code + 4); /* return address */
   domain_state->current_stack->sp[narg + 1] = Val_unit;    /* environment */

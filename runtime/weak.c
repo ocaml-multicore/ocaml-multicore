@@ -107,12 +107,13 @@ CAMLprim value caml_weak_create (value len)
  */
 static void do_check_key_clean(struct domain* d, value e, mlsize_t offset)
 {
+  value elt;
   CAMLassert (offset >= CAML_EPHE_FIRST_KEY);
   CAMLassert (Ephe_domain(e) == d);
 
   if (caml_gc_phase != Phase_sweep_ephe) return;
 
-  value elt = Op_val(e)[offset];
+  elt = Op_val(e)[offset];
   if (elt != caml_ephe_none && Is_block (elt) &&
       !Is_minor (elt) && is_unmarked(elt)) {
     Op_val(e)[offset] = caml_ephe_none;
@@ -427,11 +428,11 @@ static value ephe_set_field (value e, mlsize_t offset, value el)
     } else if (target == 0) {
       caml_adopt_orphaned_work();
     } else {
+      rpc_payload_t p;
       CAMLlocalN(argv,3);
       argv[0] = e;
       argv[1] = Val_long(offset);
       argv[2] = el;
-      rpc_payload_t p;
       p.f = (void*)&ephe_set_field_domain;
       p.argv = argv;
       p.success = 1;
@@ -495,10 +496,10 @@ static value ephe_get_field (value e, mlsize_t offset)
     } else if (target == 0) {
       caml_adopt_orphaned_work();
     } else {
+      rpc_payload_t p;
       CAMLlocalN(argv,2);
       argv[0] = e;
       argv[1] = Val_long(offset);
-      rpc_payload_t p;
       p.f = (void*)&ephe_get_field_domain;
       p.argv = argv;
       p.success = 1;
@@ -537,10 +538,10 @@ static value ephe_get_field_copy (value e, mlsize_t offset)
     } else if (target == 0) {
       caml_adopt_orphaned_work();
     } else {
+      rpc_payload_t p;
       CAMLlocalN(argv,2);
       argv[0] = e;
       argv[1] = Val_long(offset);
-      rpc_payload_t p;
       p.f = (void*)&ephe_get_field_copy_domain;
       p.argv = argv;
       p.success = 1;
@@ -588,10 +589,10 @@ static value ephe_check_field (value e, mlsize_t offset)
     } else if (target == 0) {
       caml_adopt_orphaned_work();
     } else {
+      rpc_payload_t p;
       CAMLlocalN(argv,2);
       argv[0] = e;
       argv[1] = Val_long(offset);
-      rpc_payload_t p;
       p.f = (void*)&ephe_check_field_domain;
       p.argv = argv;
       p.success = 1;
@@ -638,11 +639,11 @@ static value ephe_blit_field_produce (value es, mlsize_t offset_s,
     if (target == 0) {
       caml_adopt_orphaned_work();
     } else {
+      rpc_payload_t p;
       CAMLlocalN(argv, 3);
       argv[0] = es;
       argv[1] = Val_long(offset_s);
       argv[2] = Val_long(length);
-      rpc_payload_t p;
       p.f = (void*)&ephe_blit_field_produce_domain;
       p.argv = argv;
       p.success = 1;
@@ -668,11 +669,11 @@ static value ephe_blit_field_consume (value ed, mlsize_t offset_d, value ar)
     if (target == 0) {
       caml_adopt_orphaned_work();
     } else {
+      rpc_payload_t p;
       CAMLlocalN(argv, 3);
       argv[0] = ed;
       argv[1] = Val_long(offset_d);
       argv[2] = ar;
-      rpc_payload_t p;
       p.f = (void*)&ephe_blit_field_consume_domain;
       p.argv = argv;
       p.success = 1;

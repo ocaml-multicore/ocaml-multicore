@@ -505,6 +505,7 @@ CAMLprim value caml_thread_new(value clos)          /* ML */
   caml_thread_t th;
   st_retcode err;
   uintnat domain_id;
+  struct st_thread_info *info;
 
   /* Create a thread info block */
   th = caml_thread_new_info();
@@ -517,8 +518,7 @@ CAMLprim value caml_thread_new(value clos)          /* ML */
   curr_thread->next->prev = th;
   curr_thread->next = th;
   /* Create the new thread */
-  struct st_thread_info *info =
-    (struct st_thread_info*)malloc(sizeof(struct st_thread_info));
+  info = (struct st_thread_info*)malloc(sizeof(struct st_thread_info));
   info->thread_info = th;
   info->domain_id = Caml_state->id;
   domain_id = info->domain_id;

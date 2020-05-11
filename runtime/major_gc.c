@@ -302,6 +302,7 @@ double caml_mean_space_overhead ()
 static uintnat default_slice_budget() {
   double p, heap_words;
   intnat computed_work, opportunistic_credit;
+  uintnat heap_size, heap_sweep_words, saved_terminated_words;
   /*
      Free memory at the start of the GC cycle (garbage + free list) (assumed):
                  FM = heap_words * caml_percent_free
@@ -335,11 +336,12 @@ static uintnat default_slice_budget() {
      for this slice is:
                  S = P * TW
   */
-  uintnat heap_size = caml_heap_size(Caml_state->shared_heap);
-  heap_words = (double)Wsize_bsize(heap_size);
-  uintnat heap_sweep_words = heap_words;
 
-  uintnat saved_terminated_words = terminated_domains_allocated_words;
+  heap_size = caml_heap_size(Caml_state->shared_heap);
+  heap_words = (double)Wsize_bsize(heap_size);
+  heap_sweep_words = heap_words;
+
+  saved_terminated_words = terminated_domains_allocated_words;
   if( saved_terminated_words > 0 ) {
     while(!atomic_compare_exchange_strong(&terminated_domains_allocated_words, &saved_terminated_words, 0));
   }
@@ -761,10 +763,10 @@ intnat ephe_mark (intnat budget, uintnat for_cycle)
 
 intnat ephe_sweep (struct domain* d, intnat budget)
 {
-  CAMLassert (caml_gc_phase == Phase_sweep_ephe);
   value v;
   caml_domain_state* domain_state = d->state;
 
+  CAMLassert (caml_gc_phase == Phase_sweep_ephe);
   while (domain_state->ephe_info->todo != 0 && budget > 0) {
     v = domain_state->ephe_info->todo;
     domain_state->ephe_info->todo = Ephe_link(v);
@@ -817,7 +819,6 @@ void caml_remove_heap_stats(struct heap_stats* acc, const struct heap_stats* h)
 
 void caml_sample_gc_stats(struct gc_stats* buf)
 {
-  memset(buf, 0, sizeof(*buf));
   /* we read from the buffers that are not currently being
      written to. that way, we pick up the numbers written
      at the end of the most recently completed GC cycle */
@@ -827,6 +828,7 @@ void caml_sample_gc_stats(struct gc_stats* buf)
   struct domain* domain_self = caml_domain_self ();
   int my_id = domain_self->state->id;
 
+  memset(buf, 0, sizeof(*buf));
   for (i=0; i<Max_domains; i++) {
     struct gc_stats* s = &sampled_gc_stats[phase][i];
     struct heap_stats* h = &s->major_heap;
@@ -1053,8 +1055,8 @@ static int is_complete_phase_sweep_ephe (struct domain *d)
 static void try_complete_gc_phase (struct domain* domain, void* unused,
                                    int participating_count, struct domain** participating)
 {
-  caml_ev_begin("major_gc/phase_change");
   barrier_status b;
+  caml_ev_begin("major_gc/phase_change");
 
   b = caml_global_barrier_begin ();
   if (caml_global_barrier_is_final(b)) {
@@ -1382,17 +1384,19 @@ static int pool_count_cmp(const void* a, const void* b)
 static void mark_stack_prune (struct mark_stack* stk)
 {
   struct addrmap t = ADDRMAP_INIT;
-  int count = 0, entry;
+  int count = 0, entry, entries_to_free, start, total;
   addrmap_iterator i;
   uintnat mark_stack_count = stk->count;
   mark_entry* mark_stack = stk->stack;
+  struct pool_count* pools;
+
 
   /* space used by the computations below */
   uintnat table_max = mark_stack_count / 100;
   if (table_max < 1000) table_max = 1000;
 
   /* amount of space we want to free up */
-  int entries_to_free = (uintnat)(mark_stack_count * 0.20);
+  entries_to_free = (uintnat)(mark_stack_count * 0.20);
 
   /* We compress the mark stack by removing all of the objects from a
      subset of pools, which are rescanned later. For efficiency, we
@@ -1406,9 +1410,10 @@ static void mark_stack_prune (struct mark_stack* stk)
      repeated elements", 1982). */
 
   for (entry = 0; entry < mark_stack_count; entry++) {
+    value p;
     struct pool* pool = caml_pool_of_shared_block(mark_stack[entry].block);
     if (!pool) continue;
-    value p = (value)pool;
+    p = (value)pool;
     if (caml_addrmap_contains(&t, p)) {
       /* if it's already present, increase the count */
       (*caml_addrmap_insert_pos(&t, p)) ++;
@@ -1453,40 +1458,44 @@ static void mark_stack_prune (struct mark_stack* stk)
 
   /* Next, find a subset of those pools that covers enough entries */
 
-  struct pool_count* pools = caml_stat_alloc(count * sizeof(struct pool_count));
-  int pos = 0;
-  for (i = caml_addrmap_iterator(&t);
-       caml_addrmap_iter_ok(&t, i);
-       i = caml_addrmap_next(&t, i)) {
-    struct pool_count* p = &pools[pos++];
-    p->pool = (struct pool*)caml_addrmap_iter_key(&t, i);
-    p->occurs = (int)caml_addrmap_iter_value(&t, i);
+  pools = caml_stat_alloc(count * sizeof(struct pool_count));
+  {
+    int pos = 0;
+    for (i = caml_addrmap_iterator(&t);
+         caml_addrmap_iter_ok(&t, i);
+         i = caml_addrmap_next(&t, i)) {
+      struct pool_count* p = &pools[pos++];
+      p->pool = (struct pool*)caml_addrmap_iter_key(&t, i);
+      p->occurs = (int)caml_addrmap_iter_value(&t, i);
+    }
+    CAMLassert(pos == count);
   }
-  CAMLassert(pos == count);
   caml_addrmap_clear(&t);
 
   qsort(pools, count, sizeof(struct pool_count), &pool_count_cmp);
 
-  int start = count, total = 0;
+  start = count, total = 0;
   while (start > 0 && total < entries_to_free) {
     start--;
     total += pools[start].occurs;
   }
 
 
-
   for (i = start; i < count; i++) {
     *caml_addrmap_insert_pos(&t, (value)pools[i].pool) = 1;
   }
-  int out = 0;
-  for (entry = 0; entry < mark_stack_count; entry++) {
-    mark_entry e = mark_stack[entry];
-    value p = (value)caml_pool_of_shared_block(e.block);
-    if (!(p && caml_addrmap_contains(&t, p))) {
-      mark_stack[out++] = e;
+
+  {
+    int out = 0;
+    for (entry = 0; entry < mark_stack_count; entry++) {
+      mark_entry e = mark_stack[entry];
+      value p = (value)caml_pool_of_shared_block(e.block);
+      if (!(p && caml_addrmap_contains(&t, p))) {
+        mark_stack[out++] = e;
+      }
     }
+    stk->count = out;
   }
-  stk->count = out;
 
   caml_gc_log("Mark stack overflow. Postponing %d pools (%.1f%%, leaving %d).",
               count-start, 100. * (double)total / (double)mark_stack_count,

@@ -347,11 +347,13 @@ static void oldify_one (void* st_v, value v, value *p)
       #endif
     }
   } else {
+    value f;
+    tag_t ft;
     CAMLassert (tag == Forward_tag);
     CAMLassert (infix_offset == 0);
 
-    value f = Forward_val (v);
-    tag_t ft = 0;
+    f = Forward_val (v);
+    ft = 0;
 
     if (Is_block (f)) {
       ft = Tag_val (get_header_val(f) == 0 ? Op_val (f)[0] : f);
@@ -524,24 +526,20 @@ void caml_empty_minor_heap_promote (struct domain* domain, int participating_cou
   struct caml_custom_elt *elt;
   unsigned rewrite_successes = 0;
   unsigned rewrite_failures = 0;
-  char* young_ptr = domain_state->young_ptr;
-  char* young_end = domain_state->young_end;
-  uintnat minor_allocated_bytes = young_end - young_ptr;
   struct oldify_state st = {0};
   value **r;
   intnat c, curr_idx;
+  int remembered_roots = 0;
+  char* young_ptr = domain_state->young_ptr;
+  char* young_end = domain_state->young_end;
+  uintnat minor_allocated_bytes = young_end - young_ptr;
+  uintnat prev_alloc_words = domain_state->allocated_words;
 
   st.promote_domain = domain;
-
-  /* TODO: are there any optimizations we can make where we don't need to scan
-     when minor heaps can reference each other? */
-  uintnat prev_alloc_words = domain_state->allocated_words;
 
   caml_gc_log ("Minor collection of domain %d starting", domain->state->id);
   caml_ev_begin("minor_gc");
   caml_ev_begin("minor_gc/remembered_set");
-
-  int remembered_roots = 0;
 
   if( not_alone ) {
     int participating_idx = -1;
@@ -556,10 +554,9 @@ void caml_empty_minor_heap_promote (struct domain* domain, int participating_cou
 
     CAMLassert(participating_idx != -1);
 
-    struct domain* foreign_domain;
     // We use this rather odd scheme because it better smoothes the remainder
     for( curr_idx = 0, c = participating_idx; curr_idx < participating_count; curr_idx++) {
-      foreign_domain = participating[c];
+      struct domain* foreign_domain = participating[c];
       struct caml_minor_tables* foreign_minor_tables = foreign_domain->state->minor_tables;
       struct caml_ref_table* foreign_major_ref = &foreign_minor_tables->major_ref;
       // calculate the size of the remembered set
@@ -690,11 +687,12 @@ void caml_empty_minor_heap_setup(struct domain* domain) {
 /* must be called within a STW section */
 static void caml_stw_empty_minor_heap (struct domain* domain, void* unused, int participating_count, struct domain** participating)
 {
+  int not_alone;
   #ifdef DEBUG
   CAMLassert(caml_domain_is_in_stw());
   #endif
 
-  int not_alone = !caml_domain_alone();
+  not_alone = !caml_domain_alone();
 
   if( not_alone ) {
     if( participating[0] == caml_domain_self() ) {
@@ -801,12 +799,17 @@ CAMLexport void caml_minor_collection (void)
   caml_handle_gc_interrupt();
 }
 
+Caml_inline void check_urgent_gc (value extra_root)
+{
+  CAMLparam1(extra_root);
+  caml_handle_gc_interrupt();
+  CAMLreturn0;
+}
+
 CAMLexport value caml_check_urgent_gc (value extra_root)
 {
   if (Caml_check_gc_interrupt(Caml_state)) {
-    CAMLparam1(extra_root);
-    caml_handle_gc_interrupt();
-    CAMLdrop;
+    check_urgent_gc(extra_root);
   }
   return extra_root;
 }

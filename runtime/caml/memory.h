@@ -224,10 +224,11 @@ extern uintnat caml_use_huge_pages;
 #endif
 
 #define Alloc_small_with_profinfo(result, wosize, tag, GC, profinfo) do{    \
+  caml_domain_state* dom_st;                                                \
                                                 CAMLassert ((wosize) >= 1); \
                                           CAMLassert ((tag_t) (tag) < 256); \
                                  CAMLassert ((wosize) <= Max_young_wosize); \
-  caml_domain_state* dom_st = Caml_state;                                   \
+  dom_st = Caml_state;                                                      \
   dom_st->young_ptr -= Bhsize_wosize (wosize);                              \
   if (Caml_check_gc_interrupt(dom_st)){                                     \
     dom_st->young_ptr += Bhsize_wosize (wosize);                            \
@@ -291,7 +292,7 @@ struct caml__roots_block {
 
 #define CAMLparam0() \
   struct caml__roots_block** caml_local_roots_ptr = &CAML_LOCAL_ROOTS;\
-  struct caml__roots_block *caml__frame = *caml_local_roots_ptr;\
+  struct caml__roots_block *caml__frame = *caml_local_roots_ptr
 
 #define CAMLparam1(x) \
   CAMLparam0 (); \
@@ -319,7 +320,7 @@ struct caml__roots_block {
 
 #define CAMLxparam1(x) \
   struct caml__roots_block caml__roots_##x; \
-  CAMLunused int caml__dummy_##x = ( \
+  CAMLunused_start int caml__dummy_##x = ( \
     (caml__roots_##x.next = *caml_local_roots_ptr), \
     (*caml_local_roots_ptr = &caml__roots_##x), \
     (caml__roots_##x.mutexes = 0), \
@@ -331,7 +332,7 @@ struct caml__roots_block {
 
 #define CAMLxparam2(x, y) \
   struct caml__roots_block caml__roots_##x; \
-  CAMLunused int caml__dummy_##x = ( \
+  CAMLunused_start int caml__dummy_##x = ( \
     (caml__roots_##x.next = *caml_local_roots_ptr), \
     (*caml_local_roots_ptr = &caml__roots_##x), \
     (caml__roots_##x.mutexes = 0), \
@@ -344,7 +345,7 @@ struct caml__roots_block {
 
 #define CAMLxparam3(x, y, z) \
   struct caml__roots_block caml__roots_##x; \
-  CAMLunused int caml__dummy_##x = ( \
+  CAMLunused_start int caml__dummy_##x = ( \
     (caml__roots_##x.next = *caml_local_roots_ptr), \
     (*caml_local_roots_ptr = &caml__roots_##x), \
     (caml__roots_##x.mutexes = 0), \
@@ -358,7 +359,7 @@ struct caml__roots_block {
 
 #define CAMLxparam4(x, y, z, t) \
   struct caml__roots_block caml__roots_##x; \
-  CAMLunused int caml__dummy_##x = ( \
+  CAMLunused_start int caml__dummy_##x = ( \
     (caml__roots_##x.next = *caml_local_roots_ptr), \
     (*caml_local_roots_ptr = &caml__roots_##x), \
     (caml__roots_##x.mutexes = 0), \
@@ -373,7 +374,7 @@ struct caml__roots_block {
 
 #define CAMLxparam5(x, y, z, t, u) \
   struct caml__roots_block caml__roots_##x; \
-  CAMLunused int caml__dummy_##x = ( \
+  CAMLunused_start int caml__dummy_##x = ( \
     (caml__roots_##x.next = *caml_local_roots_ptr), \
     (*caml_local_roots_ptr = &caml__roots_##x), \
     (caml__roots_##x.mutexes = 0), \
@@ -389,7 +390,7 @@ struct caml__roots_block {
 
 #define CAMLxparamN(x, size) \
   struct caml__roots_block caml__roots_##x; \
-  CAMLunused int caml__dummy_##x = ( \
+  CAMLunused_start int caml__dummy_##x = ( \
     (caml__roots_##x.next = *caml_local_roots_ptr), \
     (*caml_local_roots_ptr = &caml__roots_##x), \
     (caml__roots_##x.mutexes = 0), \
@@ -426,10 +427,10 @@ struct caml__roots_block {
 #define CAMLlocalN(x, size) \
   value x [(size)]; \
   int caml__i_##x; \
+  CAMLxparamN (x, (size)); \
   for (caml__i_##x = 0; caml__i_##x < size; caml__i_##x ++) { \
     x[caml__i_##x] = Val_unit; \
-  } \
-  CAMLxparamN (x, (size))
+  }
 
 #ifdef DEBUG
 #define CAMLcheck_mutexes do {   \

@@ -237,6 +237,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
 #endif
 #endif
   value env;
+  value resume_fn, resume_arg;
   intnat extra_args;
   struct caml_exception_context * initial_external_raise;
   int initial_stack_words;
@@ -258,6 +259,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
 #endif
 
   if (prog == NULL) {           /* Interpreter is initializing */
+    value raise_unhandled_closure;
     static opcode_t raise_unhandled_code[] = { ACC, 0, RAISE };
 #ifdef THREADED_CODE
     caml_instr_table = (char **) jumptable;
@@ -265,7 +267,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
     caml_thread_code(raise_unhandled_code,
                      sizeof(raise_unhandled_code));
 #endif
-    value raise_unhandled_closure =
+    raise_unhandled_closure =
       caml_alloc_1(Closure_tag,
                    Val_bytecode(raise_unhandled_code));
     raise_unhandled = caml_create_root(raise_unhandled_closure);
@@ -1260,8 +1262,6 @@ value caml_interprete(code_t prog, asize_t prog_size)
       Restart_curr_instr;
 
 /* Context switching */
-      value resume_fn, resume_arg;
-
     Instruct(RESUME):
       resume_fn = sp[0];
       resume_arg = sp[1];
