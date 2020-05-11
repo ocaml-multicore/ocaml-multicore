@@ -16,7 +16,7 @@
 #endif
 
 #if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) || defined(__GNUC__)
-#define INLINE static inline
+#define INLINE Caml_inline
 #else
 #define INLINE static
 #endif
@@ -50,7 +50,7 @@ unsigned caml_plat_spin_wait(unsigned spins,
                              const char* function);
 
 #define SPIN_WAIT                                                       \
-  for (; 1; cpu_relax())                                                
+  for (; 1; cpu_relax())
 
 INLINE uintnat atomic_load_wait_nonzero(atomic_uintnat* p) {
   SPIN_WAIT {
@@ -71,11 +71,11 @@ INLINE uintnat atomic_fetch_add_verify_ge0(atomic_uintnat* p, uintnat v) {
 typedef pthread_mutex_t caml_plat_mutex;
 #define CAML_PLAT_MUTEX_INITIALIZER PTHREAD_MUTEX_INITIALIZER
 void caml_plat_mutex_init(caml_plat_mutex*);
-static inline void caml_plat_lock(caml_plat_mutex*);
-static inline int caml_plat_try_lock(caml_plat_mutex*);
+Caml_inline void caml_plat_lock(caml_plat_mutex*);
+Caml_inline int caml_plat_try_lock(caml_plat_mutex*);
 void caml_plat_assert_locked(caml_plat_mutex*);
 void caml_plat_assert_all_locks_unlocked();
-static inline void caml_plat_unlock(caml_plat_mutex*);
+Caml_inline void caml_plat_unlock(caml_plat_mutex*);
 void caml_plat_mutex_free(caml_plat_mutex*);
 typedef struct { pthread_cond_t cond; caml_plat_mutex* mutex; } caml_plat_cond;
 #define CAML_PLAT_COND_INITIALIZER(m) { PTHREAD_COND_INITIALIZER, m }
@@ -118,7 +118,7 @@ void caml_mem_decommit(void* mem, uintnat size);
 void caml_mem_unmap(void* mem, uintnat size);
 
 
-static inline void check_err(char* action, int err)
+Caml_inline void check_err(char* action, int err)
 {
   if (err) {
     caml_fatal_error_arg2("Fatal error during %s", action, ": %s\n", strerror(err));
@@ -134,13 +134,13 @@ static __thread int lockdepth;
 #define DEBUG_UNLOCK(m)
 #endif
 
-static inline void caml_plat_lock(caml_plat_mutex* m)
+Caml_inline void caml_plat_lock(caml_plat_mutex* m)
 {
   check_err("lock", pthread_mutex_lock(m));
   DEBUG_LOCK(m);
 }
 
-static inline int caml_plat_try_lock(caml_plat_mutex* m)
+Caml_inline int caml_plat_try_lock(caml_plat_mutex* m)
 {
   int r = pthread_mutex_trylock(m);
   if (r == EBUSY) {
@@ -152,7 +152,7 @@ static inline int caml_plat_try_lock(caml_plat_mutex* m)
   }
 }
 
-static inline void caml_plat_unlock(caml_plat_mutex* m)
+Caml_inline void caml_plat_unlock(caml_plat_mutex* m)
 {
   DEBUG_UNLOCK(m);
   check_err("unlock", pthread_mutex_unlock(m));

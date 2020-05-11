@@ -262,12 +262,12 @@ CAMLextern value caml_get_public_method (value obj, value tag);
    Note however that tags being hashed, same tag does not necessarily mean
    same method name. */
 
-static inline value Val_ptr(void* p)
+Caml_inline value Val_ptr(void* p)
 {
   CAMLassert(((value)p & 1) == 0);
   return (value)p + 1;
 }
-static inline void* Ptr_val(value val)
+Caml_inline void* Ptr_val(value val)
 {
   CAMLassert(val & 1);
   return (void*)(val - 1);
@@ -365,14 +365,14 @@ CAMLextern void caml_Store_double_val (value,double);
   #define Double_field(v,i) Double_flat_field(v,i)
   #define Store_double_field(v,i,d) Store_double_flat_field(v,i,d)
 #else
-  static inline double Double_field (value v, mlsize_t i) {
+  Caml_inline double Double_field (value v, mlsize_t i) {
     if (Tag_val (v) == Double_array_tag){
       return Double_flat_field (v, i);
     }else{
       return Double_array_field (v, i);
     }
   }
-  static inline void Store_double_field (value v, mlsize_t i, double d) {
+  Caml_inline void Store_double_field (value v, mlsize_t i, double d) {
     if (Tag_val (v) == Double_array_tag){
       Store_double_flat_field (v, i, d);
     }else{
@@ -432,7 +432,7 @@ CAMLextern value caml_set_oo_id(value obj);
 
 /* Field access macros and functions */
 
-static inline value Field_imm(value x, int i) {
+Caml_inline value Field_imm(value x, int i) {
   Assert (Hd_val(x));
   Assert (Tag_val(x) == Infix_tag || i < Wosize_val(x));
   value v = Op_val(x)[i];
@@ -441,7 +441,7 @@ static inline value Field_imm(value x, int i) {
 
 CAMLextern value caml_read_barrier(value, intnat);
 
-static inline void caml_read_field(value x, intnat i, value* ret) {
+Caml_inline void caml_read_field(value x, intnat i, value* ret) {
   Assert (Hd_val(x));
   /* See Note [MM] in memory.c */
   value v = atomic_load_explicit(&Op_atomic_val(x)[i], memory_order_relaxed);

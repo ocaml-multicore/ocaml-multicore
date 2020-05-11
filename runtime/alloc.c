@@ -54,7 +54,7 @@ CAMLexport value caml_alloc (mlsize_t wosize, tag_t tag)
   return result;
 }
 
-static inline void enter_gc_preserving_vals(mlsize_t wosize, value* vals)
+Caml_inline void enter_gc_preserving_vals(mlsize_t wosize, value* vals)
 {
   CAMLparam0();
   /* Copy the values to be preserved to a different array.
@@ -68,7 +68,7 @@ static inline void enter_gc_preserving_vals(mlsize_t wosize, value* vals)
   CAMLreturn0;
 }
 
-static inline value do_alloc_small(mlsize_t wosize, tag_t tag, value* vals)
+Caml_inline value do_alloc_small(mlsize_t wosize, tag_t tag, value* vals)
 {
   value v;
   mlsize_t i;

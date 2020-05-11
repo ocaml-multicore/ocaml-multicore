@@ -169,7 +169,7 @@ static void caml_thread_scan_roots(scanning_action action, void* fdata, struct d
 
 /* Saving and restoring runtime state in curr_thread */
 
-static inline void caml_thread_save_runtime_state(void)
+Caml_inline void caml_thread_save_runtime_state(void)
 {
 #if 0
   /* Save the stack-related global variables in the thread descriptor
@@ -196,7 +196,7 @@ static inline void caml_thread_save_runtime_state(void)
 #endif
 }
 
-static inline void caml_thread_restore_runtime_state(void)
+Caml_inline void caml_thread_restore_runtime_state(void)
 {
 #if 0
   /* Update curr_thread to point to the thread descriptor corresponding
