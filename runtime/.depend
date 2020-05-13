@@ -43,10 +43,10 @@ major_gc_b.$(O): major_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
   caml/eventlog.h caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h \
   caml/globroots.h caml/platform.h caml/shared_heap.h caml/startup_aux.h \
   caml/weak.h
-minor_gc_b.$(O): minor_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
-  caml/m.h caml/s.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
-  caml/domain_state.tbl caml/byte_domain_state.tbl caml/custom.h \
-  caml/domain.h caml/memory.h caml/gc.h caml/major_gc.h caml/minor_gc.h \
+minor_gc_b.$(O): minor_gc.c caml/config.h caml/m.h caml/s.h caml/custom.h \
+  caml/mlvalues.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
+  caml/domain_state.tbl caml/byte_domain_state.tbl caml/domain.h \
+  caml/memory.h caml/gc.h caml/major_gc.h caml/minor_gc.h caml/addrmap.h \
   caml/alloc.h caml/eventlog.h caml/fail.h caml/fiber.h caml/roots.h \
   caml/finalise.h caml/gc_ctrl.h caml/platform.h caml/shared_heap.h \
   caml/signals.h caml/startup_aux.h caml/weak.h
@@ -345,10 +345,10 @@ major_gc_bd.$(O): major_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
   caml/eventlog.h caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h \
   caml/globroots.h caml/platform.h caml/shared_heap.h caml/startup_aux.h \
   caml/weak.h
-minor_gc_bd.$(O): minor_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
-  caml/m.h caml/s.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
-  caml/domain_state.tbl caml/byte_domain_state.tbl caml/custom.h \
-  caml/domain.h caml/memory.h caml/gc.h caml/major_gc.h caml/minor_gc.h \
+minor_gc_bd.$(O): minor_gc.c caml/config.h caml/m.h caml/s.h caml/custom.h \
+  caml/mlvalues.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
+  caml/domain_state.tbl caml/byte_domain_state.tbl caml/domain.h \
+  caml/memory.h caml/gc.h caml/major_gc.h caml/minor_gc.h caml/addrmap.h \
   caml/alloc.h caml/eventlog.h caml/fail.h caml/fiber.h caml/roots.h \
   caml/finalise.h caml/gc_ctrl.h caml/platform.h caml/shared_heap.h \
   caml/signals.h caml/startup_aux.h caml/weak.h
@@ -653,10 +653,10 @@ major_gc_bi.$(O): major_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
   caml/eventlog.h caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h \
   caml/globroots.h caml/platform.h caml/shared_heap.h caml/startup_aux.h \
   caml/weak.h
-minor_gc_bi.$(O): minor_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
-  caml/m.h caml/s.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
-  caml/domain_state.tbl caml/byte_domain_state.tbl caml/custom.h \
-  caml/domain.h caml/memory.h caml/gc.h caml/major_gc.h caml/minor_gc.h \
+minor_gc_bi.$(O): minor_gc.c caml/config.h caml/m.h caml/s.h caml/custom.h \
+  caml/mlvalues.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
+  caml/domain_state.tbl caml/byte_domain_state.tbl caml/domain.h \
+  caml/memory.h caml/gc.h caml/major_gc.h caml/minor_gc.h caml/addrmap.h \
   caml/alloc.h caml/eventlog.h caml/fail.h caml/fiber.h caml/roots.h \
   caml/finalise.h caml/gc_ctrl.h caml/platform.h caml/shared_heap.h \
   caml/signals.h caml/startup_aux.h caml/weak.h
@@ -955,10 +955,10 @@ major_gc_bpic.$(O): major_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
   caml/eventlog.h caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h \
   caml/globroots.h caml/platform.h caml/shared_heap.h caml/startup_aux.h \
   caml/weak.h
-minor_gc_bpic.$(O): minor_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
-  caml/m.h caml/s.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
-  caml/domain_state.tbl caml/byte_domain_state.tbl caml/custom.h \
-  caml/domain.h caml/memory.h caml/gc.h caml/major_gc.h caml/minor_gc.h \
+minor_gc_bpic.$(O): minor_gc.c caml/config.h caml/m.h caml/s.h caml/custom.h \
+  caml/mlvalues.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
+  caml/domain_state.tbl caml/byte_domain_state.tbl caml/domain.h \
+  caml/memory.h caml/gc.h caml/major_gc.h caml/minor_gc.h caml/addrmap.h \
   caml/alloc.h caml/eventlog.h caml/fail.h caml/fiber.h caml/roots.h \
   caml/finalise.h caml/gc_ctrl.h caml/platform.h caml/shared_heap.h \
   caml/signals.h caml/startup_aux.h caml/weak.h
@@ -1266,13 +1266,13 @@ major_gc_n.$(O): major_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
   caml/major_gc.h caml/minor_gc.h caml/alloc.h caml/eventlog.h \
   caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h caml/globroots.h \
   caml/platform.h caml/shared_heap.h caml/startup_aux.h caml/weak.h
-minor_gc_n.$(O): minor_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
-  caml/m.h caml/s.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
-  caml/domain_state.tbl caml/custom.h caml/domain.h caml/memory.h \
-  caml/gc.h caml/major_gc.h caml/minor_gc.h caml/alloc.h caml/eventlog.h \
-  caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h caml/gc_ctrl.h \
-  caml/platform.h caml/shared_heap.h caml/signals.h caml/startup_aux.h \
-  caml/weak.h
+minor_gc_n.$(O): minor_gc.c caml/config.h caml/m.h caml/s.h caml/custom.h \
+  caml/mlvalues.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
+  caml/domain_state.tbl caml/domain.h caml/memory.h caml/gc.h \
+  caml/major_gc.h caml/minor_gc.h caml/addrmap.h caml/alloc.h \
+  caml/eventlog.h caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h \
+  caml/gc_ctrl.h caml/platform.h caml/shared_heap.h caml/signals.h \
+  caml/startup_aux.h caml/weak.h
 memory_n.$(O): memory.c caml/config.h caml/m.h caml/s.h caml/misc.h \
   caml/camlatomic.h caml/fail.h caml/mlvalues.h caml/domain_state.h \
   caml/domain_state.tbl caml/memory.h caml/gc.h caml/major_gc.h \
@@ -1558,13 +1558,13 @@ major_gc_nd.$(O): major_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
   caml/major_gc.h caml/minor_gc.h caml/alloc.h caml/eventlog.h \
   caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h caml/globroots.h \
   caml/platform.h caml/shared_heap.h caml/startup_aux.h caml/weak.h
-minor_gc_nd.$(O): minor_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
-  caml/m.h caml/s.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
-  caml/domain_state.tbl caml/custom.h caml/domain.h caml/memory.h \
-  caml/gc.h caml/major_gc.h caml/minor_gc.h caml/alloc.h caml/eventlog.h \
-  caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h caml/gc_ctrl.h \
-  caml/platform.h caml/shared_heap.h caml/signals.h caml/startup_aux.h \
-  caml/weak.h
+minor_gc_nd.$(O): minor_gc.c caml/config.h caml/m.h caml/s.h caml/custom.h \
+  caml/mlvalues.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
+  caml/domain_state.tbl caml/domain.h caml/memory.h caml/gc.h \
+  caml/major_gc.h caml/minor_gc.h caml/addrmap.h caml/alloc.h \
+  caml/eventlog.h caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h \
+  caml/gc_ctrl.h caml/platform.h caml/shared_heap.h caml/signals.h \
+  caml/startup_aux.h caml/weak.h
 memory_nd.$(O): memory.c caml/config.h caml/m.h caml/s.h caml/misc.h \
   caml/camlatomic.h caml/fail.h caml/mlvalues.h caml/domain_state.h \
   caml/domain_state.tbl caml/memory.h caml/gc.h caml/major_gc.h \
@@ -1850,13 +1850,13 @@ major_gc_ni.$(O): major_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
   caml/major_gc.h caml/minor_gc.h caml/alloc.h caml/eventlog.h \
   caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h caml/globroots.h \
   caml/platform.h caml/shared_heap.h caml/startup_aux.h caml/weak.h
-minor_gc_ni.$(O): minor_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
-  caml/m.h caml/s.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
-  caml/domain_state.tbl caml/custom.h caml/domain.h caml/memory.h \
-  caml/gc.h caml/major_gc.h caml/minor_gc.h caml/alloc.h caml/eventlog.h \
-  caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h caml/gc_ctrl.h \
-  caml/platform.h caml/shared_heap.h caml/signals.h caml/startup_aux.h \
-  caml/weak.h
+minor_gc_ni.$(O): minor_gc.c caml/config.h caml/m.h caml/s.h caml/custom.h \
+  caml/mlvalues.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
+  caml/domain_state.tbl caml/domain.h caml/memory.h caml/gc.h \
+  caml/major_gc.h caml/minor_gc.h caml/addrmap.h caml/alloc.h \
+  caml/eventlog.h caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h \
+  caml/gc_ctrl.h caml/platform.h caml/shared_heap.h caml/signals.h \
+  caml/startup_aux.h caml/weak.h
 memory_ni.$(O): memory.c caml/config.h caml/m.h caml/s.h caml/misc.h \
   caml/camlatomic.h caml/fail.h caml/mlvalues.h caml/domain_state.h \
   caml/domain_state.tbl caml/memory.h caml/gc.h caml/major_gc.h \
@@ -2142,13 +2142,13 @@ major_gc_npic.$(O): major_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
   caml/major_gc.h caml/minor_gc.h caml/alloc.h caml/eventlog.h \
   caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h caml/globroots.h \
   caml/platform.h caml/shared_heap.h caml/startup_aux.h caml/weak.h
-minor_gc_npic.$(O): minor_gc.c caml/addrmap.h caml/mlvalues.h caml/config.h \
-  caml/m.h caml/s.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
-  caml/domain_state.tbl caml/custom.h caml/domain.h caml/memory.h \
-  caml/gc.h caml/major_gc.h caml/minor_gc.h caml/alloc.h caml/eventlog.h \
-  caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h caml/gc_ctrl.h \
-  caml/platform.h caml/shared_heap.h caml/signals.h caml/startup_aux.h \
-  caml/weak.h
+minor_gc_npic.$(O): minor_gc.c caml/config.h caml/m.h caml/s.h caml/custom.h \
+  caml/mlvalues.h caml/misc.h caml/camlatomic.h caml/domain_state.h \
+  caml/domain_state.tbl caml/domain.h caml/memory.h caml/gc.h \
+  caml/major_gc.h caml/minor_gc.h caml/addrmap.h caml/alloc.h \
+  caml/eventlog.h caml/fail.h caml/fiber.h caml/roots.h caml/finalise.h \
+  caml/gc_ctrl.h caml/platform.h caml/shared_heap.h caml/signals.h \
+  caml/startup_aux.h caml/weak.h
 memory_npic.$(O): memory.c caml/config.h caml/m.h caml/s.h caml/misc.h \
   caml/camlatomic.h caml/fail.h caml/mlvalues.h caml/domain_state.h \
   caml/domain_state.tbl caml/memory.h caml/gc.h caml/major_gc.h \
