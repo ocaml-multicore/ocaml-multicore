@@ -411,9 +411,6 @@ let task spin parent procedure initial () =
         Queue.iter Verbose.notify ready
   in
   match procedure initial with
-  | effect _ k ->
-      log 'E';
-      discontinue k Unhandled
   | exception Exit ->
       log 'X';
       Domain.Sync.critical_section finish;
@@ -547,11 +544,11 @@ let kill _thread = invalid_arg "Thread.kill: not implemented"
 
 let select = Unix.select
 
-let wait_read _fd = incomplete "wait_read"
-let wait_write _fd = incomplete "wait_write"
-let wait_timed_read _fd _interval = incomplete "wait_timed_read"
-let wait_timed_write _fd _interval = incomplete "wait_timed_write"
-let wait_pid _pid = incomplete "wait_pid"
+(* let wait_read _fd = incomplete "wait_read"
+ * let wait_write _fd = incomplete "wait_write"
+ * let wait_timed_read _fd _interval = incomplete "wait_timed_read"
+ * let wait_timed_write _fd _interval = incomplete "wait_timed_write"
+ * let wait_pid _pid = incomplete "wait_pid" *)
 let wait_signal _signals = incomplete "wait_signal"
 
 let wait_timed_read fd d =

@@ -337,6 +337,7 @@ void caml_init_domains(uintnat minor_heap_wsz) {
     dom->interruptor.qhead = dom->interruptor.qtail = NULL;
     dom->interruptor.running = 0;
     dom->interruptor.terminating = 0;
+    dom->interruptor.blocking_section = 0;
     dom->interruptor.unique_id = i;
     dom->id = i;
 

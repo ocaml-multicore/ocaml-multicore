@@ -93,7 +93,7 @@ let str = make_library_modifier
 let systhreads =
   unix @
   (make_library_modifier
-    "threads" (compiler_subdir ["otherlibs"; "systhreads"]))
+    "threads" (compiler_subdir ["otherlibs"; "threads"]))
 
 let compilerlibs_subdirs =
 [

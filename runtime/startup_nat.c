@@ -75,10 +75,9 @@ static void init_segments(void)
 }
 
 /* These are termination hooks used by the systhreads library */
-/*
-struct longjmp_buffer caml_termination_jmpbuf;
-void (*caml_termination_hook)(void *) = NULL;
-*/
+
+/* struct longjmp_buffer caml_termination_jmpbuf; */
+/* void (*caml_termination_hook)(void *) = NULL; */
 
 extern value caml_start_program (caml_domain_state*);
 extern void caml_init_ieee_floats (void);
@@ -134,8 +133,8 @@ value caml_startup_common(char_os **argv, int pooling)
   caml_sys_init(exe_name, argv);
   /* if (sigsetjmp(caml_termination_jmpbuf.buf, 0)) { */
   /*   if (caml_termination_hook != NULL) caml_termination_hook(NULL); */
-    return Val_unit;
-  }
+  /*   return Val_unit; */
+  /* } */
   caml_maybe_expand_stack();
   return caml_start_program(Caml_state);
 }

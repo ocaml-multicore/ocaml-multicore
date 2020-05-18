@@ -22,15 +22,15 @@ UTILS_MLIS := $(wildcard $(SRC)/utils/*.mli)
 STR_MLIS = $(addprefix $(SRC)/otherlibs/str/, str.mli)
 UNIX_MLIS = $(addprefix $(SRC)/otherlibs/unix/, unix.mli unixLabels.mli)
 DYNLINK_MLIS = $(addprefix $(SRC)/otherlibs/dynlink/, dynlink.mli)
-THREAD_MLIS = $(addprefix $(SRC)/otherlibs/systhreads/, \
-  thread.mli condition.mli mutex.mli event.mli threadUnix.mli)
+THREAD_MLIS = $(addprefix $(SRC)/otherlibs/threads/, \
+  thread.mli mutex.mli condition.mli event.mli)
 DRIVER_MLIS = $(SRC)/driver/pparse.mli
 
 
 DOC_STDLIB_DIRS = stdlib \
 	otherlibs/str \
 	otherlibs/$(UNIXLIB) otherlibs/dynlink \
-	otherlibs/systhreads
+	otherlibs/threads
 
 DOC_COMPILERLIBS_DIRS= parsing utils typing bytecomp driver file_formats lambda
 

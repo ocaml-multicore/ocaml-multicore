@@ -66,6 +66,7 @@ module Internal: sig
     val enter: Domain.id -> flag
     val leave: unit -> Domain.id
     val is_current: Domain.id -> bool
+    val yield : Domain.id -> Domain.id
   end
 
   type thread

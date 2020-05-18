@@ -27,7 +27,7 @@ else
   str := true
 endif
 
-ifeq "$(filter systhreads,$(OTHERLIBRARIES))" ""
+ifeq "$(filter threads,$(OTHERLIBRARIES))" ""
   systhreads := false
 else
   systhreads := true
