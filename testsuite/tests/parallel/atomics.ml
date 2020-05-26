@@ -10,6 +10,45 @@ let () =
   ignore (Sys.opaque_identity a)
 
 
+(* see https://github.com/ocaml-multicore/ocaml-multicore/issues/257 *)
+type node = Nil | Cons of stack
+and stack = node Atomic.t
+
+let make () : stack =
+  Atomic.make Nil
+
+let push (st : stack) : unit =
+  let next = Atomic.make Nil in
+  let new_hd = Cons next in
+  let old_hd = Atomic.exchange st new_hd in
+  Atomic.set next old_hd
+
+let pop (st : stack) : unit =
+  begin match Atomic.get st with
+  | Nil       -> ()
+  | Cons next -> Atomic.set st (Atomic.get next)
+  end
+
+let run n thread =
+  Array.init n (fun _ -> Domain.spawn thread)
+  |> Array.iter Domain.join
+
+let () =
+  let st = make () in
+  run 2 begin fun () ->
+    for _ = 1 to 10_000 do
+      push st
+    done
+  end ;
+  print_endline "pushed ok";
+  run 2 begin fun () ->
+    for _ = 1 to 10_000 do
+      pop st
+    done
+  end ;
+  print_endline "popped ok"
+
+
 let test_fetch_add () =
   let ndoms = 4 in
   let count = 10000 in
@@ -32,7 +71,6 @@ let test_fetch_add () =
 let () =
   test_fetch_add ();
   print_endline "ok"
-
 
 
 
