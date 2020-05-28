@@ -46,6 +46,7 @@
 #include "caml/osdeps.h"
 #include "caml/signals.h"
 #include "caml/sys.h"
+#include "caml/startup_aux.h"
 
 #include "caml/config.h"
 #ifdef SUPPORT_DYNAMIC_LINKING
