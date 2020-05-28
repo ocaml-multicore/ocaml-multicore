@@ -169,6 +169,10 @@ extern int64_t caml_time_counter(void);
 
 extern void caml_init_os_params(void);
 
+#if defined(DEBUG) || defined(NATIVE_CODE)
+extern void caml_print_trace(void);
+#endif
+
 #endif /* CAML_INTERNALS */
 
 #endif /* CAML_OSDEPS_H */
