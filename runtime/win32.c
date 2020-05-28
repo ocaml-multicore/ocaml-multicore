@@ -47,6 +47,7 @@
 #include "caml/signals.h"
 #include "caml/sys.h"
 #include "caml/startup_aux.h"
+#include "caml/platform.h"
 
 #include "caml/config.h"
 #ifdef SUPPORT_DYNAMIC_LINKING
@@ -1019,5 +1020,11 @@ int caml_num_rows_fd(int fd)
 
 void caml_init_os_params(void)
 {
+  SYSTEM_INFO si;
+
+  /* Get the system page size */
+  GetSystemInfo(&si);
+  caml_sys_pagesize = si.dwPageSize;
+
   return;
 }
