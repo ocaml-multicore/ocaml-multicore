@@ -39,26 +39,33 @@ jobs:
             env: OCAMLRUNPARAM=v=0,V=1 USE_RUNTIME=d
           - name: macos
             os: macos-latest
+          - name: windows
+            os: windows-latest
+            config_arg: --host=x86_64-w64-mingw32
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+        with:
+          submodules: true
+      - uses: dra27/setup-ocaml@multicore
+        if: ${{ matrix.os == 'windows-latest' }}
       - name: configure tree
         run: |
-          CONFIG_ARG=${{ matrix.config_arg }} MAKE_ARG=-j XARCH=x64 bash -xe tools/ci/actions/runner.sh configure
+          bash -c 'CONFIG_ARG=${{ matrix.config_arg }} MAKE_ARG=-j XARCH=x64 tools/ci/actions/runner.sh configure'
       - name: Build
         run: |
-          MAKE_ARG=-j bash -xe tools/ci/actions/runner.sh build
+          bash -c 'MAKE_ARG=-j tools/ci/actions/runner.sh build'
       - name: Run the testsuite
         if: ${{ matrix.name != 'linux-O0' }}
         run: |
-          bash -xe tools/ci/actions/runner.sh test
+          bash -c 'tools/ci/actions/runner.sh test'
       - name: Run the testsuite (linux-O0, parallel)
         if: ${{ matrix.name == 'linux-O0' }}
         env:
           OCAMLRUNPARAM: v=0,V=1
           USE_RUNTIME: d
         run: |
-          bash -xe tools/ci/actions/runner.sh test_multicore 1 "parallel" "lib-threads" "lib-systhreads"
+          bash -c 'tools/ci/actions/runner.sh test_multicore 1 parallel lib-threads lib-systhreads'
 
   testsuite:
     needs: build
