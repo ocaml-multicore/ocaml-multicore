@@ -1,0 +1,12 @@
+# This file lists test directories which should be run for a "quick" multicore test
+backtrace
+basic
+callback
+effects
+gc-roots
+lazy
+lib-unix
+parallel
+promotion
+unwind
+weak-ephe-final
