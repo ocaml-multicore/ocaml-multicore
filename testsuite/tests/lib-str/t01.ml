@@ -1,3 +1,10 @@
+(* TEST
+* hasstr
+include str
+** bytecode
+** native
+*)
+
 open Printf
 
 let build_result ngroups input =

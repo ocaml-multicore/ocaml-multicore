@@ -48,7 +48,6 @@ let default_output = function
   | Some s -> s
   | None -> Config.default_executable_name
 
-let implicit_modules = ref []
 let first_include_dirs = ref []
 let last_include_dirs = ref []
 let first_ccopts = ref []
@@ -77,13 +76,13 @@ let is_unit_name name =
   with Exit -> false
 ;;
 
-let check_unit_name ppf filename name =
+let check_unit_name filename name =
   if not (is_unit_name name) then
-    Location.print_warning (Location.in_file filename) ppf
+    Location.prerr_warning (Location.in_file filename)
       (Warnings.Bad_module_name name);;
 
 (* Compute name of module from output file name *)
-let module_of_filename ppf inputfile outputprefix =
+let module_of_filename inputfile outputprefix =
   let basename = Filename.basename outputprefix in
   let name =
     try
@@ -92,7 +91,7 @@ let module_of_filename ppf inputfile outputprefix =
     with Not_found -> basename
   in
   let name = String.capitalize_ascii name in
-  check_unit_name ppf inputfile name;
+  check_unit_name inputfile name;
   name
 ;;
 
@@ -101,19 +100,34 @@ type filename = string
 type readenv_position =
   Before_args | Before_compile of filename | Before_link
 
-(* Syntax of OCAMLPARAM: (name=VALUE,)* _ (,name=VALUE)*
-   where VALUE should not contain ',' *)
+(* Syntax of OCAMLPARAM: SEP?(name=VALUE SEP)* _ (SEP name=VALUE)*
+   where VALUE should not contain SEP, and SEP is ',' if unspecified,
+   or ':', '|', ';', ' ' or ',' *)
 exception SyntaxError of string
 
+let print_error ppf msg =
+  Location.print_warning Location.none ppf
+    (Warnings.Bad_env_variable ("OCAMLPARAM", msg))
+
 let parse_args s =
-  let args = String.split_on_char ',' s in
+  let args =
+    let len = String.length s in
+    if len = 0 then []
+    else
+      (* allow first char to specify an alternative separator in ":|; ," *)
+      match s.[0] with
+      | ( ':' | '|' | ';' | ' ' | ',' ) as c ->
+         List.tl (String.split_on_char c s)
+      | _ -> String.split_on_char ',' s
+  in
   let rec iter is_after args before after =
     match args with
       [] ->
       if not is_after then
         raise (SyntaxError "no '_' separator found")
       else
-      (List.rev before, List.rev after)
+        (List.rev before, List.rev after)
+    | "" :: tail -> iter is_after tail before after
     | "_" :: _ when is_after -> raise (SyntaxError "too many '_' separators")
     | "_" :: tail -> iter true tail before after
     | arg :: tail ->
@@ -138,25 +152,22 @@ let setter ppf f name options s =
     in
     List.iter (fun b -> b := f bool) options
   with Not_found ->
-    Location.print_warning Location.none ppf
-      (Warnings.Bad_env_variable ("OCAMLPARAM",
-                                  Printf.sprintf "bad value for %s" name))
+    Printf.ksprintf (print_error ppf)
+      "bad value %s for %s" s name
 
 let int_setter ppf name option s =
   try
     option := int_of_string s
   with _ ->
-    Location.print_warning Location.none ppf
-      (Warnings.Bad_env_variable
-         ("OCAMLPARAM", Printf.sprintf "non-integer parameter for \"%s\"" name))
+    Printf.ksprintf (print_error ppf)
+      "non-integer parameter %s for %S" s name
 
 let int_option_setter ppf name option s =
   try
     option := Some (int_of_string s)
   with _ ->
-    Location.print_warning Location.none ppf
-      (Warnings.Bad_env_variable
-         ("OCAMLPARAM", Printf.sprintf "non-integer parameter for \"%s\"" name))
+    Printf.ksprintf (print_error ppf)
+      "non-integer parameter %s for %S" s name
 
 (*
 let float_setter ppf name option s =
@@ -168,16 +179,13 @@ let float_setter ppf name option s =
          ("OCAMLPARAM", Printf.sprintf "non-float parameter for \"%s\"" name))
 *)
 
-let load_plugin = ref (fun _ -> ())
-
 let check_bool ppf name s =
   match s with
   | "0" -> false
   | "1" -> true
   | _ ->
-    Location.print_warning Location.none ppf
-      (Warnings.Bad_env_variable ("OCAMLPARAM",
-                                  Printf.sprintf "bad value for %s" name));
+    Printf.ksprintf (print_error ppf)
+      "bad value %s for %s" s name;
     false
 
 (* 'can-discard=' specifies which arguments can be discarded without warning
@@ -189,13 +197,12 @@ let read_one_param ppf position name v =
   let clear name options s = setter ppf (fun b -> not b) name options s in
   match name with
   | "g" -> set "g" [ Clflags.debug ] v
-  | "p" -> set "p" [ Clflags.gprofile ] v
   | "bin-annot" -> set "bin-annot" [ Clflags.binary_annotations ] v
   | "afl-instrument" -> set "afl-instrument" [ Clflags.afl_instrument ] v
   | "afl-inst-ratio" ->
       int_setter ppf "afl-inst-ratio" afl_inst_ratio v
   | "annot" -> set "annot" [ Clflags.annotations ] v
-  | "absname" -> set "absname" [ Location.absname ] v
+  | "absname" -> set "absname" [ Clflags.absname ] v
   | "compat-32" -> set "compat-32" [ bytecode_compatible_32 ] v
   | "noassert" -> set "noassert" [ noassert ] v
   | "noautolink" -> set "noautolink" [ no_auto_link ] v
@@ -209,7 +216,7 @@ let read_one_param ppf position name v =
   | "strict-formats" -> set "strict-formats" [ strict_formats ] v
   | "thread" -> set "thread" [ use_threads ] v
   | "unboxed-types" -> set "unboxed-types" [ unboxed_types ] v
-  | "unsafe" -> set "unsafe" [ fast ] v
+  | "unsafe" -> set "unsafe" [ unsafe ] v
   | "verbose" -> set "verbose" [ verbose ] v
   | "nopervasives" -> set "nopervasives" [ nopervasives ] v
   | "slash" -> set "slash" [ force_slash ] v (* for ocamldep *)
@@ -225,10 +232,15 @@ let read_one_param ppf position name v =
 
   | "pp" -> preprocessor := Some v
   | "runtime-variant" -> runtime_variant := v
+  | "with-runtime" -> set "with-runtime" [ with_runtime ] v
+  | "open" ->
+      open_modules := List.rev_append (String.split_on_char ',' v) !open_modules
   | "cc" -> c_compiler := Some v
 
   | "clambda-checks" -> set "clambda-checks" [ clambda_checks ] v
 
+  | "function-sections" ->
+    set "function-sections" [ Clflags.function_sections ] v
   (* assembly sources *)
   |  "s" ->
     set "s" [ Clflags.keep_asm_file ; Clflags.keep_startup_file ] v
@@ -241,6 +253,8 @@ let read_one_param ppf position name v =
   |  "w"  ->               Warnings.parse_options false v
   (* warn-errors *)
   | "wwe" ->               Warnings.parse_options false v
+  (* alerts *)
+  | "alert" ->             Warnings.parse_alert_option v
 
   (* inlining *)
   | "inline" ->
@@ -248,12 +262,8 @@ let read_one_param ppf position name v =
       begin match F.parse_no_error v inline_threshold with
       | F.Ok -> ()
       | F.Parse_failed exn ->
-          let error =
-            Printf.sprintf "bad syntax for \"inline\": %s"
-              (Printexc.to_string exn)
-          in
-          Location.print_warning Location.none ppf
-            (Warnings.Bad_env_variable ("OCAMLPARAM", error))
+          Printf.ksprintf (print_error ppf)
+            "bad syntax %s for \"inline\": %s" v (Printexc.to_string exn)
       end
 
   | "inline-toplevel" ->
@@ -329,16 +339,26 @@ let read_one_param ppf position name v =
       set "flambda-verbose" [ dump_flambda_verbose ] v
   | "flambda-invariants" ->
       set "flambda-invariants" [ flambda_invariant_checks ] v
+  | "linscan" ->
+      set "linscan" [ use_linscan ] v
+  | "insn-sched" -> set "insn-sched" [ insn_sched ] v
+  | "no-insn-sched" -> clear "insn-sched" [ insn_sched ] v
 
   (* color output *)
   | "color" ->
-      begin match parse_color_setting v with
+      begin match color_reader.parse v with
       | None ->
-        Location.print_warning Location.none ppf
-          (Warnings.Bad_env_variable ("OCAMLPARAM",
-           "bad value for \"color\", \
-            (expected \"auto\", \"always\" or \"never\")"))
+        Printf.ksprintf (print_error ppf)
+          "bad value %s for \"color\", (%s)" v color_reader.usage
       | Some setting -> color := Some setting
+      end
+
+  | "error-style" ->
+      begin match error_style_reader.parse v with
+      | None ->
+          Printf.ksprintf (print_error ppf)
+            "bad value %s for \"error-style\", (%s)" v error_style_reader.usage
+      | Some setting -> error_style := Some setting
       end
 
   | "intf-suffix" -> Config.interface_suffix := v
@@ -358,7 +378,9 @@ let read_one_param ppf position name v =
         ccobjs := Misc.rev_split_words v @ !ccobjs
     end
 
-  | "ccopts" ->
+  | "ccopt"
+  | "ccopts"
+    ->
     begin
       match position with
       | Before_link | Before_compile _ ->
@@ -408,12 +430,24 @@ let read_one_param ppf position name v =
      let if_on = if name = "timings" then [ `Time ] else Profile.all_columns in
      profile_columns := if check_bool ppf name v then if_on else []
 
-  | "plugin" -> !load_plugin v
-
+  | "stop-after" ->
+    let module P = Clflags.Compiler_pass in
+    begin match P.of_string v with
+    | None ->
+        Printf.ksprintf (print_error ppf)
+          "bad value %s for option \"stop-after\" (expected one of: %s)"
+          v (String.concat ", " P.pass_names)
+    | Some pass ->
+        Clflags.stop_after := Some pass;
+        begin match pass with
+        | P.Parsing | P.Typing ->
+            compile_only := true
+        end;
+    end
   | _ ->
     if not (List.mem name !can_discard) then begin
       can_discard := name :: !can_discard;
-      Printf.eprintf
+      Printf.ksprintf (print_error ppf)
         "Warning: discarding value of variable %S in OCAMLPARAM\n%!"
         name
     end
@@ -425,9 +459,8 @@ let read_OCAMLPARAM ppf position =
       try
         parse_args s
       with SyntaxError s ->
-         Location.print_warning Location.none ppf
-           (Warnings.Bad_env_variable ("OCAMLPARAM", s));
-         [],[]
+        print_error ppf s;
+        [],[]
     in
     List.iter (fun (name, v) -> read_one_param ppf position name v)
       (match position with
@@ -460,8 +493,9 @@ let scan_line ic =
 let load_config ppf filename =
   match open_in_bin filename with
   | exception e ->
-      Location.print_error ppf (Location.in_file filename);
-      Format.fprintf ppf "Cannot open file %s@." (Printexc.to_string e);
+      Location.errorf ~loc:(Location.in_file filename)
+        "Cannot open file %s" (Printexc.to_string e)
+      |> Location.print_report ppf;
       raise Exit
   | ic ->
       let sic = Scanf.Scanning.from_channel ic in
@@ -484,8 +518,8 @@ let load_config ppf filename =
                 loc_ghost = false;
               }
             in
-            Location.print_error ppf loc;
-            Format.fprintf ppf "Configuration file error %s@." error;
+            Location.errorf ~loc "Configuration file error %s" error
+            |> Location.print_report ppf;
             close_in ic;
             raise Exit
         | line ->
@@ -560,12 +594,12 @@ let process_action
   | ProcessImplementation name ->
       readenv ppf (Before_compile name);
       let opref = output_prefix name in
-      implementation ppf name opref;
+      implementation ~source_file:name ~output_prefix:opref;
       objfiles := (opref ^ ocaml_mod_ext) :: !objfiles
   | ProcessInterface name ->
       readenv ppf (Before_compile name);
       let opref = output_prefix name in
-      interface ppf name opref;
+      interface ~source_file:name ~output_prefix:opref;
       if !make_package then objfiles := (opref ^ ".cmi") :: !objfiles
   | ProcessCFile name ->
       readenv ppf (Before_compile name);
@@ -627,7 +661,7 @@ let process_deferred_actions env =
 
           if List.length (List.filter (function
               | ProcessImplementation _
-              | ProcessInterface _
+              | ProcessInterface _ -> true
               | _ -> false) !deferred_actions) > 1 then
             fatal "Options -c -o are incompatible with compiling multiple files"
         end;

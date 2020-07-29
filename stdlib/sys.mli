@@ -20,14 +20,17 @@
   an error.
 *)
 
-val argv : string array
+external argv : string array = "%sys_argv"
 (** The command line arguments given to the process.
    The first element is the command name used to invoke the program.
    The following elements are the command-line arguments
    given to the program. *)
 
 val executable_name : string
-(** The name of the file containing the executable currently running. *)
+(** The name of the file containing the executable currently running.
+    This name may be absolute or relative to the current directory, depending
+    on the platform and whether the program was compiled to bytecode or a native
+    executable. *)
 
 external file_exists : string -> bool = "caml_sys_file_exists"
 (** Test if a file with the given name exists. *)
@@ -63,7 +66,24 @@ val getenv_opt: string -> string option
 *)
 
 external command : string -> int = "caml_sys_system_command"
-(** Execute the given shell command and return its exit code. *)
+(** Execute the given shell command and return its exit code.
+
+  The argument of {!Sys.command} is generally the name of a
+  command followed by zero, one or several arguments, separated
+  by whitespace.  The given argument is interpreted by a
+  shell: either the Windows shell [cmd.exe] for the Win32 ports of
+  OCaml, or the POSIX shell [sh] for other ports.  It can contain
+  shell builtin commands such as [echo], and also special characters
+  such as file redirections [>] and [<], which will be honored by the
+  shell.
+
+  Conversely, whitespace or special shell characters occuring in
+  command names or in their arguments must be quoted or escaped
+  so that the shell does not interpret them.  The quoting rules vary
+  between the POSIX shell and the Windows shell.
+  The {!Filename.quote_command} performs the appropriate quoting
+  given a command name, a list of arguments, and optional file redirections.
+*)
 
 external time : unit -> (float [@unboxed]) =
   "caml_sys_time" "caml_sys_time_unboxed" [@@noalloc]
@@ -126,13 +146,12 @@ val cygwin : bool
 
 val word_size : int
 (** Size of one word on the machine currently executing the OCaml
-   program, in bits: 32 or 64. *)
+    program, in bits: 32 or 64. *)
 
 val int_size : int
-(** Size of an int.  It is 31 bits (resp. 63 bits) when using the
-    OCaml compiler on a 32 bits (resp. 64 bits) platform.  It may
-    differ for other compilers, e.g. it is 32 bits when compiling to
-    JavaScript.
+(** Size of [int], in bits. It is 31 (resp. 63) when using OCaml on a
+    32-bit (resp. 64-bit) platform. It may differ for other implementations,
+    e.g. it can be 32 bits when compiling to JavaScript.
     @since 4.03.0 *)
 
 val big_endian : bool
@@ -143,9 +162,16 @@ val max_string_length : int
 (** Maximum length of strings and byte sequences. *)
 
 val max_array_length : int
-(** Maximum length of a normal array.  The maximum length of a float
-    array is [max_array_length/2] on 32-bit machines and
-    [max_array_length] on 64-bit machines. *)
+(** Maximum length of a normal array (i.e. any array whose elements are
+    not of type [float]). The maximum length of a [float array]
+    is [max_floatarray_length] if OCaml was configured with
+    [--enable-flat-float-array] and [max_array_length] if configured
+    with [--disable-flat-float-array]. *)
+
+val max_floatarray_length : int
+(** Maximum length of a floatarray. This is also the maximum length of
+    a [float array] when OCaml is configured with
+    [--enable-flat-float-array]. *)
 
 external runtime_variant : unit -> string = "caml_runtime_variant"
 (** Return the name of the runtime variant the program is running on.
@@ -331,3 +357,28 @@ external opaque_identity : 'a -> 'a = "%opaque"
 
     @since 4.03.0
 *)
+
+module Immediate64 : sig
+  (** This module allows to define a type [t] with the [immediate64]
+      attribute. This attribute means that the type is immediate on 64
+      bit architectures. On other architectures, it might or might not
+      be immediate.
+
+      @since 4.10.0
+  *)
+
+  module type Non_immediate = sig
+    type t
+  end
+  module type Immediate = sig
+    type t [@@immediate]
+  end
+
+  module Make(Immediate : Immediate)(Non_immediate : Non_immediate) : sig
+    type t [@@immediate64]
+    type 'a repr =
+      | Immediate : Immediate.t repr
+      | Non_immediate : Non_immediate.t repr
+    val repr : t repr
+  end
+end

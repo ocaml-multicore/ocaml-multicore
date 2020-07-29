@@ -1,3 +1,12 @@
+(* TEST
+
+* hassysthreads
+include systhreads
+** bytecode
+** native
+
+*)
+
 (* The bank account example, using events and channels *)
 
 open Printf

@@ -41,8 +41,10 @@
 #include "caml/spacetime.h"
 #endif
 
+#ifndef NATIVE_CODE
 /* Initial size of bytecode stack when a thread is created (4 Ko) */
 #define Thread_stack_size (Stack_size / 4)
+#endif
 
 /* Max computation time before rescheduling, in milliseconds */
 #define Thread_timeout 50
@@ -245,6 +247,7 @@ static void caml_thread_leave_blocking_section(void)
   caml_thread_restore_runtime_state();
 }
 
+#if 0
 static int caml_thread_try_leave_blocking_section(void)
 {
   /* Disable immediate processing of signals (PR#3659).
@@ -253,6 +256,7 @@ static int caml_thread_try_leave_blocking_section(void)
      polling. */
   return 0;
 }
+#endif
 
 /* Create and setup a new thread info block.
    This block has no associated thread descriptor and
@@ -380,7 +384,7 @@ static void caml_thread_reinitialize(void)
 
 CAMLprim value caml_thread_initialize(value unit)   /* ML */
 {
-  /* Protect against repeated initialization (PR#1325) */
+  /* Protect against repeated initialization (PR#3532) */
   if (curr_thread != NULL) return Val_unit;
   /* OS-specific initialization */
   st_initialize();
@@ -600,7 +604,8 @@ CAMLexport int caml_c_thread_unregister(void)
 
 CAMLprim value caml_thread_self(value unit)         /* ML */
 {
-  if (curr_thread == NULL) caml_invalid_argument("Thread.self: not initialized");
+  if (curr_thread == NULL)
+    caml_invalid_argument("Thread.self: not initialized");
   return curr_thread->descr;
 }
 
@@ -630,7 +635,8 @@ CAMLprim value caml_thread_exit(value unit)   /* ML */
 {
   struct longjmp_buffer * exit_buf = NULL;
 
-  if (curr_thread == NULL) caml_invalid_argument("Thread.exit: not initialized");
+  if (curr_thread == NULL)
+    caml_invalid_argument("Thread.exit: not initialized");
 
   /* In native code, we cannot call pthread_exit here because on some
      systems this raises a C++ exception, and ocamlopt-generated stack
@@ -659,9 +665,19 @@ CAMLprim value caml_thread_exit(value unit)   /* ML */
 CAMLprim value caml_thread_yield(value unit)        /* ML */
 {
   if (st_masterlock_waiters(&caml_master_lock) == 0) return Val_unit;
-  caml_enter_blocking_section();
-  st_thread_yield();
-  caml_leave_blocking_section();
+
+  /* Do all the parts of a blocking section enter/leave except lock
+     manipulation, which we'll do more efficiently in st_thread_yield. (Since
+     our blocking section doesn't contain anything interesting, don't bother
+     with saving errno.)
+  */
+  caml_check_urgent_gc (Val_unit);
+  caml_thread_save_runtime_state();
+  st_thread_yield(&caml_master_lock);
+  curr_thread = st_tls_get(thread_descriptor_key);
+  caml_thread_restore_runtime_state();
+  caml_check_urgent_gc (Val_unit);
+
   return Val_unit;
 }
 
@@ -701,6 +717,7 @@ static const struct custom_operations caml_mutex_ops = {
   caml_mutex_compare,
   caml_mutex_hash,
   custom_serialize_default,
+  custom_deserialize_default,
   custom_compare_ext_default,
   custom_fixed_length_default
 };

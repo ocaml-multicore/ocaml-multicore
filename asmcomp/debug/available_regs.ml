@@ -18,6 +18,7 @@ module M = Mach
 module R = Reg
 module RAS = Reg_availability_set
 module RD = Reg_with_debug_info
+module V = Backend_var
 
 (* This pass treats [avail_at_exit] like a "result" structure whereas the
    equivalent in [Liveness] is like an "environment".  (Which means we need
@@ -108,7 +109,8 @@ let rec available_regs (instr : M.instruction)
                 match RD.debug_info reg with
                 | None -> reg
                 | Some debug_info ->
-                  if Ident.same (RD.Debug_info.holds_value_of debug_info) ident
+                  if V.same
+                    (RD.Debug_info.holds_value_of debug_info) ident
                   then RD.clear_debug_info reg
                   else reg)
               avail_before
@@ -223,22 +225,6 @@ let rec available_regs (instr : M.instruction)
         Some (ok avail_across), ok avail_after
       | Iifthenelse (_, ifso, ifnot) -> join [ifso; ifnot] ~avail_before
       | Iswitch (_, cases) -> join (Array.to_list cases) ~avail_before
-      | Iloop body ->
-        let avail_after = ref (ok avail_before) in
-        begin try
-          while true do
-            let avail_after' =
-              RAS.inter !avail_after
-                (available_regs body ~avail_before:!avail_after)
-            in
-            if RAS.equal !avail_after avail_after' then begin
-              raise Exit
-              end;
-            avail_after := avail_after'
-          done
-        with Exit -> ()
-        end;
-        None, unreachable
       | Icatch (recursive, handlers, body) ->
         List.iter (fun (nfail, _handler) ->
             (* In case there are nested [Icatch] expressions with the same

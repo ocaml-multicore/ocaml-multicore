@@ -13,13 +13,52 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(* Miscellaneous useful types and functions *)
+(** Miscellaneous useful types and functions
+
+  {b Warning:} this module is unstable and part of
+  {{!Compiler_libs}compiler-libs}.
+
+*)
 
 val fatal_error: string -> 'a
 val fatal_errorf: ('a, Format.formatter, unit, 'b) format4 -> 'a
 exception Fatal_error
 
-val try_finally : (unit -> 'a) -> (unit -> unit) -> 'a;;
+val try_finally :
+  ?always:(unit -> unit) ->
+  ?exceptionally:(unit -> unit) ->
+  (unit -> 'a) -> 'a
+(** [try_finally work ~always ~exceptionally] is designed to run code
+    in [work] that may fail with an exception, and has two kind of
+    cleanup routines: [always], that must be run after any execution
+    of the function (typically, freeing system resources), and
+    [exceptionally], that should be run only if [work] or [always]
+    failed with an exception (typically, undoing user-visible state
+    changes that would only make sense if the function completes
+    correctly). For example:
+
+    {[
+      let objfile = outputprefix ^ ".cmo" in
+      let oc = open_out_bin objfile in
+      Misc.try_finally
+        (fun () ->
+           bytecode
+           ++ Timings.(accumulate_time (Generate sourcefile))
+               (Emitcode.to_file oc modulename objfile);
+           Warnings.check_fatal ())
+        ~always:(fun () -> close_out oc)
+        ~exceptionally:(fun _exn -> remove_file objfile);
+    ]}
+
+    If [exceptionally] fail with an exception, it is propagated as
+    usual.
+
+    If [always] or [exceptionally] use exceptions internally for
+    control-flow but do not raise, then [try_finally] is careful to
+    preserve any exception backtrace coming from [work] or [always]
+    for easier debugging.
+*)
+
 
 val map_end: ('a -> 'b) -> 'a list -> 'b list -> 'b list
         (* [map_end f l t] is [map f l @ t], just more efficient. *)
@@ -37,8 +76,6 @@ val list_remove: 'a -> 'a list -> 'a list
            element equal to [x] removed. *)
 val split_last: 'a list -> 'a list * 'a
         (* Return the last element and the other elements of the given list. *)
-val may: ('a -> unit) -> 'a option -> unit
-val may_map: ('a -> 'b) -> 'a option -> 'b option
 
 type ref_and_value = R : 'a ref * 'a -> ref_and_value
 
@@ -59,10 +96,9 @@ module Stdlib : sig
     (** Returns [true] iff the given lists have the same length and content
         with respect to the given equality function. *)
 
-    val filter_map : ('a -> 'b option) -> 'a t -> 'b t
-    (** [filter_map f l] applies [f] to every element of [l], filters
-        out the [None] elements and returns the list of the arguments of
-        the [Some] elements. *)
+    val find_map : ('a -> 'b option) -> 'a t -> 'b option
+    (** [find_map f l] returns the first evaluation of [f] that returns [Some],
+       or returns None if there is no such element. *)
 
     val some_if_all_elements_are_some : 'a option t -> 'a t option
     (** If all elements of the given list are [Some _] then [Some xs]
@@ -78,17 +114,39 @@ module Stdlib : sig
     (** [split_at n l] returns the pair [before, after] where [before] is
         the [n] first elements of [l] and [after] the remaining ones.
         If [l] has less than [n] elements, raises Invalid_argument. *)
+
+    val is_prefix
+       : equal:('a -> 'a -> bool)
+      -> 'a list
+      -> of_:'a list
+      -> bool
+    (** Returns [true] iff the given list, with respect to the given equality
+        function on list members, is a prefix of the list [of_]. *)
+
+    type 'a longest_common_prefix_result = private {
+      longest_common_prefix : 'a list;
+      first_without_longest_common_prefix : 'a list;
+      second_without_longest_common_prefix : 'a list;
+    }
+
+    val find_and_chop_longest_common_prefix
+       : equal:('a -> 'a -> bool)
+      -> first:'a list
+      -> second:'a list
+      -> 'a longest_common_prefix_result
+    (** Returns the longest list that, with respect to the provided equality
+        function, is a prefix of both of the given lists.  The input lists,
+        each with such longest common prefix removed, are also returned. *)
   end
 
   module Option : sig
     type 'a t = 'a option
 
-    val equal : ('a -> 'a -> bool) -> 'a t -> 'a t -> bool
-
-    val iter : ('a -> unit) -> 'a t -> unit
-    val map : ('a -> 'b) -> 'a t -> 'b t
-    val fold : ('a -> 'b -> 'b) -> 'a t -> 'b -> 'b
-    val value_default : ('a -> 'b) -> default:'b -> 'a t -> 'b
+    val print
+       : (Format.formatter -> 'a -> unit)
+      -> Format.formatter
+      -> 'a t
+      -> unit
   end
 
   module Array : sig
@@ -96,7 +154,27 @@ module Stdlib : sig
     (* Same as [Array.exists], but for a two-argument predicate. Raise
        Invalid_argument if the two arrays are determined to have
        different lengths. *)
+
+    val for_alli : (int -> 'a -> bool) -> 'a array -> bool
+    (** Same as {!Array.for_all}, but the
+        function is applied with the index of the element as first argument,
+        and the element itself as second argument. *)
+
+    val all_somes : 'a option array -> 'a array option
   end
+
+  module String : sig
+    include module type of String
+    module Set : Set.S with type elt = string
+    module Map : Map.S with type key = string
+    module Tbl : Hashtbl.S with type key = string
+
+    val print : Format.formatter -> t -> unit
+
+    val for_all : (char -> bool) -> t -> bool
+  end
+
+  external compare : 'a -> 'a -> int = "%compare"
 end
 
 val find_in_path: string list -> string -> string
@@ -112,6 +190,13 @@ val remove_file: string -> unit
 val expand_directory: string -> string -> string
         (* [expand_directory alt file] eventually expands a [+] at the
            beginning of file into [alt] (an alternate root directory) *)
+
+val split_path_contents: ?sep:char -> string -> string list
+(* [split_path_contents ?sep s] interprets [s] as the value of a "PATH"-like
+   variable and returns the corresponding list of directories. [s] is split
+   using the platform-specific delimiter, or [~sep] if it is passed.
+
+   Returns the empty list if [s] is empty. *)
 
 val create_hashtable: int -> ('a * 'b) list -> ('a, 'b) Hashtbl.t
         (* Create a hashtable of the given size and fills it with the
@@ -135,6 +220,14 @@ val output_to_file_via_temporary:
            which is passed to [fn] (name + output channel).  When [fn] returns,
            the channel is closed and the temporary file is renamed to
            [filename]. *)
+
+(** Open the given [filename] for writing (in binary mode), pass the
+    [out_channel] to the given function, then close the channel. If the function
+    raises an exception then [filename] will be removed. *)
+val protect_writing_to_file
+   : filename:string
+  -> f:(out_channel -> 'a)
+  -> 'a
 
 val log2: int -> int
         (* [log2 n] returns [s] such that [n = 1 lsl s]
@@ -188,6 +281,9 @@ val get_ref: 'a list ref -> 'a list
         (* [get_ref lr] returns the content of the list reference [lr] and reset
            its content to the empty list. *)
 
+val set_or_ignore : ('a -> 'b option) -> 'b option ref -> 'a -> unit
+        (* [set_or_ignore f opt x] sets [opt] to [f x] if it returns [Some _],
+           or leaves it unmodified if it returns [None]. *)
 
 val fst3: 'a * 'b * 'c -> 'a
 val snd3: 'a * 'b * 'c -> 'b
@@ -254,12 +350,6 @@ val cut_at : string -> char -> string * string
    @since 4.01
 *)
 
-
-module StringSet: Set.S with type elt = string
-module StringMap: Map.S with type key = string
-(* TODO: replace all custom instantiations of StringSet/StringMap in various
-   compiler modules with this one. *)
-
 (* Color handling *)
 module Color : sig
   type color =
@@ -294,6 +384,8 @@ module Color : sig
 
   type setting = Auto | Always | Never
 
+  val default_setting : setting
+
   val setup : setting option -> unit
   (* [setup opt] will enable or disable color handling on standard formatters
      according to the value of color setting [opt].
@@ -301,6 +393,15 @@ module Color : sig
 
   val set_color_tag_handling : Format.formatter -> unit
   (* adds functions to support color tags to the given formatter. *)
+end
+
+(* See the -error-style option *)
+module Error_style : sig
+  type setting =
+    | Contextual
+    | Short
+
+  val default_setting : setting
 end
 
 val normalise_eol : string -> string
@@ -313,38 +414,74 @@ val delete_eol_spaces : string -> string
    line spaces removed. Intended to normalize the output of the
    toplevel for tests. *)
 
+val pp_two_columns :
+  ?sep:string -> ?max_lines:int ->
+  Format.formatter -> (string * string) list -> unit
+(** [pp_two_columns ?sep ?max_lines ppf l] prints the lines in [l] as two
+   columns separated by [sep] ("|" by default). [max_lines] can be used to
+   indicate a maximum number of lines to print -- an ellipsis gets inserted at
+   the middle if the input has too many lines.
 
+   Example:
 
-(** {1 Hook machinery}
+    {v pp_two_columns ~max_lines:3 Format.std_formatter [
+      "abc", "hello";
+      "def", "zzz";
+      "a"  , "bllbl";
+      "bb" , "dddddd";
+    ] v}
 
-    Hooks machinery:
-   [add_hook name f] will register a function that will be called on the
-    argument of a later call to [apply_hooks]. Hooks are applied in the
-    lexicographical order of their names.
+    prints
+
+    {v
+    abc | hello
+    ...
+    bb  | dddddd
+    v}
 *)
 
-type hook_info = {
-  sourcefile : string;
-}
+(** configuration variables *)
+val show_config_and_exit : unit -> unit
+val show_config_variable_and_exit : string -> unit
 
-exception HookExnWrapper of
-    {
-      error: exn;
-      hook_name: string;
-      hook_info: hook_info;
-    }
-    (** An exception raised by a hook will be wrapped into a
-        [HookExnWrapper] constructor by the hook machinery.  *)
+val get_build_path_prefix_map: unit -> Build_path_prefix_map.map option
+(** Returns the map encoded in the [BUILD_PATH_PREFIX_MAP] environment
+    variable. *)
+
+val debug_prefix_map_flags: unit -> string list
+(** Returns the list of [--debug-prefix-map] flags to be passed to the
+    assembler, built from the [BUILD_PATH_PREFIX_MAP] environment variable. *)
+
+val print_if :
+  Format.formatter -> bool ref -> (Format.formatter -> 'a -> unit) -> 'a -> 'a
+(** [print_if ppf flag fmt x] prints [x] with [fmt] on [ppf] if [b] is true. *)
 
 
-val raise_direct_hook_exn: exn -> 'a
-  (** A hook can use [raise_unwrapped_hook_exn] to raise an exception that will
-      not be wrapped into a {!HookExnWrapper}. *)
+type filepath = string
+type modname = string
+type crcs = (modname * Digest.t option) list
 
-module type HookSig = sig
-  type t
-  val add_hook : string -> (hook_info -> t -> t) -> unit
-  val apply_hooks : hook_info -> t -> t
+type alerts = string Stdlib.String.Map.t
+
+
+module EnvLazy: sig
+  type ('a,'b) t
+
+  type log
+
+  val force : ('a -> 'b) -> ('a,'b) t -> 'b
+  val create : 'a -> ('a,'b) t
+  val get_arg : ('a,'b) t -> 'a option
+  val create_forced : 'b -> ('a, 'b) t
+  val create_failed : exn -> ('a, 'b) t
+
+  (* [force_logged log f t] is equivalent to [force f t] but if [f]
+     returns [Error _] then [t] is recorded in [log]. [backtrack log]
+     will then reset all the recorded [t]s back to their original
+     state. *)
+  val log : unit -> log
+  val force_logged :
+    log -> ('a -> ('b, 'c) result) -> ('a,('b, 'c) result) t -> ('b, 'c) result
+  val backtrack : log -> unit
+
 end
-
-module MakeHooks : functor (M : sig type t end) -> HookSig with type t = M.t

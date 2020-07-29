@@ -50,6 +50,7 @@ let is_base_type env ty base_ty_path =
   | _ -> false
 
 let maybe_pointer_type env ty =
+  let ty = scrape_ty env ty in
   if Ctype.maybe_pointer_type env ty then
     Pointer
   else
@@ -120,8 +121,8 @@ let array_pattern_kind pat = array_type_kind pat.pat_env pat.pat_type
 
 let bigarray_decode_type env ty tbl dfl =
   match scrape env ty with
-  | Tconstr(Pdot(Pident mod_id, type_name, _), [], _)
-    when Ident.name mod_id = "CamlinternalBigarray" ->
+  | Tconstr(Pdot(Pident mod_id, type_name), [], _)
+    when Ident.name mod_id = "Stdlib__bigarray" ->
       begin try List.assoc type_name tbl with Not_found -> dfl end
   | _ ->
       dfl
@@ -170,6 +171,10 @@ let value_kind env ty =
   | _ ->
       Pgenval
 
+let function_return_value_kind env ty =
+  match is_function_type env ty with
+  | Some (_lhs, rhs) -> value_kind env rhs
+  | None -> Pgenval
 
 (** Whether a forward block is needed for a lazy thunk on a value, i.e.
     if the value can be represented as a float/forward/lazy *)
@@ -184,7 +189,7 @@ let lazy_val_requires_forward env ty =
     taken into account when determining whether a recursive binding is safe. *)
 let classify_lazy_argument : Typedtree.expression ->
                              [`Constant_or_function
-                             |`Float
+                             |`Float_that_cannot_be_shortcut
                              |`Identifier of [`Forward_value|`Other]
                              |`Other] =
   fun e -> match e.exp_desc with
@@ -195,10 +200,16 @@ let classify_lazy_argument : Typedtree.expression ->
     | Texp_construct (_, {cstr_arity = 0}, _) ->
        `Constant_or_function
     | Texp_constant(Const_float _) ->
-       `Float
+       if Config.flat_float_array
+       then `Float_that_cannot_be_shortcut
+       else `Constant_or_function
     | Texp_ident _ when lazy_val_requires_forward e.exp_env e.exp_type ->
        `Identifier `Forward_value
     | Texp_ident _ ->
        `Identifier `Other
     | _ ->
        `Other
+
+let value_kind_union k1 k2 =
+  if k1 = k2 then k1
+  else Pgenval

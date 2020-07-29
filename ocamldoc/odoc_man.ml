@@ -287,12 +287,11 @@ class man =
     method man_of_text_element b txt =
       match txt with
       | Odoc_info.Raw s -> bs b (self#escape s)
-      | Odoc_info.Code s ->
-          bs b "\n.B ";
-          bs b ((Str.global_replace (Str.regexp "\n") "\n.B " (self#escape s))^"\n")
+      | Odoc_info.Code s -> self#man_of_code b s
       | Odoc_info.CodePre s ->
-          bs b "\n.B ";
-          bs b ((Str.global_replace (Str.regexp "\n") "\n.B " (self#escape s))^"\n")
+         bs b "\n.EX";
+         self#man_of_code b s;
+         bs b "\n.EE";
       | Odoc_info.Verbatim s ->
           bs b (self#escape s)
       | Odoc_info.Bold t
@@ -319,7 +318,8 @@ class man =
           self#man_of_text2 b t;
           bs b "\n.sp\n"
       | Odoc_info.Title (_, _, t) ->
-          self#man_of_text2 b [Odoc_info.Code (Odoc_info.string_of_text t)]
+          let txt = Odoc_info.string_of_text t in
+          bp b ".SS %s\n" txt
       | Odoc_info.Latex _ ->
           (* don't care about LaTeX stuff in HTML. *)
           ()
@@ -329,9 +329,9 @@ class man =
           self#man_of_text_element b
             (Odoc_info.Code (Odoc_info.use_hidden_modules name))
       | Odoc_info.Superscript t ->
-          bs b "^{"; self#man_of_text2 b t
+          bs b "^"; self#man_of_text2 b t
       | Odoc_info.Subscript t ->
-          bs b "_{"; self#man_of_text2 b t
+          bs b "_"; self#man_of_text2 b t
       | Odoc_info.Module_list _ ->
           ()
       | Odoc_info.Index_list ->
@@ -345,7 +345,11 @@ class man =
       if String.lowercase_ascii target = "man" then bs b code else ()
 
     (** Print groff string to display code. *)
-    method man_of_code b s = self#man_of_text b [ Code s ]
+    method man_of_code b code =
+      let code = self#escape code in
+      bs b "\n.ft B\n";
+      bs b (Str.global_replace (Str.regexp "\n") "\n.br\n\\&" code);
+      bs b "\n.ft R\n";
 
     (** Take a string and return the string where fully qualified idents
        have been replaced by idents relative to the given module name.*)
@@ -732,7 +736,7 @@ class man =
             (fun (p, desc_opt) ->
               bs b ".sp\n";
               bs b ("\""^p.mp_name^"\"\n");
-              Misc.may (self#man_of_module_type b m_name) p.mp_type;
+              Option.iter (self#man_of_module_type b m_name) p.mp_type;
               bs b "\n";
               (
                match desc_opt with
@@ -810,13 +814,13 @@ class man =
     (** Print groff string for a module comment.*)
     method man_of_module_comment b text =
       bs b "\n.PP\n";
-      self#man_of_text b [Code ("=== "^(Odoc_misc.string_of_text text)^" ===")];
+      self#man_of_text b text;
       bs b "\n.PP\n"
 
     (** Print groff string for a class comment.*)
     method man_of_class_comment b text =
       bs b "\n.PP\n";
-      self#man_of_text b [Code ("=== "^(Odoc_misc.string_of_text text)^" ===")];
+      self#man_of_text b text;
       bs b "\n.PP\n"
 
     method man_of_recfield b modname f =

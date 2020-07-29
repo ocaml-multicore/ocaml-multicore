@@ -21,7 +21,7 @@
   the -ppx rewriters, handling such details as the serialization format,
   forwarding of command-line flags, and storing state.
 
-  {!mapper} allows to implement AST rewriting using open recursion.
+  {!mapper} enables AST rewriting using open recursion.
   A typical mapper would be based on {!default_mapper}, a deep
   identity mapper, and will fall back on it for handling the syntax it
   does not modify. For example:
@@ -46,6 +46,9 @@ let () =
   the constant [42], can be compiled using
   [ocamlc -o ppx_test -I +compiler-libs ocamlcommon.cma ppx_test.ml].
 
+  {b Warning:} this module is unstable and part of
+  {{!Compiler_libs}compiler-libs}.
+
   *)
 
 open Parsetree
@@ -55,6 +58,7 @@ open Parsetree
 type mapper = {
   attribute: mapper -> attribute -> attribute;
   attributes: mapper -> attribute list -> attribute list;
+  binding_op: mapper -> binding_op -> binding_op;
   case: mapper -> case -> case;
   cases: mapper -> case list -> case list;
   class_declaration: mapper -> class_declaration -> class_declaration;
@@ -79,10 +83,12 @@ type mapper = {
   location: mapper -> Location.t -> Location.t;
   module_binding: mapper -> module_binding -> module_binding;
   module_declaration: mapper -> module_declaration -> module_declaration;
+  module_substitution: mapper -> module_substitution -> module_substitution;
   module_expr: mapper -> module_expr -> module_expr;
   module_type: mapper -> module_type -> module_type;
   module_type_declaration: mapper -> module_type_declaration
                            -> module_type_declaration;
+  open_declaration: mapper -> open_declaration -> open_declaration;
   open_description: mapper -> open_description -> open_description;
   pat: mapper -> pattern -> pattern;
   payload: mapper -> payload -> payload;
@@ -93,6 +99,7 @@ type mapper = {
   typ: mapper -> core_type -> core_type;
   type_declaration: mapper -> type_declaration -> type_declaration;
   type_extension: mapper -> type_extension -> type_extension;
+  type_exception: mapper -> type_exception -> type_exception;
   type_kind: mapper -> type_kind -> type_kind;
   value_binding: mapper -> value_binding -> value_binding;
   value_description: mapper -> value_description -> value_description;
@@ -114,7 +121,7 @@ val tool_name: unit -> string
     ["ocaml"], ...  Some global variables that reflect command-line
     options are automatically synchronized between the calling tool
     and the ppx preprocessor: {!Clflags.include_dirs},
-    {!Config.load_path}, {!Clflags.open_modules}, {!Clflags.for_package},
+    {!Load_path}, {!Clflags.open_modules}, {!Clflags.for_package},
     {!Clflags.debug}. *)
 
 

@@ -62,8 +62,7 @@ let match_expect_extension (ext : Parsetree.extension) =
   match ext with
   | ({Asttypes.txt="expect"|"ocaml.expect"; loc = extid_loc}, payload) ->
     let invalid_payload () =
-      Location.raise_errorf ~loc:extid_loc
-        "invalid [%%%%expect payload]"
+      Location.raise_errorf ~loc:extid_loc "invalid [%%%%expect payload]"
     in
     let string_constant (e : Parsetree.expression) =
       match e.pexp_desc with
@@ -130,19 +129,9 @@ let split_chunks phrases =
   loop phrases [] []
 
 module Compiler_messages = struct
-  let print_loc ppf (loc : Location.t) =
-    let startchar = loc.loc_start.pos_cnum - loc.loc_start.pos_bol in
-    let endchar = loc.loc_end.pos_cnum - loc.loc_start.pos_cnum + startchar in
-    Format.fprintf ppf "Line _";
-    if startchar >= 0 then
-      Format.fprintf ppf ", characters %d-%d" startchar endchar;
-    Format.fprintf ppf ":@,"
-
   let capture ppf ~f =
     Misc.protect_refs
-      [ R (Location.formatter_for_warnings , ppf)
-      ; R (Location.printer                , print_loc)
-      ]
+      [ R (Location.formatter_for_warnings, ppf) ]
       f
 end
 
@@ -182,6 +171,7 @@ let parse_contents ~fname contents =
   let lexbuf = Lexing.from_string contents in
   Location.init lexbuf fname;
   Location.input_name := fname;
+  Location.input_lexbuf := Some lexbuf;
   Parse.use_file lexbuf
 
 let eval_expectation expectation ~output =
@@ -242,11 +232,20 @@ let eval_expect_file _fname ~file_contents =
     let _ : bool =
       List.fold_left phrases ~init:true ~f:(fun acc phrase ->
         acc &&
+        let snap = Btype.snapshot () in
         try
           exec_phrase ppf phrase
         with exn ->
-          Location.report_exception ppf exn;
-          false)
+          let bt = Printexc.get_raw_backtrace () in
+          begin try Location.report_exception ppf exn
+          with _ ->
+            Format.fprintf ppf "Uncaught exception: %s\n%s\n"
+              (Printexc.to_string exn)
+              (Printexc.raw_backtrace_to_string bt)
+          end;
+          Btype.backtrack snap;
+          false
+      )
     in
     Format.pp_print_flush ppf ();
     let len = Buffer.length buf in
@@ -313,34 +312,57 @@ let process_expect_file fname =
   let correction = eval_expect_file fname ~file_contents in
   write_corrected ~file:corrected_fname ~file_contents correction
 
-let repo_root = ref ""
+let repo_root = ref None
+let keep_original_error_size = ref false
 
 let main fname =
+  if not !keep_original_error_size then
+    Clflags.error_size := 0;
   Toploop.override_sys_argv
     (Array.sub Sys.argv ~pos:!Arg.current
        ~len:(Array.length Sys.argv - !Arg.current));
   (* Ignore OCAMLRUNPARAM=b to be reproducible *)
   Printexc.record_backtrace false;
-  List.iter [ "stdlib" ] ~f:(fun s ->
-    Topdirs.dir_directory (Filename.concat !repo_root s));
+  if not !Clflags.no_std_include then begin
+    match !repo_root with
+    | None -> ()
+    | Some dir ->
+        (* If we pass [-repo-root], use the stdlib from inside the
+           compiler, not the installed one. We use
+           [Compenv.last_include_dirs] to make sure that the stdlib
+           directory is the last one. *)
+        Clflags.no_std_include := true;
+        Compenv.last_include_dirs := [Filename.concat dir "stdlib"]
+  end;
+  Compmisc.init_path ();
   Toploop.initialize_toplevel_env ();
   Sys.interactive := false;
   process_expect_file fname;
   exit 0
 
+module Options = Main_args.Make_bytetop_options (struct
+  include Main_args.Default.Topmain
+  let _stdin () = (* disabled *) ()
+  let _args = Arg.read_arg
+  let _args0 = Arg.read_arg0
+  let anonymous s = main s
+end);;
+
 let args =
   Arg.align
-    [ "-repo-root", Set_string repo_root,
-      "<dir> root of the OCaml repository"
-    ; "-principal", Set Clflags.principal,
-      " Evaluate the file with -principal set"
-    ]
+    ( [ "-repo-root", Arg.String (fun s -> repo_root := Some s),
+        "<dir> root of the OCaml repository. This causes the tool to use \
+         the stdlib from the current source tree rather than the installed one."
+      ; "-keep-original-error-size", Arg.Set keep_original_error_size,
+        " truncate long error messages as the compiler would"
+      ] @ Options.list
+    )
 
 let usage = "Usage: expect_test <options> [script-file [arguments]]\n\
              options are:"
 
 let () =
-  Clflags.error_size := 0;
+  Clflags.color := Some Misc.Color.Never;
   try
     Arg.parse args main usage;
     Printf.eprintf "expect_test: no input file\n";

@@ -1,3 +1,12 @@
+(* TEST
+
+* hassysthreads
+include systhreads
+** bytecode
+** native
+
+*)
+
 let sieve primes =
   Event.sync (Event.send primes 2);
   let integers = Event.new_channel () in

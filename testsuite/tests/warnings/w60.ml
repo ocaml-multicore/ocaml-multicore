@@ -1,3 +1,14 @@
+(* TEST
+
+flags = "-w A-67"
+
+* setup-ocamlc.byte-build-env
+** ocamlc.byte
+compile_only = "true"
+*** check-ocamlc.byte-output
+
+*)
+
 (* PR#7314 *)
 
 module type Comparable = sig
@@ -21,3 +32,10 @@ module M = struct
 end
 
 module O = M.N
+
+(***************)
+
+let () =
+  (* M is unused, but no warning was emitted before 4.10. *)
+  let module M = struct end in
+  ()

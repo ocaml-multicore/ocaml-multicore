@@ -23,6 +23,7 @@ module T = Typedtree
 type mapper = {
   attribute: mapper -> T.attribute -> attribute;
   attributes: mapper -> T.attribute list -> attribute list;
+  binding_op: mapper -> T.binding_op -> T.pattern -> binding_op;
   case: mapper -> T.case -> case;
   cases: mapper -> T.case list -> case list;
   class_declaration: mapper -> T.class_declaration -> class_declaration;
@@ -46,11 +47,13 @@ type mapper = {
   location: mapper -> Location.t -> Location.t;
   module_binding: mapper -> T.module_binding -> module_binding;
   module_declaration: mapper -> T.module_declaration -> module_declaration;
+  module_substitution: mapper -> T.module_substitution -> module_substitution;
   module_expr: mapper -> T.module_expr -> module_expr;
   module_type: mapper -> T.module_type -> module_type;
   module_type_declaration:
     mapper -> T.module_type_declaration -> module_type_declaration;
   package_type: mapper -> T.package_type -> package_type;
+  open_declaration: mapper -> T.open_declaration -> open_declaration;
   open_description: mapper -> T.open_description -> open_description;
   pat: mapper -> T.pattern -> pattern;
   row_field: mapper -> T.row_field -> row_field;
@@ -62,6 +65,7 @@ type mapper = {
   typ: mapper -> T.core_type -> core_type;
   type_declaration: mapper -> T.type_declaration -> type_declaration;
   type_extension: mapper -> T.type_extension -> type_extension;
+  type_exception: mapper -> T.type_exception -> type_exception;
   type_kind: mapper -> T.type_kind -> type_kind;
   value_binding: mapper -> T.value_binding -> value_binding;
   value_description: mapper -> T.value_description -> value_description;
@@ -92,11 +96,9 @@ let string_is_prefix sub str =
   let sublen = String.length sub in
   String.length str >= sublen && String.sub str 0 sublen = sub
 
-let map_opt f = function None -> None | Some e -> Some (f e)
-
 let rec lident_of_path = function
   | Path.Pident id -> Longident.Lident (Ident.name id)
-  | Path.Pdot (p, s, _) -> Longident.Ldot (lident_of_path p, s)
+  | Path.Pdot (p, s) -> Longident.Ldot (lident_of_path p, s)
   | Path.Papply (p1, p2) ->
       Longident.Lapply (lident_of_path p1, lident_of_path p2)
 
@@ -105,27 +107,45 @@ let map_loc sub {loc; txt} = {loc = sub.location sub loc; txt}
 (** Try a name [$name$0], check if it's free, if not, increment and repeat. *)
 let fresh_name s env =
   let rec aux i =
-    let name = s ^ string_of_int i in
-    try
-      let _ = Env.lookup_value (Lident name) env in
-      name
-    with
-      | Not_found -> aux (i+1)
+    let name = s ^ Int.to_string i in
+    if Env.bound_value name env then aux (i+1)
+    else name
   in
   aux 0
+
+(** Extract the [n] patterns from the case of a letop *)
+let rec extract_letop_patterns n pat =
+  if n = 0 then pat, []
+  else begin
+    match pat.pat_desc with
+    | Tpat_tuple([first; rest]) ->
+        let next, others = extract_letop_patterns (n-1) rest in
+        first, next :: others
+    | _ ->
+      let rec anys n =
+        if n = 0 then []
+        else { pat with pat_desc = Tpat_any } :: anys (n-1)
+      in
+      { pat with pat_desc = Tpat_any }, anys (n-1)
+  end
 
 (** Mapping functions. *)
 
 let constant = function
   | Const_char c -> Pconst_char c
   | Const_string (s,d) -> Pconst_string (s,d)
-  | Const_int i -> Pconst_integer (string_of_int i, None)
+  | Const_int i -> Pconst_integer (Int.to_string i, None)
   | Const_int32 i -> Pconst_integer (Int32.to_string i, Some 'l')
   | Const_int64 i -> Pconst_integer (Int64.to_string i, Some 'L')
   | Const_nativeint i -> Pconst_integer (Nativeint.to_string i, Some 'n')
   | Const_float f -> Pconst_float (f,None)
 
-let attribute sub (s, p) = (map_loc sub s, p)
+let attribute sub a = {
+    attr_name = map_loc sub a.attr_name;
+    attr_payload = a.attr_payload;
+    attr_loc = a.attr_loc
+  }
+
 let attributes sub l = List.map (sub.attribute sub) l
 
 let structure sub str =
@@ -136,7 +156,14 @@ let open_description sub od =
   let attrs = sub.attributes sub od.open_attributes in
   Opn.mk ~loc ~attrs
     ~override:od.open_override
-    (map_loc sub od.open_txt)
+    (snd od.open_expr)
+
+let open_declaration sub od =
+  let loc = sub.location sub od.open_loc in
+  let attrs = sub.attributes sub od.open_attributes in
+  Opn.mk ~loc ~attrs
+    ~override:od.open_override
+    (sub.module_expr sub od.open_expr)
 
 let structure_item sub item =
   let loc = sub.location sub item.str_loc in
@@ -152,8 +179,8 @@ let structure_item sub item =
     | Tstr_typext tyext ->
         Pstr_typext (sub.type_extension sub tyext)
     | Tstr_exception ext ->
-        Pstr_exception (sub.extension_constructor sub ext)
-    | Tstr_effect _ -> failwith "untypast.structure_item: Tstr_effect"
+        Pstr_exception (sub.type_exception sub ext)
+    | Tstr_effect _ -> failwith "Untypeast.Tstr_effect: impossible"
     | Tstr_module mb ->
         Pstr_module (sub.module_binding sub mb)
     | Tstr_recmodule list ->
@@ -161,7 +188,7 @@ let structure_item sub item =
     | Tstr_modtype mtd ->
         Pstr_modtype (sub.module_type_declaration sub mtd)
     | Tstr_open od ->
-        Pstr_open (sub.open_description sub od)
+        Pstr_open (sub.open_declaration sub od)
     | Tstr_class list ->
         Pstr_class
           (List.map
@@ -208,7 +235,7 @@ let type_declaration sub decl =
         decl.typ_cstrs)
     ~kind:(sub.type_kind sub decl.typ_kind)
     ~priv:decl.typ_private
-    ?manifest:(map_opt (sub.typ sub) decl.typ_manifest)
+    ?manifest:(Option.map (sub.typ sub) decl.typ_manifest)
     (map_loc sub decl.typ_name)
 
 let type_kind sub tk = match tk with
@@ -228,7 +255,7 @@ let constructor_declaration sub cd =
   let attrs = sub.attributes sub cd.cd_attributes in
   Type.constructor ~loc ~attrs
     ~args:(constructor_arguments sub cd.cd_args)
-    ?res:(map_opt (sub.typ sub) cd.cd_res)
+    ?res:(Option.map (sub.typ sub) cd.cd_res)
     (map_loc sub cd.cd_name)
 
 let label_declaration sub ld =
@@ -247,6 +274,11 @@ let type_extension sub tyext =
     (map_loc sub tyext.tyext_txt)
     (List.map (sub.extension_constructor sub) tyext.tyext_constructors)
 
+let type_exception sub tyexn =
+  let attrs = sub.attributes sub tyexn.tyexn_attributes in
+  Te.mk_exception ~attrs
+    (sub.extension_constructor sub tyexn.tyexn_constructor)
+
 let extension_constructor sub ext =
   let loc = sub.location sub ext.ext_loc in
   let attrs = sub.attributes sub ext.ext_attributes in
@@ -255,7 +287,7 @@ let extension_constructor sub ext =
     (match ext.ext_kind with
       | Text_decl (args, ret) ->
           Pext_decl (constructor_arguments sub args,
-                     map_opt (sub.typ sub) ret)
+                     Option.map (sub.typ sub) ret)
       | Text_rebind (_p, lid) -> Pext_rebind (map_loc sub lid)
     )
 
@@ -265,8 +297,10 @@ let pattern sub pat =
   let attrs = sub.attributes sub pat.pat_attributes in
   let desc =
   match pat with
-      { pat_extra=[Tpat_unpack, _, _attrs]; pat_desc = Tpat_var (_,name); _ } ->
-        Ppat_unpack name
+      { pat_extra=[Tpat_unpack, loc, _attrs]; pat_desc = Tpat_any; _ } ->
+        Ppat_unpack { txt = None; loc  }
+    | { pat_extra=[Tpat_unpack, _, _attrs]; pat_desc = Tpat_var (_,name); _ } ->
+        Ppat_unpack { name with txt = Some name.txt }
     | { pat_extra=[Tpat_type (_path, lid), _, _attrs]; _ } ->
         Ppat_type (map_loc sub lid)
     | { pat_extra= (Tpat_constraint ct, _, _attrs) :: rem; _ } ->
@@ -279,7 +313,7 @@ let pattern sub pat =
         begin
           match (Ident.name id).[0] with
             'A'..'Z' ->
-              Ppat_unpack name
+              Ppat_unpack { name with txt = Some name.txt}
           | _ ->
               Ppat_var name
         end
@@ -309,13 +343,14 @@ let pattern sub pat =
                   )
           ))
     | Tpat_variant (label, pato, _) ->
-        Ppat_variant (label, map_opt (sub.pat sub) pato)
+        Ppat_variant (label, Option.map (sub.pat sub) pato)
     | Tpat_record (list, closed) ->
         Ppat_record (List.map (fun (lid, _, pat) ->
             map_loc sub lid, sub.pat sub pat) list, closed)
     | Tpat_array list -> Ppat_array (List.map (sub.pat sub) list)
     | Tpat_or (p1, p2, _) -> Ppat_or (sub.pat sub p1, sub.pat sub p2)
     | Tpat_lazy p -> Ppat_lazy (sub.pat sub p)
+    | Tpat_exception p -> Ppat_exception (sub.pat sub p)
   in
   Pat.mk ~loc ~attrs desc
 
@@ -326,13 +361,11 @@ let exp_extra sub (extra, loc, attrs) sexp =
     match extra with
       Texp_coerce (cty1, cty2) ->
         Pexp_coerce (sexp,
-                     map_opt (sub.typ sub) cty1,
+                     Option.map (sub.typ sub) cty1,
                      sub.typ sub cty2)
     | Texp_constraint cty ->
         Pexp_constraint (sexp, sub.typ sub cty)
-    | Texp_open (ovf, _path, lid, _) ->
-        Pexp_open (ovf, map_loc sub lid, sexp)
-    | Texp_poly cto -> Pexp_poly (sexp, map_opt (sub.typ sub) cto)
+    | Texp_poly cto -> Pexp_poly (sexp, Option.map (sub.typ sub) cto)
     | Texp_newtype s -> Pexp_newtype (mkloc s loc, sexp)
   in
   Exp.mk ~loc ~attrs desc
@@ -342,7 +375,7 @@ let cases sub l = List.map (sub.case sub) l
 let case sub {c_lhs; c_guard; c_rhs} =
   {
    pc_lhs = sub.pat sub c_lhs;
-   pc_guard = map_opt (sub.expr sub) c_guard;
+   pc_guard = Option.map (sub.expr sub) c_guard;
    pc_rhs = sub.expr sub c_rhs;
   }
 
@@ -387,18 +420,8 @@ let expression sub exp =
                 None -> list
               | Some exp -> (label, sub.expr sub exp) :: list
           ) list [])
-    | Texp_match (exp, cases, exn_cases, _eff_cases, _) ->
-      let merged_cases = sub.cases sub cases
-        @ (List.map
-            (fun c ->
-              let uc = sub.case sub c in
-              let pat = { uc.pc_lhs
-                          with ppat_desc = Ppat_exception uc.pc_lhs }
-              in
-              { uc with pc_lhs = pat })
-            exn_cases)
-      in
-      Pexp_match (sub.expr sub exp, merged_cases)
+    | Texp_match (exp, cases, _eff_cases, _) ->
+        Pexp_match (sub.expr sub exp, sub.cases sub cases)
     | Texp_try (exp, exn_cases, _eff_cases) ->
         let merged_cases = sub.cases sub exn_cases in
         Pexp_try (sub.expr sub exp, merged_cases)
@@ -414,14 +437,14 @@ let expression sub exp =
                 (Exp.tuple ~loc (List.map (sub.expr sub) args))
           ))
     | Texp_variant (label, expo) ->
-        Pexp_variant (label, map_opt (sub.expr sub) expo)
+        Pexp_variant (label, Option.map (sub.expr sub) expo)
     | Texp_record { fields; extended_expression; _ } ->
         let list = Array.fold_left (fun l -> function
             | _, Kept _ -> l
             | _, Overridden (lid, exp) -> (lid, sub.expr sub exp) :: l)
             [] fields
         in
-        Pexp_record (list, map_opt (sub.expr sub) extended_expression)
+        Pexp_record (list, Option.map (sub.expr sub) extended_expression)
     | Texp_field (exp, lid, _label) ->
         Pexp_field (sub.expr sub exp, map_loc sub lid)
     | Texp_setfield (exp1, lid, _label, exp2) ->
@@ -432,7 +455,7 @@ let expression sub exp =
     | Texp_ifthenelse (exp1, exp2, expo) ->
         Pexp_ifthenelse (sub.expr sub exp1,
           sub.expr sub exp2,
-          map_opt (sub.expr sub) expo)
+          Option.map (sub.expr sub) expo)
     | Texp_sequence (exp1, exp2) ->
         Pexp_sequence (sub.expr sub exp1, sub.expr sub exp2)
     | Texp_while (exp1, exp2) ->
@@ -454,7 +477,7 @@ let expression sub exp =
         Pexp_override (List.map (fun (_path, lid, exp) ->
               (map_loc sub lid, sub.expr sub exp)
           ) list)
-    | Texp_letmodule (_id, name, mexpr, exp) ->
+    | Texp_letmodule (_id, name, _pres, mexpr, exp) ->
         Pexp_letmodule (name, sub.module_expr sub mexpr,
           sub.expr sub exp)
     | Texp_letexception (ext, exp) ->
@@ -466,6 +489,14 @@ let expression sub exp =
         Pexp_object (sub.class_structure sub cl)
     | Texp_pack (mexpr) ->
         Pexp_pack (sub.module_expr sub mexpr)
+    | Texp_letop {let_; ands; body; _} ->
+        let pat, and_pats =
+          extract_letop_patterns (List.length ands) body.c_lhs
+        in
+        let let_ = sub.binding_op sub let_ pat in
+        let ands = List.map2 (sub.binding_op sub) ands and_pats in
+        let body = sub.expr sub body.c_rhs in
+        Pexp_letop {let_; ands; body }
     | Texp_unreachable ->
         Pexp_unreachable
     | Texp_extension_constructor (lid, _) ->
@@ -473,9 +504,18 @@ let expression sub exp =
                         PStr [ Str.eval ~loc
                                  (Exp.construct ~loc (map_loc sub lid) None)
                              ])
+    | Texp_open (od, exp) ->
+        Pexp_open (sub.open_declaration sub od, sub.expr sub exp)
   in
   List.fold_right (exp_extra sub) exp.exp_extra
     (Exp.mk ~loc ~attrs desc)
+
+let binding_op sub bop pat =
+  let pbop_op = bop.bop_op_name in
+  let pbop_pat = sub.pat sub pat in
+  let pbop_exp = sub.expr sub bop.bop_exp in
+  let pbop_loc = bop.bop_loc in
+  {pbop_op; pbop_pat; pbop_exp; pbop_loc}
 
 let package_type sub pack =
   (map_loc sub pack.pack_txt,
@@ -486,7 +526,7 @@ let module_type_declaration sub mtd =
   let loc = sub.location sub mtd.mtd_loc in
   let attrs = sub.attributes sub mtd.mtd_attributes in
   Mtd.mk ~loc ~attrs
-    ?typ:(map_opt (sub.module_type sub) mtd.mtd_type)
+    ?typ:(Option.map (sub.module_type sub) mtd.mtd_type)
     (map_loc sub mtd.mtd_name)
 
 let signature sub sg =
@@ -500,12 +540,16 @@ let signature_item sub item =
         Psig_value (sub.value_description sub v)
     | Tsig_type (rec_flag, list) ->
         Psig_type (rec_flag, List.map (sub.type_declaration sub) list)
+    | Tsig_typesubst list ->
+        Psig_typesubst (List.map (sub.type_declaration sub) list)
     | Tsig_typext tyext ->
         Psig_typext (sub.type_extension sub tyext)
     | Tsig_exception ext ->
-        Psig_exception (sub.extension_constructor sub ext)
+        Psig_exception (sub.type_exception sub ext)
     | Tsig_module md ->
         Psig_module (sub.module_declaration sub md)
+    | Tsig_modsubst ms ->
+        Psig_modsubst (sub.module_substitution sub ms)
     | Tsig_recmodule list ->
         Psig_recmodule (List.map (sub.module_declaration sub) list)
     | Tsig_modtype mtd ->
@@ -531,6 +575,13 @@ let module_declaration sub md =
     (map_loc sub md.md_name)
     (sub.module_type sub md.md_type)
 
+let module_substitution sub ms =
+  let loc = sub.location sub ms.ms_loc in
+  let attrs = sub.attributes sub ms.ms_attributes in
+  Ms.mk ~loc ~attrs
+    (map_loc sub ms.ms_name)
+    (map_loc sub ms.ms_txt)
+
 let include_infos f sub incl =
   let loc = sub.location sub incl.incl_loc in
   let attrs = sub.attributes sub incl.incl_attributes in
@@ -553,6 +604,11 @@ let class_declaration sub = class_infos sub.class_expr sub
 let class_description sub = class_infos sub.class_type sub
 let class_type_declaration sub = class_infos sub.class_type sub
 
+let functor_parameter sub : functor_parameter -> Parsetree.functor_parameter =
+  function
+  | Unit -> Unit
+  | Named (_, name, mtype) -> Named (name, sub.module_type sub mtype)
+
 let module_type sub mty =
   let loc = sub.location sub mty.mty_loc in
   let attrs = sub.attributes sub mty.mty_attributes in
@@ -560,9 +616,8 @@ let module_type sub mty =
       Tmty_ident (_path, lid) -> Pmty_ident (map_loc sub lid)
     | Tmty_alias (_path, lid) -> Pmty_alias (map_loc sub lid)
     | Tmty_signature sg -> Pmty_signature (sub.signature sub sg)
-    | Tmty_functor (_id, name, mtype1, mtype2) ->
-        Pmty_functor (name, map_opt (sub.module_type sub) mtype1,
-          sub.module_type sub mtype2)
+    | Tmty_functor (arg, mtype2) ->
+        Pmty_functor (functor_parameter sub arg, sub.module_type sub mtype2)
     | Tmty_with (mtype, list) ->
         Pmty_with (sub.module_type sub mtype,
           List.map (sub.with_constraint sub) list)
@@ -592,9 +647,9 @@ let module_expr sub mexpr =
         let desc = match mexpr.mod_desc with
             Tmod_ident (_p, lid) -> Pmod_ident (map_loc sub lid)
           | Tmod_structure st -> Pmod_structure (sub.structure sub st)
-          | Tmod_functor (_id, name, mtype, mexpr) ->
-              Pmod_functor (name, Misc.may_map (sub.module_type sub) mtype,
-                sub.module_expr sub mexpr)
+          | Tmod_functor (arg, mexpr) ->
+              Pmod_functor
+                (functor_parameter sub arg, sub.module_expr sub mexpr)
           | Tmod_apply (mexp1, mexp2, _) ->
               Pmod_apply (sub.module_expr sub mexp1, sub.module_expr sub mexp2)
           | Tmod_constraint (mexpr, _, Tmodtype_explicit mtype, _) ->
@@ -637,8 +692,8 @@ let class_expr sub cexpr =
     | Tcl_constraint (cl, Some clty, _vals, _meths, _concrs) ->
         Pcl_constraint (sub.class_expr sub cl,  sub.class_type sub clty)
 
-    | Tcl_open (ovf, _p, lid, _env, e) ->
-        Pcl_open (ovf, lid, sub.class_expr sub e)
+    | Tcl_open (od, e) ->
+        Pcl_open (sub.open_description sub od, sub.class_expr sub e)
 
     | Tcl_ident _ -> assert false
     | Tcl_constraint (_, None, _, _, _) -> assert false
@@ -654,8 +709,8 @@ let class_type sub ct =
         Pcty_constr (map_loc sub lid, List.map (sub.typ sub) list)
     | Tcty_arrow (label, ct, cl) ->
         Pcty_arrow (label, sub.typ sub ct, sub.class_type sub cl)
-    | Tcty_open (ovf, _p, lid, _env, e) ->
-        Pcty_open (ovf, lid, sub.class_type sub e)
+    | Tcty_open (od, e) ->
+        Pcty_open (sub.open_description sub od, sub.class_type sub e)
   in
   Cty.mk ~loc ~attrs desc
 
@@ -711,7 +766,7 @@ let core_type sub ct =
 let class_structure sub cs =
   let rec remove_self = function
     | { pat_desc = Tpat_alias (p, id, _s) }
-      when string_is_prefix "selfpat-" id.Ident.name ->
+      when string_is_prefix "selfpat-" (Ident.name id) ->
         remove_self p
     | p -> p
   in
@@ -719,17 +774,25 @@ let class_structure sub cs =
     pcstr_fields = List.map (sub.class_field sub) cs.cstr_fields;
   }
 
-let row_field sub rf =
-  match rf with
-    Ttag (label, attrs, bool, list) ->
-      Rtag (label, sub.attributes sub attrs, bool, List.map (sub.typ sub) list)
-  | Tinherit ct -> Rinherit (sub.typ sub ct)
+let row_field sub {rf_loc; rf_desc; rf_attributes;} =
+  let loc = sub.location sub rf_loc in
+  let attrs = sub.attributes sub rf_attributes in
+  let desc = match rf_desc with
+    | Ttag (label, bool, list) ->
+        Rtag (label, bool, List.map (sub.typ sub) list)
+    | Tinherit ct -> Rinherit (sub.typ sub ct)
+  in
+  Rf.mk ~loc ~attrs desc
 
-let object_field sub ofield =
-  match ofield with
-    OTtag (label, attrs, ct) ->
-      Otag (label, sub.attributes sub attrs, sub.typ sub ct)
-  | OTinherit ct -> Oinherit (sub.typ sub ct)
+let object_field sub {of_loc; of_desc; of_attributes;} =
+  let loc = sub.location sub of_loc in
+  let attrs = sub.attributes sub of_attributes in
+  let desc = match of_desc with
+    | OTtag (label, ct) ->
+        Otag (label, sub.typ sub ct)
+    | OTinherit ct -> Oinherit (sub.typ sub ct)
+  in
+  Of.mk ~loc ~attrs desc
 
 and is_self_pat = function
   | { pat_desc = Tpat_alias(_pat, id, _) } ->
@@ -742,7 +805,7 @@ let class_field sub cf =
   let desc = match cf.cf_desc with
       Tcf_inherit (ovf, cl, super, _vals, _meths) ->
         Pcf_inherit (ovf, sub.class_expr sub cl,
-                     map_opt (fun v -> mkloc v loc) super)
+                     Option.map (fun v -> mkloc v loc) super)
     | Tcf_constraint (cty, cty') ->
         Pcf_constraint (sub.typ sub cty, sub.typ sub cty')
     | Tcf_val (lab, mut, _, Tcfk_virtual cty, _) ->
@@ -777,8 +840,9 @@ let location _sub l = l
 
 let default_mapper =
   {
-    attribute = attribute ;
-    attributes = attributes ;
+    attribute = attribute;
+    attributes = attributes;
+    binding_op = binding_op;
     structure = structure;
     structure_item = structure_item;
     module_expr = module_expr;
@@ -799,14 +863,17 @@ let default_mapper =
     type_kind = type_kind;
     typ = core_type;
     type_extension = type_extension;
+    type_exception = type_exception;
     extension_constructor = extension_constructor;
     value_description = value_description;
     pat = pattern;
     expr = expression;
     module_declaration = module_declaration;
+    module_substitution = module_substitution;
     module_type_declaration = module_type_declaration;
     module_binding = module_binding;
     package_type = package_type ;
+    open_declaration = open_declaration;
     open_description = open_description;
     include_description = include_description;
     include_declaration = include_declaration;

@@ -22,8 +22,9 @@ open Arch
 open Proc
 open Reg
 open Mach
-open Linearize
+open Linear
 open Emitaux
+module String = Misc.Stdlib.String
 
 open X86_ast
 open X86_proc
@@ -55,6 +56,9 @@ let fastcode_flag = ref true
 let stack_offset = ref 0
 
 (* Layout of the stack frame *)
+let num_stack_slots = Array.make Proc.num_register_classes 0
+
+let prologue_required = ref false
 
 let frame_size () =                     (* includes return address *)
   let sz =
@@ -77,11 +81,11 @@ let slot_offset loc cl =
 (* Record symbols used and defined - at the end generate extern for those
    used but not defined *)
 
-let symbols_defined = ref StringSet.empty
-let symbols_used = ref StringSet.empty
+let symbols_defined = ref String.Set.empty
+let symbols_used = ref String.Set.empty
 
-let add_def_symbol s = symbols_defined := StringSet.add s !symbols_defined
-let add_used_symbol s = symbols_used := StringSet.add s !symbols_used
+let add_def_symbol s = symbols_defined := String.Set.add s !symbols_defined
+let add_used_symbol s = symbols_used := String.Set.add s !symbols_used
 
 let trap_frame_size = Misc.align 8 stack_alignment
 
@@ -135,6 +139,12 @@ let register_name r =
   else Regf (float_reg_name.(r - 100))
 
 let sym32 ?ofs s = mem_sym ?ofs DWORD (emit_symbol s)
+
+let domain_field f r =
+  mem32 DWORD (Domainstate.idx_of_field f * 8) r
+
+let load_domain_state r =
+  I.mov (sym32 "Caml_state") r
 
 let reg = function
   | { loc = Reg r } -> register_name r
@@ -356,7 +366,7 @@ let is_tos = function { loc = Reg _; typ = Float } -> true | _ -> false
 
 (* Emit the code for a floating-point comparison *)
 
-let emit_float_test cmp neg arg lbl =
+let emit_float_test cmp arg lbl =
   let actual_cmp =
     match (is_tos arg.(0), is_tos arg.(1)) with
     | (true, true) ->
@@ -370,7 +380,7 @@ let emit_float_test cmp neg arg lbl =
     | (false, true) ->
         (* second arg on top of FP stack *)
         I.fcomp (reg arg.(0));
-        Cmm.swap_comparison cmp
+        Cmm.swap_float_comparison cmp
     | (false, false) ->
         I.fld     (reg arg.(0));
         I.fcomp   (reg arg.(1));
@@ -378,49 +388,44 @@ let emit_float_test cmp neg arg lbl =
   in
   I.fnstsw ax;
   match actual_cmp with
-  | Ceq ->
-      if neg then begin
-        I.and_ (int 68) ah;
-        I.xor (int 64) ah;
-        I.jne lbl
-      end else begin
-        I.and_ (int 69) ah;
-        I.cmp (int 64) ah;
-        I.je lbl
-      end
-  | Cne ->
-      if neg then begin
-        I.and_ (int 69) ah;
-        I.cmp (int 64) ah;
-        I.je lbl
-      end else begin
-        I.and_ (int 68) ah;
-        I.xor (int 64) ah;
-        I.jne lbl
-      end
-  | Cle ->
+  | CFeq ->
+      I.and_ (int 69) ah;
+      I.cmp (int 64) ah;
+      I.je lbl
+  | CFneq ->
+      I.and_ (int 68) ah;
+      I.xor (int 64) ah;
+      I.jne lbl
+  | CFle ->
       I.and_ (int 69) ah;
       I.dec ah;
       I.cmp (int 64) ah;
-      if neg
-      then I.jae lbl
-      else I.jb lbl
-  | Cge ->
+      I.jb lbl
+  | CFnle ->
+      I.and_ (int 69) ah;
+      I.dec ah;
+      I.cmp (int 64) ah;
+      I.jae lbl
+  | CFge ->
       I.and_ (int 5) ah;
-      if neg
-      then I.jne lbl
-      else I.je lbl
-  | Clt ->
+      I.je lbl
+  | CFnge ->
+      I.and_ (int 5) ah;
+      I.jne lbl
+  | CFlt ->
       I.and_ (int 69) ah;
       I.cmp (int 1) ah;
-      if neg
-      then I.jne lbl
-      else I.je lbl
-  | Cgt ->
+      I.je lbl
+  | CFnlt ->
       I.and_ (int 69) ah;
-      if neg
-      then I.jne lbl
-      else I.je lbl
+      I.cmp (int 1) ah;
+      I.jne lbl
+  | CFgt ->
+      I.and_ (int 69) ah;
+      I.je lbl
+  | CFngt ->
+      I.and_ (int 69) ah;
+      I.jne lbl
 
 (* Emit a Ifloatspecial instruction *)
 
@@ -465,20 +470,35 @@ let emit_global_label s =
   D.global lbl;
   _label lbl
 
+(* Output .text section directive, or named .text.caml.<name> if enabled. *)
+
+let emit_named_text_section func_name =
+  if !Clflags.function_sections then
+    begin match system with
+    | S_macosx | S_mingw | S_cygwin | S_win32 -> D.text ()
+    | _ -> D.section [ ".text.caml."^(emit_symbol func_name) ]
+             (Some "ax") ["@progbits"]
+    end
+  else D.text ()
+
 (* Output the assembly code for an instruction *)
 
 (* Name of current function *)
 let function_name = ref ""
 (* Entry point for tail recursive calls *)
 let tailrec_entry_point = ref 0
-(* Record references to external C functions (for MacOSX) *)
-let external_symbols_direct = ref StringSet.empty
-let external_symbols_indirect = ref StringSet.empty
 
 let emit_instr fallthrough i =
   emit_debug_info i.dbg;
   match i.desc with
   | Lend -> ()
+  | Lprologue ->
+    assert (!prologue_required);
+    let n = frame_size() - 4 in
+    if n > 0 then  begin
+      I.sub (int n) esp;
+      cfi_adjust_cfa_offset n;
+    end;
   | Lop(Imove | Ispill | Ireload) ->
       let src = i.arg.(0) and dst = i.res.(0) in
       if src.loc <> dst.loc then begin
@@ -541,24 +561,11 @@ let emit_instr fallthrough i =
   | Lop(Iextcall { func; alloc; label_after; }) ->
       add_used_symbol func;
       if alloc then begin
-        if system <> S_macosx then
-          I.mov (immsym func) eax
-        else begin
-          external_symbols_indirect :=
-            StringSet.add func !external_symbols_indirect;
-          I.mov (mem_sym DWORD (Printf.sprintf "L%s$non_lazy_ptr"
-                              (emit_symbol func))) eax
-        end;
+        I.mov (immsym func) eax;
         emit_call "caml_c_call";
         record_frame i.live false i.dbg ~label:label_after
       end else begin
-        if system <> S_macosx then
-          emit_call func
-        else begin
-          external_symbols_direct :=
-            StringSet.add func !external_symbols_direct;
-          I.call (sym (Printf.sprintf "L%s$stub" (emit_symbol func)))
-        end
+        emit_call func
       end
   | Lop(Istackoffset n) ->
       if n < 0
@@ -607,17 +614,18 @@ let emit_instr fallthrough i =
             I.fstp (addressing addr REAL8 i 1)
           end
       end
-  | Lop(Ialloc { words = n; label_after_call_gc; }) ->
+  | Lop(Ialloc { bytes = n; label_after_call_gc; }) ->
       if !fastcode_flag then begin
         let lbl_redo = new_label() in
         def_label lbl_redo;
-        I.mov (sym32 "caml_young_ptr") eax;
+        load_domain_state ebx;
+        I.mov (domain_field Domain_young_ptr RBX) eax;
         I.sub (int n) eax;
-        I.mov eax (sym32 "caml_young_ptr");
-        I.cmp (sym32 "caml_young_limit") eax;
+        I.cmp (domain_field Domain_young_limit RBX) eax;
         let lbl_call_gc = new_label() in
         let lbl_frame = record_frame_label i.live false Debuginfo.none in
         I.jb (label lbl_call_gc);
+        I.mov eax (domain_field Domain_young_ptr RBX);
         I.lea (mem32 NONE 4 RAX) (reg i.res.(0));
         call_gc_sites :=
           { gc_lbl = lbl_call_gc;
@@ -825,8 +833,8 @@ let emit_instr fallthrough i =
       | Iinttest_imm(cmp, n) ->
           I.cmp (int n) (reg i.arg.(0));
           I.j (cond cmp) lbl
-      | Ifloattest(cmp, neg) ->
-          emit_float_test cmp neg i.arg lbl
+      | Ifloattest cmp ->
+          emit_float_test cmp i.arg lbl
       | Ioddtest ->
           I.test (int 1) (reg i.arg.(0));
           I.jne lbl
@@ -846,7 +854,7 @@ let emit_instr fallthrough i =
       end;
       begin match lbl2 with
         None -> ()
-      | Some lbl -> I.jg (label lbl)
+      | Some lbl -> I.ja (label lbl)
       end
   | Lswitch jumptbl ->
       let lbl = new_label() in
@@ -856,32 +864,49 @@ let emit_instr fallthrough i =
       for i = 0 to Array.length jumptbl - 1 do
         D.long (ConstLabel (emit_label jumptbl.(i)))
       done;
-      D.text ()
-  | Lsetuptrap lbl ->
-      I.call (label lbl)
-  | Lpushtrap ->
+      emit_named_text_section !function_name
+  | Lentertrap ->
+      ()
+  | Ladjust_trap_depth { delta_traps } ->
+      let delta = trap_frame_size * delta_traps in
+      cfi_adjust_cfa_offset delta;
+      stack_offset := !stack_offset + delta
+  | Lpushtrap { lbl_handler; } ->
+      I.push (label lbl_handler);
       if trap_frame_size > 8 then
         I.sub (int (trap_frame_size - 8)) esp;
-      I.push (sym32 "caml_exception_pointer");
+      load_domain_state edx;
+      I.push (domain_field Domain_exception_pointer RDX);
       cfi_adjust_cfa_offset trap_frame_size;
-      I.mov esp (sym32 "caml_exception_pointer");
+      I.mov esp (domain_field Domain_exception_pointer RDX);
       stack_offset := !stack_offset + trap_frame_size
   | Lpoptrap ->
-      I.pop (sym32 "caml_exception_pointer");
-      I.add (int (trap_frame_size - 4)) esp;
+      I.mov edx (mem32 DWORD 4 RSP);
+      load_domain_state edx;
+      I.pop (domain_field Domain_exception_pointer RDX);
+      I.pop edx;
+      if trap_frame_size > 8 then
+        I.add (int (trap_frame_size - 8)) esp;
       cfi_adjust_cfa_offset (-trap_frame_size);
       stack_offset := !stack_offset - trap_frame_size
   | Lraise k  ->
       begin match k with
-      | Cmm.Raise_withtrace ->
+      | Lambda.Raise_regular ->
+          load_domain_state ebx;
+          I.mov (int 0) (domain_field Domain_backtrace_pos RBX);
           emit_call "caml_raise_exn";
           record_frame Reg.Set.empty true i.dbg
-      | Cmm.Raise_notrace ->
-          I.mov (sym32 "caml_exception_pointer") esp;
-          I.pop (sym32 "caml_exception_pointer");
+      | Lambda.Raise_reraise ->
+          emit_call "caml_raise_exn";
+          record_frame Reg.Set.empty true i.dbg
+      | Lambda.Raise_notrace ->
+          load_domain_state ebx;
+          I.mov (domain_field Domain_exception_pointer RBX) esp;
+          I.pop (domain_field Domain_exception_pointer RBX);
           if trap_frame_size > 8 then
             I.add (int (trap_frame_size - 8)) esp;
-          I.ret ()
+          I.pop ebx;
+          I.jmp ebx
       end
 
 let rec emit_all fallthrough i =
@@ -890,84 +915,30 @@ let rec emit_all fallthrough i =
   | _ ->
       emit_instr fallthrough i;
       emit_all
-        (system = S_win32 || Linearize.has_fallthrough i.desc)
+        (system = S_win32 || Linear.has_fallthrough i.desc)
         i.next
-
-(* Emission of external symbol references (for MacOSX) *)
-
-let emit_external_symbol_direct s =
-  _label (Printf.sprintf "L%s$stub" (emit_symbol s));
-  D.indirect_symbol (emit_symbol s);
-  I.hlt (); I.hlt (); I.hlt (); I.hlt () ; I.hlt ()
-
-let emit_external_symbol_indirect s =
-  _label (Printf.sprintf "L%s$non_lazy_ptr" (emit_symbol s));
-  D.indirect_symbol (emit_symbol s);
-  D.long (const 0)
-
-let emit_external_symbols () =
-  D.section [ "__IMPORT"; "__pointers"] None ["non_lazy_symbol_pointers" ];
-  StringSet.iter emit_external_symbol_indirect !external_symbols_indirect;
-  external_symbols_indirect := StringSet.empty;
-  D.section [ "__IMPORT"; "__jump_table"] None
-    [ "symbol_stubs"; "self_modifying_code+pure_instructions"; "5" ];
-  StringSet.iter emit_external_symbol_direct !external_symbols_direct;
-  external_symbols_direct := StringSet.empty;
-  if !Clflags.gprofile then begin
-    _label "Lmcount$stub";
-    D.indirect_symbol "mcount";
-    I.hlt (); I.hlt (); I.hlt () ; I.hlt () ; I.hlt ()
-  end
-
-(* Emission of the profiling prelude *)
-
-let call_mcount mcount =
-  I.push eax;
-  I.mov esp ebp;
-  I.push ecx;
-  I.push edx;
-  I.call (sym mcount);
-  I.pop edx;
-  I.pop ecx;
-  I.pop eax
-
-let emit_profile () =
-  match system with
-  | S_linux_elf | S_gnu -> call_mcount "mcount"
-  | S_bsd_elf -> call_mcount ".mcount"
-  | S_macosx -> call_mcount "Lmcount$stub"
-  | _ -> () (*unsupported yet*)
 
 (* Emission of a function declaration *)
 
 let fundecl fundecl =
   function_name := fundecl.fun_name;
   fastcode_flag := fundecl.fun_fast;
-  tailrec_entry_point := new_label();
+  tailrec_entry_point := fundecl.fun_tailrec_entry_point_label;
   stack_offset := 0;
   call_gc_sites := [];
   bound_error_sites := [];
   bound_error_call := 0;
-  D.text ();
+  for i = 0 to Proc.num_register_classes - 1 do
+    num_stack_slots.(i) <- fundecl.fun_num_stack_slots.(i);
+  done;
+  prologue_required := fundecl.fun_prologue_required;
+  emit_named_text_section !function_name;
   add_def_symbol fundecl.fun_name;
   D.align (if system = S_win32 then 4 else 16);
-  if system = S_macosx
-  && not !Clflags.output_c_object
-  && is_generic_function fundecl.fun_name
-  then (* PR#4690 *)
-    D.private_extern (emit_symbol fundecl.fun_name)
-  else
-    D.global (emit_symbol fundecl.fun_name);
+  D.global (emit_symbol fundecl.fun_name);
   D.label (emit_symbol fundecl.fun_name);
   emit_debug_info fundecl.fun_dbg;
   cfi_startproc ();
-  if !Clflags.gprofile then emit_profile();
-  let n = frame_size() - 4 in
-  if n > 0 then  begin
-    I.sub (int n) esp;
-    cfi_adjust_cfa_offset n;
-  end;
-  def_label !tailrec_entry_point;
   emit_all true fundecl.fun_body;
   List.iter emit_call_gc !call_gc_sites;
   emit_call_bound_errors ();
@@ -1012,9 +983,6 @@ let begin_assembly() =
   if system = S_win32 then begin
     D.mode386 ();
     D.model "FLAT";
-    D.extrn "_caml_young_ptr" DWORD;
-    D.extrn "_caml_young_limit" DWORD;
-    D.extrn "_caml_exception_pointer" DWORD;
     D.extrn "_caml_extra_params" DWORD;
     D.extrn "_caml_call_gc" PROC;
     D.extrn "_caml_c_call" PROC;
@@ -1024,15 +992,13 @@ let begin_assembly() =
     D.extrn "_caml_alloc3" PROC;
     D.extrn "_caml_ml_array_bound_error" PROC;
     D.extrn "_caml_raise_exn" PROC;
+    D.extrn "_Caml_state" DWORD;
   end;
 
   D.data ();
   emit_global_label "data_begin";
-
-  D.text ();
-  emit_global_label "code_begin";
-  if system = S_macosx then I.nop (); (* PR#4690 *)
-  ()
+  emit_named_text_section (Compilenv.make_symbol (Some "code_begin"));
+  emit_global_label "code_begin"
 
 let end_assembly() =
   if !float_constants <> [] then begin
@@ -1040,10 +1006,7 @@ let end_assembly() =
     List.iter (fun (cst,lbl) -> emit_float_constant cst lbl) !float_constants
   end;
 
-  D.text ();
-  if system = S_macosx then I.nop ();
-  (* suppress "ld warning: atom sorting error" *)
-
+  emit_named_text_section (Compilenv.make_symbol (Some "code_end"));
   emit_global_label "code_end";
 
   D.data ();
@@ -1069,20 +1032,19 @@ let end_assembly() =
       efa_string = (fun s -> D.bytes (s ^ "\000"))
     };
 
-  if system = S_macosx then emit_external_symbols ();
   if system = S_linux_elf then
     (* Mark stack as non-executable, PR#4564 *)
     D.section [".note.GNU-stack"] (Some "") ["%progbits"];
 
   if system = S_win32 then begin
     D.comment "External functions";
-    StringSet.iter
+    String.Set.iter
       (fun s ->
-         if not (StringSet.mem s !symbols_defined) then
+         if not (String.Set.mem s !symbols_defined) then
            D.extrn (emit_symbol s) PROC)
       !symbols_used;
-    symbols_used := StringSet.empty;
-    symbols_defined := StringSet.empty;
+    symbols_used := String.Set.empty;
+    symbols_defined := String.Set.empty;
   end;
 
   let asm =

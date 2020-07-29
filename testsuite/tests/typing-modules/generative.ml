@@ -1,3 +1,7 @@
+(* TEST
+   * expect
+*)
+
 (* Using generative functors *)
 
 (* Without type *)
@@ -10,8 +14,8 @@ module H (X : sig end) = (val v);; (* ok *)
 module type S = sig val x : int end
 val v : (module S) = <module>
 module F : functor () -> S
-module G : functor (X : sig  end) -> S
-module H : functor (X : sig  end) -> S
+module G : functor (X : sig end) -> S
+module H : functor (X : sig end) -> S
 |}];;
 
 (* With type *)
@@ -25,7 +29,9 @@ module F : functor () -> S
 |}];;
 module G (X : sig end) : S = F ();; (* fail *)
 [%%expect{|
-Line _, characters 29-33:
+Line 1, characters 29-33:
+1 | module G (X : sig end) : S = F ();; (* fail *)
+                                 ^^^^
 Error: This expression creates fresh types.
        It is not allowed inside applicative functors.
 |}];;
@@ -38,12 +44,14 @@ module H : functor () -> S
 module U = struct end;;
 module M = F(struct end);; (* ok *)
 [%%expect{|
-module U : sig  end
+module U : sig end
 module M : S
 |}];;
 module M = F(U);; (* fail *)
 [%%expect{|
-Line _, characters 11-12:
+Line 1, characters 11-12:
+1 | module M = F(U);; (* fail *)
+               ^
 Error: This is a generative functor. It can only be applied to ()
 |}];;
 
@@ -51,24 +59,28 @@ Error: This is a generative functor. It can only be applied to ()
 module F1 (X : sig end) = struct end;;
 module F2 : functor () -> sig end = F1;; (* fail *)
 [%%expect{|
-module F1 : functor (X : sig  end) -> sig  end
-Line _, characters 36-38:
+module F1 : functor (X : sig end) -> sig end
+Line 2, characters 36-38:
+2 | module F2 : functor () -> sig end = F1;; (* fail *)
+                                        ^^
 Error: Signature mismatch:
        Modules do not match:
-         functor (X : sig  end) -> sig  end
+         functor (X : sig end) -> sig end
        is not included in
-         functor () -> sig  end
+         functor () -> sig end
 |}];;
 module F3 () = struct end;;
 module F4 : functor (X : sig end) -> sig end = F3;; (* fail *)
 [%%expect{|
-module F3 : functor () -> sig  end
-Line _, characters 47-49:
+module F3 : functor () -> sig end
+Line 2, characters 47-49:
+2 | module F4 : functor (X : sig end) -> sig end = F3;; (* fail *)
+                                                   ^^
 Error: Signature mismatch:
        Modules do not match:
-         functor () -> sig  end
+         functor () -> sig end
        is not included in
-         functor (X : sig  end) -> sig  end
+         functor (X : sig end) -> sig end
 |}];;
 
 (* tests for shortened functor notation () *)
@@ -79,8 +91,8 @@ module Z = functor (_: sig end) (_:sig end) (_: sig end) -> struct end;;
 module GZ : functor (X: sig end) () (Z: sig end) -> sig end
           = functor (X: sig end) () (Z: sig end) -> struct end;;
 [%%expect{|
-module X : functor (X : sig  end) (Y : sig  end) (Z : sig  end) -> sig  end
-module Y : functor (X : sig  end) (Y : sig  end) (Z : sig  end) -> sig  end
-module Z : sig  end -> sig  end -> sig  end -> sig  end
-module GZ : functor (X : sig  end) () (Z : sig  end) -> sig  end
+module X : functor (X : sig end) (Y : sig end) (Z : sig end) -> sig end
+module Y : functor (X : sig end) (Y : sig end) (Z : sig end) -> sig end
+module Z : sig end -> sig end -> sig end -> sig end
+module GZ : functor (X : sig end) () (Z : sig end) -> sig end
 |}];;

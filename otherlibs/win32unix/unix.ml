@@ -182,6 +182,7 @@ type file_perm = int
 external openfile : string -> open_flag list -> file_perm -> file_descr
            = "unix_open"
 external close : file_descr -> unit = "unix_close"
+external fsync : file_descr -> unit = "unix_fsync"
 external unsafe_read : file_descr -> bytes -> int -> int -> int
                      = "unix_read"
 external unsafe_write : file_descr -> bytes -> int -> int -> int
@@ -228,8 +229,8 @@ type seek_command =
 
 external lseek : file_descr -> int -> seek_command -> int = "unix_lseek"
 
-let truncate _name _len = invalid_arg "Unix.truncate not implemented"
-let ftruncate _fd _len = invalid_arg "Unix.ftruncate not implemented"
+external truncate : string -> int -> unit = "unix_truncate"
+external ftruncate : file_descr -> int -> unit = "unix_ftruncate"
 
 (* File statistics *)
 
@@ -265,7 +266,7 @@ external isatty : file_descr -> bool = "unix_isatty"
 
 external unlink : string -> unit = "unix_unlink"
 external rename : string -> string -> unit = "unix_rename"
-external link : string -> string -> unit = "unix_link"
+external link : ?follow:bool -> string -> string -> unit = "unix_link"
 
 (* Operations on large files *)
 
@@ -273,10 +274,8 @@ module LargeFile =
   struct
     external lseek : file_descr -> int64 -> seek_command -> int64
        = "unix_lseek_64"
-    let truncate _name _len =
-      invalid_arg "Unix.LargeFile.truncate not implemented"
-    let ftruncate _name _len =
-      invalid_arg "Unix.LargeFile.ftruncate not implemented"
+    external truncate : string -> int64 -> unit = "unix_truncate_64"
+    external ftruncate : file_descr -> int64 -> unit = "unix_ftruncate_64"
     type stats =
       { st_dev : int;
         st_ino : int;
@@ -299,10 +298,10 @@ module LargeFile =
 (* Mapping files into memory *)
 
 external map_internal:
-   file_descr -> ('a, 'b) CamlinternalBigarray.kind
-              -> 'c CamlinternalBigarray.layout
+   file_descr -> ('a, 'b) Stdlib.Bigarray.kind
+              -> 'c Stdlib.Bigarray.layout
               -> bool -> int array -> int64
-              -> ('a, 'b, 'c) CamlinternalBigarray.genarray
+              -> ('a, 'b, 'c) Stdlib.Bigarray.Genarray.t
      = "caml_unix_map_file_bytecode" "caml_unix_map_file"
 
 let map_file fd ?(pos=0L) kind layout shared dims =
@@ -401,10 +400,12 @@ external symlink_stub : bool -> string -> string -> unit = "unix_symlink"
    Windows call GetFullPathName to do this because we need relative paths to
    stay relative. *)
 let normalize_slashes path =
-  if String.length path >= 4 && path.[0] = '\\' && path.[1] = '\\' && path.[2] = '?' && path.[3] = '\\' then
+  if String.length path >= 4 && path.[0] = '\\' && path.[1] = '\\'
+                             && path.[2] = '?' && path.[3] = '\\' then
     path
   else
-    String.init (String.length path) (fun i -> match path.[i] with '/' -> '\\' | c -> c)
+    String.init (String.length path)
+                (fun i -> match path.[i] with '/' -> '\\' | c -> c)
 
 let symlink ?to_dir source dest =
   let to_dir =
@@ -579,7 +580,8 @@ type msg_flag =
 external socket :
   ?cloexec: bool -> socket_domain -> socket_type -> int -> file_descr
   = "unix_socket"
-let socketpair ?cloexec:_ _dom _ty _proto = invalid_arg "Unix.socketpair not implemented"
+let socketpair ?cloexec:_ _dom _ty _proto =
+  invalid_arg "Unix.socketpair not implemented"
 external accept :
   ?cloexec: bool -> file_descr -> file_descr * sockaddr = "unix_accept"
 external bind : file_descr -> sockaddr -> unit = "unix_bind"
@@ -840,7 +842,7 @@ let getnameinfo_emulation addr opts =
           let kind = if List.mem NI_DGRAM opts then "udp" else "tcp" in
           (getservbyport p kind).s_name
         with Not_found ->
-          string_of_int p in
+          Int.to_string p in
       { ni_hostname = hostname; ni_service = service }
 
 let getnameinfo addr opts =
@@ -889,21 +891,18 @@ type popen_process =
 
 let popen_processes = (Hashtbl.create 7 : (popen_process, int) Hashtbl.t)
 
-let open_proc cmd optenv proc input output error =
-  let shell =
-    try Sys.getenv "COMSPEC"
-    with Not_found -> raise(Unix_error(ENOEXEC, "open_proc", cmd)) in
+let open_proc prog cmdline optenv proc input output error =
   let pid =
-    win_create_process shell (shell ^ " /c " ^ cmd) optenv
+    win_create_process prog cmdline optenv
                        input output error in
   Hashtbl.add popen_processes proc pid
 
-let open_process_in cmd =
+let open_process_cmdline_in prog cmdline =
   let (in_read, in_write) = pipe ~cloexec:true () in
   let inchan = in_channel_of_descr in_read in
   begin
     try
-      open_proc cmd None (Process_in inchan) stdin in_write stderr
+      open_proc prog cmdline None (Process_in inchan) stdin in_write stderr
     with e ->
       close_in inchan;
       close in_write;
@@ -912,12 +911,12 @@ let open_process_in cmd =
   close in_write;
   inchan
 
-let open_process_out cmd =
+let open_process_cmdline_out prog cmdline =
   let (out_read, out_write) = pipe ~cloexec:true () in
   let outchan = out_channel_of_descr out_write in
   begin
     try
-      open_proc cmd None (Process_out outchan) out_read stdout stderr
+      open_proc prog cmdline None (Process_out outchan) out_read stdout stderr
     with e ->
     close_out outchan;
     close out_read;
@@ -926,7 +925,7 @@ let open_process_out cmd =
   close out_read;
   outchan
 
-let open_process cmd =
+let open_process_cmdline prog cmdline =
   let (in_read, in_write) = pipe ~cloexec:true () in
   let (out_read, out_write) =
     try pipe ~cloexec:true ()
@@ -935,7 +934,8 @@ let open_process cmd =
   let outchan = out_channel_of_descr out_write in
   begin
     try
-      open_proc cmd None (Process(inchan, outchan)) out_read in_write stderr
+      open_proc prog cmdline None
+                (Process(inchan, outchan)) out_read in_write stderr
     with e ->
       close out_read; close out_write;
       close in_read; close in_write;
@@ -945,7 +945,7 @@ let open_process cmd =
   close in_write;
   (inchan, outchan)
 
-let open_process_full cmd env =
+let open_process_cmdline_full prog cmdline env =
   let (in_read, in_write) = pipe ~cloexec:true () in
   let (out_read, out_write) =
     try pipe ~cloexec:true ()
@@ -959,7 +959,7 @@ let open_process_full cmd env =
   let errchan = in_channel_of_descr err_read in
   begin
     try
-      open_proc cmd (Some (make_process_env env))
+      open_proc prog cmdline (Some (make_process_env env))
                (Process_full(inchan, outchan, errchan))
                 out_read in_write err_write
     with e ->
@@ -973,33 +973,73 @@ let open_process_full cmd env =
   close err_write;
   (inchan, outchan, errchan)
 
+let open_process_args_in prog args =
+  open_process_cmdline_in prog (make_cmdline args)
+let open_process_args_out prog args =
+  open_process_cmdline_out prog (make_cmdline args)
+let open_process_args prog args =
+  open_process_cmdline prog (make_cmdline args)
+let open_process_args_full prog args =
+  open_process_cmdline_full prog (make_cmdline args)
+
+let open_process_shell fn cmd =
+  let shell =
+    try Sys.getenv "COMSPEC"
+    with Not_found -> raise(Unix_error(ENOEXEC, "open_process_shell", cmd)) in
+  fn shell (shell ^ " /c " ^ cmd)
+let open_process_in cmd =
+  open_process_shell open_process_cmdline_in cmd
+let open_process_out cmd =
+  open_process_shell open_process_cmdline_out cmd
+let open_process cmd =
+  open_process_shell open_process_cmdline cmd
+let open_process_full cmd =
+  open_process_shell open_process_cmdline_full cmd
+
 let find_proc_id fun_name proc =
   try
-    let pid = Hashtbl.find popen_processes proc in
-    Hashtbl.remove popen_processes proc;
-    pid
+    Hashtbl.find popen_processes proc
   with Not_found ->
     raise(Unix_error(EBADF, fun_name, ""))
 
+let remove_proc_id proc =
+  Hashtbl.remove popen_processes proc
+
+let process_in_pid inchan =
+  find_proc_id "process_in_pid" (Process_in inchan)
+let process_out_pid outchan =
+  find_proc_id "process_out_pid" (Process_out outchan)
+let process_pid (inchan, outchan) =
+  find_proc_id "process_pid" (Process(inchan, outchan))
+let process_full_pid (inchan, outchan, errchan) =
+  find_proc_id "process_full_pid"
+    (Process_full(inchan, outchan, errchan))
+
 let close_process_in inchan =
-  let pid = find_proc_id "close_process_in" (Process_in inchan) in
+  let proc = Process_in inchan in
+  let pid = find_proc_id "close_process_in" proc in
+  remove_proc_id proc;
   close_in inchan;
   snd(waitpid [] pid)
 
 let close_process_out outchan =
-  let pid = find_proc_id "close_process_out" (Process_out outchan) in
+  let proc = Process_out outchan in
+  let pid = find_proc_id "close_process_out" proc in
+  remove_proc_id proc;
   close_out outchan;
   snd(waitpid [] pid)
 
 let close_process (inchan, outchan) =
-  let pid = find_proc_id "close_process" (Process(inchan, outchan)) in
+  let proc = Process(inchan, outchan) in
+  let pid = find_proc_id "close_process" proc in
+  remove_proc_id proc;
   close_in inchan; close_out outchan;
   snd(waitpid [] pid)
 
 let close_process_full (inchan, outchan, errchan) =
-  let pid =
-    find_proc_id "close_process_full"
-                 (Process_full(inchan, outchan, errchan)) in
+  let proc = Process_full(inchan, outchan, errchan) in
+  let pid = find_proc_id "close_process_full" proc in
+  remove_proc_id proc;
   close_in inchan; close_out outchan; close_in errchan;
   snd(waitpid [] pid)
 

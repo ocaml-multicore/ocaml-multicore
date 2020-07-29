@@ -1,3 +1,7 @@
+(* TEST
+   * expect
+*)
+
 module C = Char;;
 C.chr 66;;
 
@@ -53,7 +57,7 @@ module C4 = F(struct end);;
 C4.chr 66;;
 [%%expect{|
 module F :
-  functor (X : sig  end) ->
+  functor (X : sig end) ->
     sig
       external code : char -> int = "%identity"
       val chr : int -> char
@@ -87,8 +91,8 @@ module C4 :
 module G(X:sig end) = struct module M = X end;; (* does not alias X *)
 module M = G(struct end);;
 [%%expect{|
-module G : functor (X : sig  end) -> sig module M : sig  end end
-module M : sig module M : sig  end end
+module G : functor (X : sig end) -> sig module M : sig end end
+module M : sig module M : sig end end
 |}];;
 
 module M' = struct
@@ -137,9 +141,9 @@ module M5 = G(struct end);;
 M5.N'.x;;
 [%%expect{|
 module F :
-  functor (X : sig  end) ->
+  functor (X : sig end) ->
     sig module N : sig val x : int end module N' = N end
-module G : functor (X : sig  end) -> sig module N' : sig val x : int end end
+module G : functor (X : sig end) -> sig module N' : sig val x : int end end
 module M5 : sig module N' : sig val x : int end end
 - : int = 1
 |}];;
@@ -283,6 +287,7 @@ module StringSet :
     val remove : elt -> t -> t
     val union : t -> t -> t
     val inter : t -> t -> t
+    val disjoint : t -> t -> bool
     val diff : t -> t -> t
     val compare : t -> t -> int
     val equal : t -> t -> bool
@@ -310,6 +315,10 @@ module StringSet :
     val find_last : (elt -> bool) -> t -> elt
     val find_last_opt : (elt -> bool) -> t -> elt option
     val of_list : elt list -> t
+    val to_seq_from : elt -> t -> elt Seq.t
+    val to_seq : t -> elt Seq.t
+    val add_seq : elt Seq.t -> t -> t
+    val of_seq : elt Seq.t -> t
   end
 module SSet :
   sig
@@ -323,6 +332,7 @@ module SSet :
     val remove : elt -> t -> t
     val union : t -> t -> t
     val inter : t -> t -> t
+    val disjoint : t -> t -> bool
     val diff : t -> t -> t
     val compare : t -> t -> int
     val equal : t -> t -> bool
@@ -350,6 +360,10 @@ module SSet :
     val find_last : (elt -> bool) -> t -> elt
     val find_last_opt : (elt -> bool) -> t -> elt option
     val of_list : elt list -> t
+    val to_seq_from : elt -> t -> elt Seq.t
+    val to_seq : t -> elt Seq.t
+    val add_seq : elt Seq.t -> t -> t
+    val of_seq : elt Seq.t -> t
   end
 val f : StringSet.t -> SSet.t = <fun>
 |}];;
@@ -363,8 +377,8 @@ end;;
 include T;;
 let f (x : t) : T.t = x ;;
 [%%expect{|
-module F : functor (M : sig  end) -> sig type t end
-module T : sig module M : sig  end type t = F(M).t end
+module F : functor (M : sig end) -> sig type t end
+module T : sig module M : sig end type t = F(M).t end
 module M = T.M
 type t = F(M).t
 val f : t -> T.t = <fun>
@@ -395,6 +409,7 @@ module A :
         val remove : elt -> t -> t
         val union : t -> t -> t
         val inter : t -> t -> t
+        val disjoint : t -> t -> bool
         val diff : t -> t -> t
         val compare : t -> t -> int
         val equal : t -> t -> bool
@@ -422,6 +437,10 @@ module A :
         val find_last : (elt -> bool) -> t -> elt
         val find_last_opt : (elt -> bool) -> t -> elt option
         val of_list : elt list -> t
+        val to_seq_from : elt -> t -> elt Seq.t
+        val to_seq : t -> elt Seq.t
+        val add_seq : elt Seq.t -> t -> t
+        val of_seq : elt Seq.t -> t
       end
     val empty : S.t
   end
@@ -443,16 +462,11 @@ module G = F (M.Y);;
 (*module N = G (M);;
 module N = F (M.Y) (M);;*)
 [%%expect{|
-module FF : functor (X : sig  end) -> sig type t end
+module FF : functor (X : sig end) -> sig type t end
 module M :
-  sig
-    module X : sig  end
-    module Y : sig type t = FF(X).t end
-    type t = Y.t
-  end
-module F :
-  functor (Y : sig type t end) (M : sig type t = Y.t end) -> sig  end
-module G : functor (M : sig type t = M.Y.t end) -> sig  end
+  sig module X : sig end module Y : sig type t = FF(X).t end type t = Y.t end
+module F : functor (Y : sig type t end) (M : sig type t = Y.t end) -> sig end
+module G : functor (M : sig type t = M.Y.t end) -> sig end
 |}];;
 
 (* PR#6307 *)
@@ -462,18 +476,18 @@ module A2 = struct end
 module L1 = struct module X = A1 end
 module L2 = struct module X = A2 end;;
 
-module F (L : (module type of L1)) = struct end;;
+module F (L : (module type of L1 [@remove_aliases])) = struct end;;
 
 module F1 = F(L1);; (* ok *)
 module F2 = F(L2);; (* should succeed too *)
 [%%expect{|
-module A1 : sig  end
-module A2 : sig  end
+module A1 : sig end
+module A2 : sig end
 module L1 : sig module X = A1 end
 module L2 : sig module X = A2 end
-module F : functor (L : sig module X : sig  end end) -> sig  end
-module F1 : sig  end
-module F2 : sig  end
+module F : functor (L : sig module X : sig end end) -> sig end
+module F1 : sig end
+module F2 : sig end
 |}];;
 
 (* Counter example: why we need to be careful with PR#6307 *)
@@ -486,7 +500,7 @@ module M = struct
   module I = Int
   type wrap' = wrap = W of (Set.Make(Int).t, Set.Make(I).t) eq
 end;;
-module type S = module type of M;; (* keep alias *)
+module type S = module type of M [@remove_aliases];; (* keep alias *)
 
 module Int2 = struct type t = int let compare x y = compare y x end;;
 module type S' = sig
@@ -507,6 +521,7 @@ module SInt :
     val remove : elt -> t -> t
     val union : t -> t -> t
     val inter : t -> t -> t
+    val disjoint : t -> t -> bool
     val diff : t -> t -> t
     val compare : t -> t -> int
     val equal : t -> t -> bool
@@ -534,6 +549,10 @@ module SInt :
     val find_last : (elt -> bool) -> t -> elt
     val find_last_opt : (elt -> bool) -> t -> elt option
     val of_list : elt list -> t
+    val to_seq_from : elt -> t -> elt Seq.t
+    val to_seq : t -> elt Seq.t
+    val add_seq : elt Seq.t -> t -> t
+    val of_seq : elt Seq.t -> t
   end
 type (_, _) eq = Eq : ('a, 'a) eq
 type wrap = W of (SInt.t, SInt.t) eq
@@ -548,7 +567,9 @@ module type S =
     type wrap' = wrap = W of (Set.Make(Int).t, Set.Make(I).t) eq
   end
 module Int2 : sig type t = int val compare : 'a -> 'a -> int end
-Line _, characters 10-30:
+Line 15, characters 10-30:
+15 |   include S with module I := I
+               ^^^^^^^^^^^^^^^^^^^^
 Error: In this `with' constraint, the new definition of I
        does not match its original definition in the constrained signature:
        Modules do not match: (module Int2) is not included in (module Int)
@@ -575,7 +596,7 @@ module M = struct
     type wrap' = wrap = W of (Set.Make(Int).t, Set.Make(P.I).t) eq
   end
 end;;
-module type S = module type of M ;;
+module type S = module type of M [@remove_aliases];;
 [%%expect{|
 module M :
   sig
@@ -600,7 +621,7 @@ module M = struct
     type wrap' = wrap = W of (Set.Make(Int).t, Set.Make(N.I).t) eq
   end
 end;;
-module type S = module type of M ;;
+module type S = module type of M [@remove_aliases];;
 [%%expect{|
 module M :
   sig
@@ -637,9 +658,9 @@ module F (X : sig end) = struct type t end;;
 module type A = Alias with module N := F(List);;
 module rec Bad : A = Bad;;
 [%%expect{|
-module type Alias = sig module N : sig  end module M = N end
-module F : functor (X : sig  end) -> sig type t end
-Line _:
+module type Alias = sig module N : sig end module M = N end
+module F : functor (X : sig end) -> sig type t end
+Line 1:
 Error: Module type declarations do not match:
          module type A = sig module M = F(List) end
        does not match
@@ -690,7 +711,7 @@ module type S = sig
   module Q = M
 end;;
 [%%expect{|
-module type S = sig module M : sig module P : sig  end end module Q = M end
+module type S = sig module M : sig module P : sig end end module Q = M end
 |}];;
 module type S = sig
   module M : sig module N : sig end module P : sig end end
@@ -704,12 +725,12 @@ module R' : S = R;;
 [%%expect{|
 module type S =
   sig
-    module M : sig module N : sig  end module P : sig  end end
+    module M : sig module N : sig end module P : sig end end
     module Q : sig module N = M.N module P = M.P end
   end
 module R :
   sig
-    module M : sig module N : sig  end module P : sig  end end
+    module M : sig module N : sig end module P : sig end end
     module Q = M
   end
 module R' : S
@@ -730,9 +751,9 @@ end = struct
   type a = Foo.b
 end;;
 [%%expect{|
-module F : functor (X : sig  end) -> sig type t end
+module F : functor (X : sig end) -> sig type t end
 module M :
-  sig type a module Foo : sig module Bar : sig  end type b = a end end
+  sig type a module Foo : sig module Bar : sig end type b = a end end
 |}];;
 
 (* PR#6578 *)
@@ -752,3 +773,86 @@ R.M.f 3;;
 module rec R : sig module M = M end
 - : int = 3
 |}];;
+
+module M = struct type t end
+module type S = sig module N = M val x : N.t end
+module type T = S with module N := M;;
+[%%expect{|
+module M : sig type t end
+module type S = sig module N = M val x : N.t end
+module type T = sig val x : M.t end
+|}];;
+
+
+module X = struct module N = struct end end
+module Y : sig
+  module type S = sig module N = X.N end
+end = struct
+  module type S = module type of struct include X end
+end;;
+[%%expect{|
+module X : sig module N : sig end end
+module Y : sig module type S = sig module N = X.N end end
+|}];;
+
+module type S = sig
+  module M : sig
+    module A : sig end
+    module B : sig end
+  end
+  module N = M.A
+end
+
+module Foo = struct
+  module B = struct let x = 0 end
+  module A = struct let x = "hello" end
+end
+
+module Bar : S with module M := Foo = struct module N = Foo.A end
+
+let s : string = Bar.N.x
+[%%expect {|
+module type S =
+  sig
+    module M : sig module A : sig end module B : sig end end
+    module N = M.A
+  end
+module Foo :
+  sig module B : sig val x : int end module A : sig val x : string end end
+module Bar : sig module N = Foo.A end
+val s : string = "hello"
+|}]
+
+
+module M : sig
+  module N : sig
+    module A : sig val x : string end
+    module B : sig val x : int end
+  end
+  module F (X : sig module A = N.A end) : sig val s : string end
+end = struct
+  module N = struct
+    module B = struct let x = 0 end
+    module A = struct let x = "hello" end
+  end
+  module F (X : sig module A : sig val x : string end end) = struct
+    let s = X.A.x
+  end
+end
+
+module N = M.F(struct module A = M.N.A end)
+
+let s : string = N.s
+[%%expect {|
+module M :
+  sig
+    module N :
+      sig
+        module A : sig val x : string end
+        module B : sig val x : int end
+      end
+    module F : functor (X : sig module A = N.A end) -> sig val s : string end
+  end
+module N : sig val s : string end
+val s : string = "hello"
+|}]

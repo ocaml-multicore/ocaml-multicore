@@ -88,6 +88,7 @@ let phys_reg n =
   if n < 100 then hard_int_reg.(n) else hard_float_reg.(n - 100)
 
 let eax = phys_reg 0
+let ebx = phys_reg 1
 let ecx = phys_reg 2
 let edx = phys_reg 3
 
@@ -163,6 +164,22 @@ let loc_external_results res =
 
 let loc_exn_bucket = eax
 
+(* See "System V Application Binary Interface Intel386 Architecture
+   Processor Supplement Version 1.0"
+   (https://www.uclibc.org/docs/psABI-i386.pdf) *)
+
+let int_dwarf_reg_numbers = [| 0; 3; 1; 2; 6; 7; 5 |]
+
+let float_dwarf_reg_numbers = [| |]
+
+let dwarf_register_numbers ~reg_class =
+  match reg_class with
+  | 0 -> int_dwarf_reg_numbers
+  | 1 -> float_dwarf_reg_numbers
+  | _ -> Misc.fatal_errorf "Bad register class %d" reg_class
+
+let stack_ptr_dwarf_register_number = 4
+
 (* Volatile registers: the x87 top of FP stack is *)
 
 let reg_is_volatile = function
@@ -188,13 +205,17 @@ let destroyed_at_oper = function
     all_phys_regs
   | Iop(Iextcall { alloc = false; }) -> destroyed_at_c_call
   | Iop(Iintop(Idiv | Imod)) -> [| eax; edx |]
-  | Iop(Ialloc _ | Iintop Imulh) -> [| eax |]
+  | Iop(Ialloc _) -> [| eax; ebx |]
+  | Iop(Iintop Imulh) -> [| eax |]
   | Iop(Iintop(Icomp _) | Iintop_imm(Icomp _, _)) -> [| eax |]
   | Iop(Iintoffloat) -> [| eax |]
-  | Iifthenelse(Ifloattest(_, _), _, _) -> [| eax |]
+  | Iifthenelse(Ifloattest _, _, _) -> [| eax |]
+  | Itrywith _ -> [| edx |]
   | _ -> [||]
 
 let destroyed_at_raise = all_phys_regs
+
+let destroyed_at_reloadretaddr = [| |]
 
 (* Maximal register pressure *)
 
@@ -220,8 +241,16 @@ let op_is_pure = function
 
 (* Layout of the stack frame *)
 
-let num_stack_slots = [| 0; 0 |]
-let contains_calls = ref false
+let frame_required fd =
+  let frame_size_at_top_of_function =
+    (* cf. [frame_size] in emit.mlp. *)
+    Misc.align (4*fd.fun_num_stack_slots.(0) + 8*fd.fun_num_stack_slots.(1) + 4)
+      stack_alignment
+  in
+  frame_size_at_top_of_function > 4
+
+let prologue_required fd =
+  frame_required fd
 
 (* Calling the assembler *)
 

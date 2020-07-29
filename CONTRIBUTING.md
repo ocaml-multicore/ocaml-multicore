@@ -68,6 +68,9 @@ columns, not use tab characters (spaces only), and not use non-ASCII
 characters. These typographical rules can be checked with the script
 `tools/check-typo`.
 
+If you are working from a Git clone, you can automate this process by
+copying the file `tools/pre-commit-githook` to `.git/hooks/pre-commit`.
+
 Otherwise, there are no strongly enforced guidelines specific to the
 compiler -- and, as a result, the style may differ in the different
 parts of the compiler. The general [OCaml Programming
@@ -136,6 +139,56 @@ you only see a transient failure once and your change has no reason
 to affect threading, it's probably not your fault.
 
 
+### Benchmarking
+
+If your contribution can impact the performance of the code generated
+by the native compiler, you can use the infrastructure that the
+flambda team put together to benchmark the compiler to assess the
+consequences of your contribution. It has two main accessible parts:
+
+- The website that hosts benchmarks results, at
+[http://bench.flambda.ocamlpro.com/](http://bench.flambda.ocamlpro.com/).
+It exposes two ways to compare compilers: the first, under the header
+`Plot a given benchmark`, allows to select a benchmark and
+see graphs plotting the evolution of the performance of the different
+compilers over time. The second, under `Compare two runs`, allows
+to get an overview of the differences between a reference compiler
+(selected using the `ref` button) and a compiler under test (using
+the `tst` button). Clicking on the `Compare` button at the bottom
+right of the page will create a new page containing summaries and
+raw data comparing the selected runs.
+
+- The git repository containing the data about which benchmarks
+to run, on which compilers, at [https://github.com/OCamlPro/ocamlbench-repo](
+https://github.com/OCamlPro/ocamlbench-repo). This needs to be a valid
+opam 2.0 repository, and contains the benchmarks as normal packages
+and the compilers as versions of the package `ocaml-variants`.
+To add a compiler to the list, you must have a publicly accessible
+version of your branch (if you're making a pull request again the
+compiler, you should have a branch on github that was used to make
+the pull request, that you can use for this purpose).
+Then, you should make a pull request against `ocamlbench-repo`
+that adds a repertory in the `packages/ocaml-variants` sub-folder
+which contains a single `opam` file. The contents of the file
+should be inspired from the other files already present, with
+the main points of interest being the `url` field, which should
+point to your branch, the `build` field that should be adapted
+if the features that you want to benchmark depend on configure-time
+options, and the `setenv` field that can be used to pass compiler
+options via the `OCAMLPARAM` environment variable.
+The `trunk+flambda+opt` compiler, for instance, both uses a
+`configure` option and sets the `OCAMLPARAM` variable.
+The folder you add has to be named `ocaml-variants.%VERSION%+%DESCR%`,
+where `%VERSION%` is the version that will be used by opam to
+check compatibility with the opam packages that are needed for the
+benchmarks, and `%DESCR%` should be a short description of the feature
+you're benchmarking (if you're making a pull request against `ocaml`,
+you can use the PR number in the description, e.g. `+gpr0000`).
+Once your pull request is merged, it will likely take a few hours
+until the benchmark server picks up the new definition and again
+up to a few hours before the results are available on the results page.
+
+
 ## Description of the proposed change
 
 ### In the merge request interface
@@ -190,12 +243,11 @@ Any user-visible change should have a `Changes` entry:
 
 - using the label "`*`" if it breaks existing programs, "`-`" otherwise
 
-- with the issue number `PR#{N}` if from mantis, `GPR#{N}` if from github
-  (several numbers separated by commas can be used)
+- with all relevant issue and PR numbers `#{N}`, in ascending numerical order
+  (separated by commas if necessary)
 
-- maintaining the order: each section lists Mantis PRs first in ascending
-  numerical order, followed by Github PRs in ascending numerical order,
-  followed by changes that are not related to a PR.
+- maintaining the order: the entries in each section should be sorted by
+  issue/PR number (the first of each entry, if more than one is available)
 
 - with a concise readable description of the change (possibly taken
   from a commit message, but it should make sense to end-users
@@ -331,6 +383,44 @@ why the change is desirable and why it should go into stdlib.
 So: be prepared for some serious review process!  But yes, yes,
 contributions are welcome and appreciated.  Promised.
 
+## Contributing optimizations
+
+Contributions to improve the compiler's optimization capabilities are
+welcome. However, due to the potential risks involved with such
+changes, we ask the following of contributors when submitting pull
+requests:
+
+ - Explain the benefits of the optimization (faster code, smaller
+   code, improved cache behaviour, lower power consumption, increased
+   compilation speed).
+
+ - Explain when the optimization does and does not apply.
+
+ - Explain when, if ever, the optimization may be detrimental.
+
+ - Provide benchmark measurements to justify the expected
+   benefits. Measurements should ideally include experiments with
+   full-scale applications as well as with microbenchmarks.  Which
+   kinds of measurements are appropriate will vary depending on the
+   optimization; some optimizations may have to be measured indirectly
+   (for example, by measuring cache misses for a code size
+   optimization). Measurements showing clear benefits when combined
+   with some other optimization/change are acceptable.
+
+ - At least some of the measurements provided should be from
+   experiments on open source code.
+
+ - If assistance is sought with benchmarking then this should be made
+   clear on the initial pull request submission.
+
+ - Justify the correctness of the optimization, and discuss a testing
+   strategy to ensure that it does not introduce bugs. The use of
+   formal methods to increase confidence is encouraged.
+
+A major criterion in assessing whether to include an optimisation in
+the compiler is the balance between the increased complexity of the
+compiler code and the expected benefits of the benchmark. Contributors
+are asked to bear this in mind when making submissions.
 
 ## Contributor License Agreement
 

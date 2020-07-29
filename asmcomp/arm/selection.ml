@@ -23,10 +23,10 @@ open Mach
 
 let is_offset chunk n =
   match chunk with
-  (* VFPv{2,3} load/store have -1020 to 1020 *)
-    Single | Double | Double_u
+  (* VFPv{2,3} load/store have -1020 to 1020.  Offset must be multiple of 4 *)
+  | Single | Double | Double_u
     when !fpu >= VFPv2 ->
-      n >= -1020 && n <= 1020
+      n >= -1020 && n <= 1020 && n mod 4 = 0
   (* ARM load/store byte/word have -4095 to 4095 *)
   | Byte_unsigned | Byte_signed
   | Thirtytwo_unsigned | Thirtytwo_signed
@@ -132,10 +132,11 @@ method! effects_of e =
   | e -> super#effects_of e
 
 method select_addressing chunk = function
-  | Cop((Cadda | Caddv), [arg; Cconst_int n], _)
+  | Cop((Cadda | Caddv), [arg; Cconst_int (n, _)], _)
     when is_offset chunk n ->
       (Iindexed n, arg)
-  | Cop((Cadda | Caddv as op), [arg1; Cop(Caddi, [arg2; Cconst_int n], _)], dbg)
+  | Cop((Cadda | Caddv as op),
+      [arg1; Cop(Caddi, [arg2; Cconst_int (n, _)], _)], dbg)
     when is_offset chunk n ->
       (Iindexed n, Cop(op, [arg1; arg2], dbg))
   | arg ->
@@ -143,10 +144,10 @@ method select_addressing chunk = function
 
 method select_shift_arith op dbg arithop arithrevop args =
   match args with
-    [arg1; Cop(Clsl | Clsr | Casr as op, [arg2; Cconst_int n], _)]
+    [arg1; Cop(Clsl | Clsr | Casr as op, [arg2; Cconst_int (n, _)], _)]
     when n > 0 && n < 32 ->
       (Ispecific(Ishiftarith(arithop, select_shiftop op, n)), [arg1; arg2])
-  | [Cop(Clsl | Clsr | Casr as op, [arg1; Cconst_int n], _); arg2]
+  | [Cop(Clsl | Clsr | Casr as op, [arg1; Cconst_int (n, _)], _); arg2]
     when n > 0 && n < 32 ->
       (Ispecific(Ishiftarith(arithrevop, select_shiftop op, n)), [arg2; arg1])
   | args ->
@@ -185,15 +186,15 @@ method private iextcall (func, alloc) =
 method! select_operation op args dbg =
   match (op, args) with
   (* Recognize special shift arithmetic *)
-    ((Caddv | Cadda | Caddi), [arg; Cconst_int n])
+    ((Caddv | Cadda | Caddi), [arg; Cconst_int (n, _)])
     when n < 0 && self#is_immediate (-n) ->
       (Iintop_imm(Isub, -n), [arg])
   | ((Caddv | Cadda | Caddi as op), args) ->
       self#select_shift_arith op dbg Ishiftadd Ishiftadd args
-  | (Csubi, [arg; Cconst_int n])
+  | (Csubi, [arg; Cconst_int (n, _)])
     when n < 0 && self#is_immediate (-n) ->
       (Iintop_imm(Iadd, -n), [arg])
-  | (Csubi, [Cconst_int n; arg])
+  | (Csubi, [Cconst_int (n, _); arg])
     when self#is_immediate n ->
       (Ispecific(Irevsubimm n), [arg])
   | (Csubi as op, args) ->
@@ -205,7 +206,7 @@ method! select_operation op args dbg =
   | (Cxor as op, args) ->
       self#select_shift_arith op dbg Ishiftxor Ishiftxor args
   | (Ccheckbound,
-      [Cop(Clsl | Clsr | Casr as op, [arg1; Cconst_int n], _); arg2])
+      [Cop(Clsl | Clsr | Casr as op, [arg1; Cconst_int (n, _)], _); arg2])
     when n > 0 && n < 32 ->
       (Ispecific(Ishiftcheckbound(select_shiftop op, n)), [arg1; arg2])
   (* ARM does not support immediate operands for multiplication *)
@@ -241,16 +242,19 @@ method private select_operation_softfp op args dbg =
   | (Cfloatofint, args) -> (self#iextcall("__aeabi_i2d", false), args)
   | (Cintoffloat, args) -> (self#iextcall("__aeabi_d2iz", false), args)
   | (Ccmpf comp, args) ->
-      let func = (match comp with
-                    Cne    (* there's no __aeabi_dcmpne *)
-                  | Ceq -> "__aeabi_dcmpeq"
-                  | Clt -> "__aeabi_dcmplt"
-                  | Cle -> "__aeabi_dcmple"
-                  | Cgt -> "__aeabi_dcmpgt"
-                  | Cge -> "__aeabi_dcmpge") in
-      let comp = (match comp with
-                    Cne -> Ceq (* eq 0 => false *)
-                  | _   -> Cne (* ne 0 => true *)) in
+      let comp, func =
+        match comp with
+        | CFeq -> Cne, "__aeabi_dcmpeq"
+        | CFneq -> Ceq, "__aeabi_dcmpeq"
+        | CFlt -> Cne, "__aeabi_dcmplt"
+        | CFnlt -> Ceq, "__aeabi_dcmplt"
+        | CFle -> Cne, "__aeabi_dcmple"
+        | CFnle -> Ceq, "__aeabi_dcmple"
+        | CFgt -> Cne, "__aeabi_dcmpgt"
+        | CFngt -> Ceq, "__aeabi_dcmpgt"
+        | CFge -> Cne, "__aeabi_dcmpge"
+        | CFnge -> Ceq, "__aeabi_dcmpge"
+      in
       (Iintop_imm(Icomp(Iunsigned comp), 0),
        [Cop(Cextcall(func, typ_int, false, None), args, dbg)])
   (* Add coercions around loads and stores of 32-bit floats *)
@@ -302,15 +306,15 @@ method! select_condition = function
 
 (* Deal with some register constraints *)
 
-method! insert_op_debug op dbg rs rd =
+method! insert_op_debug env op dbg rs rd =
   try
     let (rsrc, rdst) = pseudoregs_for_operation op rs rd in
-    self#insert_moves rs rsrc;
-    self#insert_debug (Iop op) dbg rsrc rdst;
-    self#insert_moves rdst rd;
+    self#insert_moves env rs rsrc;
+    self#insert_debug env (Iop op) dbg rsrc rdst;
+    self#insert_moves env rdst rd;
     rd
   with Use_default ->
-    super#insert_op_debug op dbg rs rd
+    super#insert_op_debug env op dbg rs rd
 
 end
 

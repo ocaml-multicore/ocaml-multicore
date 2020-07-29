@@ -89,20 +89,6 @@ let rec live i finally =
       done;
       i.live <- !at_fork;
       Reg.add_set_array !at_fork arg
-  | Iloop(body) ->
-      let at_top = ref Reg.Set.empty in
-      (* Yes, there are better algorithms, but we'll just iterate till
-         reaching a fixpoint. *)
-      begin try
-        while true do
-          let new_at_top = Reg.Set.union !at_top (live body !at_top) in
-          if Reg.Set.equal !at_top new_at_top then raise Exit;
-          at_top := new_at_top
-        done
-      with Exit -> ()
-      end;
-      i.live <- !at_top;
-      !at_top
   | Icatch(rec_flag, handlers, body) ->
       let at_join = live i.next finally in
       let aux (nfail,handler) (nfail', before_handler) =
@@ -160,7 +146,7 @@ let reset () =
   live_at_raise := Reg.Set.empty;
   live_at_exit := []
 
-let fundecl ppf f =
+let fundecl f =
   let initially_live = live f.fun_body Reg.Set.empty in
   (* Sanity check: only function parameters (and the Spacetime node hole
      register, if profiling) can be live at entrypoint *)
@@ -170,6 +156,6 @@ let fundecl ppf f =
     else Reg.Set.remove Proc.loc_spacetime_node_hole wrong_live
   in
   if not (Reg.Set.is_empty wrong_live) then begin
-    Format.fprintf ppf "%a@." Printmach.regset wrong_live;
-    Misc.fatal_error "Liveness.fundecl"
+    Misc.fatal_errorf "@[Liveness.fundecl:@\n%a@]"
+      Printmach.regset wrong_live
   end

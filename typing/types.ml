@@ -22,6 +22,7 @@ open Asttypes
 type type_expr =
   { mutable desc: type_desc;
     mutable level: int;
+    mutable scope: int;
     id: int }
 
 and type_desc =
@@ -44,9 +45,10 @@ and row_desc =
       row_more: type_expr;
       row_bound: unit;
       row_closed: bool;
-      row_fixed: bool;
+      row_fixed: fixed_explanation option;
       row_name: (Path.t * type_expr list) option }
-
+and fixed_explanation =
+  | Univar of type_expr | Fixed_private | Reified of Path.t | Rigid
 and row_field =
     Rpresent of type_expr option
   | Reither of bool * type_expr list * bool * row_field option ref
@@ -79,9 +81,7 @@ end
 
 (* Maps of methods and instance variables *)
 
-module OrderedString =
-  struct type t = string let compare (x:t) y = compare x y end
-module Meths = Map.Make(OrderedString)
+module Meths = Misc.Stdlib.String.Map
 module Vars = Meths
 
 (* Value descriptions *)
@@ -104,7 +104,6 @@ and value_kind =
                                         (* Self *)
   | Val_anc of (string * Ident.t) list * string
                                         (* Ancestor *)
-  | Val_unbound                         (* Unbound variable *)
 
 (* Variance *)
 
@@ -122,6 +121,7 @@ module Variance = struct
   let union v1 v2 = v1 lor v2
   let inter v1 v2 = v1 land v2
   let subset v1 v2 = (v1 land v2 = v1)
+  let eq (v1 : t) v2 = (v1 = v2)
   let set x b v =
     if b then v lor single x else  v land (lnot (single x))
   let mem x = subset (single x)
@@ -146,10 +146,11 @@ type type_declaration =
     type_private: private_flag;
     type_manifest: type_expr option;
     type_variance: Variance.t list;
-    type_newtype_level: (int * int) option;
+    type_is_newtype: bool;
+    type_expansion_scope: int;
     type_loc: Location.t;
     type_attributes: Parsetree.attributes;
-    type_immediate: bool;
+    type_immediate: Type_immediacy.t;
     type_unboxed: unboxed_status;
  }
 
@@ -164,7 +165,7 @@ and record_representation =
   | Record_float                        (* All fields are floats *)
   | Record_unboxed of bool    (* Unboxed single-field record, inlined or not *)
   | Record_inlined of int               (* Inlined record *)
-  | Record_extension                    (* Inlined record under extension *)
+  | Record_extension of Path.t          (* Inlined record under extension *)
 
 and label_declaration =
   {
@@ -215,7 +216,7 @@ and type_transparence =
 
 (* Type expressions for the class language *)
 
-module Concr = Set.Make(OrderedString)
+module Concr = Misc.Stdlib.String.Set
 
 type class_type =
     Cty_constr of Path.t * type_expr list * class_type
@@ -250,26 +251,35 @@ type class_type_declaration =
 
 (* Type expressions for the module language *)
 
+type visibility =
+  | Exported
+  | Hidden
+
 type module_type =
     Mty_ident of Path.t
   | Mty_signature of signature
-  | Mty_functor of Ident.t * module_type option * module_type
-  | Mty_alias of alias_presence * Path.t
+  | Mty_functor of functor_parameter * module_type
+  | Mty_alias of Path.t
 
-and alias_presence =
-  | Mta_present
-  | Mta_absent
+and functor_parameter =
+  | Unit
+  | Named of Ident.t option * module_type
+
+and module_presence =
+  | Mp_present
+  | Mp_absent
 
 and signature = signature_item list
 
 and signature_item =
-    Sig_value of Ident.t * value_description
-  | Sig_type of Ident.t * type_declaration * rec_status
-  | Sig_typext of Ident.t * extension_constructor * ext_status
-  | Sig_module of Ident.t * module_declaration * rec_status
-  | Sig_modtype of Ident.t * modtype_declaration
-  | Sig_class of Ident.t * class_declaration * rec_status
-  | Sig_class_type of Ident.t * class_type_declaration * rec_status
+    Sig_value of Ident.t * value_description * visibility
+  | Sig_type of Ident.t * type_declaration * rec_status * visibility
+  | Sig_typext of Ident.t * extension_constructor * ext_status * visibility
+  | Sig_module of
+      Ident.t * module_presence * module_declaration * rec_status * visibility
+  | Sig_modtype of Ident.t * modtype_declaration * visibility
+  | Sig_class of Ident.t * class_declaration * rec_status * visibility
+  | Sig_class_type of Ident.t * class_type_declaration * rec_status * visibility
 
 and module_declaration =
   {
@@ -323,12 +333,12 @@ and constructor_tag =
   | Cstr_extension of Path.t * bool     (* Extension constructor
                                            true if a constant false if a block*)
 
-let equal_tag t1 t2 = 
+let equal_tag t1 t2 =
   match (t1, t2) with
   | Cstr_constant i1, Cstr_constant i2 -> i2 = i1
   | Cstr_block i1, Cstr_block i2 -> i2 = i1
   | Cstr_unboxed, Cstr_unboxed -> true
-  | Cstr_extension (path1, b1), Cstr_extension (path2, b2) -> 
+  | Cstr_extension (path1, b1), Cstr_extension (path2, b2) ->
       Path.same path1 path2 && b1 = b2
   | (Cstr_constant _|Cstr_block _|Cstr_unboxed|Cstr_extension _), _ -> false
 
@@ -348,3 +358,23 @@ type label_description =
     lbl_loc: Location.t;
     lbl_attributes: Parsetree.attributes;
    }
+
+let rec bound_value_identifiers = function
+    [] -> []
+  | Sig_value(id, {val_kind = Val_reg}, _) :: rem ->
+      id :: bound_value_identifiers rem
+  | Sig_typext(id, _, _, _) :: rem -> id :: bound_value_identifiers rem
+  | Sig_module(id, Mp_present, _, _, _) :: rem ->
+      id :: bound_value_identifiers rem
+  | Sig_class(id, _, _, _) :: rem -> id :: bound_value_identifiers rem
+  | _ :: rem -> bound_value_identifiers rem
+
+let signature_item_id = function
+  | Sig_value (id, _, _)
+  | Sig_type (id, _, _, _)
+  | Sig_typext (id, _, _, _)
+  | Sig_module (id, _, _, _, _)
+  | Sig_modtype (id, _, _)
+  | Sig_class (id, _, _, _)
+  | Sig_class_type (id, _, _, _)
+    -> id

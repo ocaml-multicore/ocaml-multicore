@@ -18,8 +18,8 @@
 type label = Cmm.label
 
 type integer_comparison =
-    Isigned of Cmm.comparison
-  | Iunsigned of Cmm.comparison
+    Isigned of Cmm.integer_comparison
+  | Iunsigned of Cmm.integer_comparison
 
 type integer_operation =
     Iadd | Isub | Imul | Imulh | Idiv | Imod
@@ -28,12 +28,14 @@ type integer_operation =
   | Icheckbound of { label_after_error : label option;
         spacetime_index : int; }
 
+type float_comparison = Cmm.float_comparison
+
 type test =
     Itruetest
   | Ifalsetest
   | Iinttest of integer_comparison
   | Iinttest_imm of integer_comparison * int
-  | Ifloattest of Cmm.comparison * bool
+  | Ifloattest of float_comparison
   | Ioddtest
   | Ieventest
 
@@ -51,16 +53,15 @@ type operation =
   | Iextcall of { func : string; alloc : bool; label_after : label; stack_ofs : int; }
   | Istackoffset of int
   | Iload of Cmm.memory_chunk * Arch.addressing_mode
-  | Iloadmut
   | Istore of Cmm.memory_chunk * Arch.addressing_mode * bool
-  | Ialloc of { words : int; label_after_call_gc : label option;
+  | Ialloc of { bytes : int; label_after_call_gc : label option;
         spacetime_index : int; }
   | Iintop of integer_operation
   | Iintop_imm of integer_operation * int
   | Inegf | Iabsf | Iaddf | Isubf | Imulf | Idivf
   | Ifloatofint | Iintoffloat
   | Ispecific of Arch.specific_operation
-  | Iname_for_debugger of { ident : Ident.t; which_parameter : int option;
+  | Iname_for_debugger of { ident : Backend_var.t; which_parameter : int option;
       provenance : unit option; is_assignment : bool; }
   | Ipoll
 
@@ -81,7 +82,6 @@ and instruction_desc =
   | Ireturn
   | Iifthenelse of test * instruction * instruction
   | Iswitch of int array * instruction array
-  | Iloop of instruction
   | Icatch of Cmm.rec_flag * (int * instruction) list * instruction
   | Iexit of int
   | Itrywith of instruction * instruction
@@ -98,9 +98,11 @@ type fundecl =
   { fun_name: string;
     fun_args: Reg.t array;
     fun_body: instruction;
-    fun_fast: bool;
+    fun_codegen_options : Cmm.codegen_option list;
     fun_dbg : Debuginfo.t;
     fun_spacetime_shape : spacetime_shape option;
+    fun_num_stack_slots: int array;
+    fun_contains_calls: bool;
   }
 
 let rec dummy_instr =
@@ -153,8 +155,6 @@ let rec instr_iter f i =
             instr_iter f cases.(i)
           done;
           instr_iter f i.next
-      | Iloop(body) ->
-          instr_iter f body; instr_iter f i.next
       | Icatch(_, handlers, body) ->
           instr_iter f body;
           List.iter (fun (_n, handler) -> instr_iter f handler) handlers;
@@ -192,12 +192,12 @@ let spacetime_node_hole_pointer_is_live_before insn =
     | Ispecific specific_op ->
       Arch.spacetime_node_hole_pointer_is_live_before specific_op
     | Imove | Ispill | Ireload | Iconst_int _ | Iconst_float _
-    | Iconst_symbol _ | Istackoffset _ | Iload _ | Iloadmut | Istore _
+    | Iconst_symbol _ | Istackoffset _ | Iload _ | Istore _
     | Inegf | Iabsf | Iaddf | Isubf | Imulf | Idivf
     | Ifloatofint | Iintoffloat
     | Iname_for_debugger _ | Ipoll -> false
     end
-  | Iend | Ireturn | Iifthenelse _ | Iswitch _ | Iloop _ | Icatch _
+  | Iend | Ireturn | Iifthenelse _ | Iswitch _ | Icatch _
   | Iexit _ | Itrywith _ | Iraise _ -> false
 
 let operation_can_raise op =

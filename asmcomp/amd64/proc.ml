@@ -44,7 +44,7 @@ let win64 = Arch.win64
     r10         10
     r11         11
     rbp         12
-    r14         trap pointer
+    r14         domain state pointer
     r15         allocation pointer
 
   xmm0 - xmm15  100 - 115  *)
@@ -266,6 +266,22 @@ let loc_external_arguments arg =
 
 let loc_exn_bucket = rax
 
+(** See "System V Application Binary Interface, AMD64 Architecture Processor
+    Supplement" (www.x86-64.org/documentation/abi.pdf) page 57, fig. 3.36. *)
+let int_dwarf_reg_numbers =
+  [| 0; 3; 5; 4; 1; 2; 8; 9; 12; 13; 10; 11; 6 |]
+
+let float_dwarf_reg_numbers =
+  [| 17; 18; 19; 20; 21; 22; 23; 24; 25; 26; 27; 28; 29; 30; 31; 32 |]
+
+let dwarf_register_numbers ~reg_class =
+  match reg_class with
+  | 0 -> int_dwarf_reg_numbers
+  | 1 -> float_dwarf_reg_numbers
+  | _ -> Misc.fatal_errorf "Bad register class %d" reg_class
+
+let stack_ptr_dwarf_register_number = 7
+
 (* Volatile registers: none *)
 
 let regs_are_volatile _rs = false
@@ -315,7 +331,7 @@ let destroyed_at_oper = function
   | Iop (Iintop_imm(Icheckbound _, _)) when Config.spacetime ->
       [| loc_spacetime_node_hole |]
   | Iswitch(_, _) -> [| rax; rdx |]
-  | Iop Iloadmut -> [| rax; rdx |]
+  | Itrywith _ -> [| r11 |]
   | _ ->
     if fp then
 (* prevent any use of the frame pointer ! *)
@@ -325,6 +341,8 @@ let destroyed_at_oper = function
 
 
 let destroyed_at_raise = all_phys_regs
+
+let destroyed_at_reloadretaddr = [| |]
 
 (* Maximal register pressure *)
 
@@ -355,16 +373,20 @@ let max_register_pressure = function
 
 let op_is_pure = function
   | Icall_ind _ | Icall_imm _ | Itailcall_ind _ | Itailcall_imm _
-  | Iextcall _ | Istackoffset _ | Istore _ | Ialloc _ | Ipoll | Iloadmut
+  | Iextcall _ | Istackoffset _ | Istore _ | Ialloc _ | Ipoll
   | Iintop(Icheckbound _) | Iintop_imm(Icheckbound _, _) -> false
-  | Ispecific(Ilea _) -> true
+  | Ispecific(Ilea _|Isextend32|Izextend32) -> true
   | Ispecific _ -> false
   | _ -> true
 
 (* Layout of the stack frame *)
 
-let num_stack_slots = [| 0; 0 |]
-let contains_calls = ref false
+let frame_required fd =
+  fp || fd.fun_contains_calls ||
+  fd.fun_num_stack_slots.(0) > 0 || fd.fun_num_stack_slots.(1) > 0
+
+let prologue_required fd =
+  frame_required fd
 
 (* Calling the assembler *)
 

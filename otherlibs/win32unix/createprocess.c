@@ -24,8 +24,9 @@
 
 static int win_has_console(void);
 
-static DWORD do_create_process_native(wchar_t * exefile, wchar_t * cmdline, wchar_t * env,
-                                      HANDLE fd1, HANDLE fd2, HANDLE fd3, HANDLE * hProcess)
+static DWORD do_create_process_native(wchar_t * exefile, wchar_t * cmdline,
+                                      wchar_t * env, HANDLE fd1, HANDLE fd2,
+                                      HANDLE fd3, HANDLE * hProcess)
 {
   PROCESS_INFORMATION pi;
   STARTUPINFO si;
@@ -52,7 +53,7 @@ static DWORD do_create_process_native(wchar_t * exefile, wchar_t * cmdline, wcha
     err = GetLastError(); goto ret3;
   }
   /* If we do not have a console window, then we must create one
-     before running the process (keep it hidden for apparence).
+     before running the process (keep it hidden for appearance).
      If we are starting a GUI application, the newly created
      console should not matter. */
   if (win_has_console())
@@ -100,16 +101,20 @@ value win_create_process_native(value cmd, value cmdline, value env,
 
   if (env != Val_int(0)) {
     env = Field(env, 0);
-    size = win_multi_byte_to_wide_char(String_val(env), caml_string_length(env), NULL, 0);
+    size =
+      win_multi_byte_to_wide_char(String_val(env),
+                                  caml_string_length(env), NULL, 0);
     wenv = caml_stat_alloc((size + 1)*sizeof(wchar_t));
-    win_multi_byte_to_wide_char(String_val(env), caml_string_length(env), wenv, size);
+    win_multi_byte_to_wide_char(String_val(env),
+                                caml_string_length(env), wenv, size);
     wenv[size] = 0;
   } else {
     wenv = NULL;
   }
 
-  err = do_create_process_native(exefile, wcmdline, wenv,
-                                 Handle_val(fd1), Handle_val(fd2), Handle_val(fd3), &hProcess);
+  err =
+    do_create_process_native(exefile, wcmdline, wenv, Handle_val(fd1),
+                             Handle_val(fd2), Handle_val(fd3), &hProcess);
 
   if (wenv != NULL) caml_stat_free(wenv);
   caml_stat_free(wcmdline);

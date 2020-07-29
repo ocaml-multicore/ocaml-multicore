@@ -47,12 +47,12 @@ let rec env_from_summary sum subst =
           Env.add_extension ~check:false id
             (Subst.extension_constructor subst desc)
             (env_from_summary s subst)
-      | Env_module(s, id, desc) ->
-          Env.add_module_declaration ~check:false id
-            (Subst.module_declaration subst desc)
+      | Env_module(s, id, pres, desc) ->
+          Env.add_module_declaration ~check:false id pres
+            (Subst.module_declaration Keep subst desc)
             (env_from_summary s subst)
       | Env_modtype(s, id, desc) ->
-          Env.add_modtype id (Subst.modtype_declaration subst desc)
+          Env.add_modtype id (Subst.modtype_declaration Keep subst desc)
                           (env_from_summary s subst)
       | Env_class(s, id, desc) ->
           Env.add_class id (Subst.class_declaration subst desc)
@@ -66,20 +66,32 @@ let rec env_from_summary sum subst =
           begin match Env.open_signature Asttypes.Override path' env with
           | Some env -> env
           | None -> assert false
+          | exception Not_found -> raise (Error (Module_not_found path'))
           end
-      | Env_functor_arg(Env_module(s, id, desc), id') when Ident.same id id' ->
+      | Env_functor_arg(Env_module(s, id, pres, desc), id')
+            when Ident.same id id' ->
           Env.add_module_declaration ~check:false
-            id (Subst.module_declaration subst desc)
+            id pres (Subst.module_declaration Keep subst desc)
             ~arg:true (env_from_summary s subst)
       | Env_functor_arg _ -> assert false
       | Env_constraints(s, map) ->
-          PathMap.fold
+          Path.Map.fold
             (fun path info ->
               Env.add_local_type (Subst.type_path subst path)
                 (Subst.type_declaration subst info))
             map (env_from_summary s subst)
-      | Env_copy_types (s, sl) ->
-          Env.copy_types sl (env_from_summary s subst)
+      | Env_copy_types s ->
+          let env = env_from_summary s subst in
+          Env.make_copy_of_types env env
+      | Env_persistent (s, id) ->
+          let env = env_from_summary s subst in
+          Env.add_persistent_structure id env
+      | Env_value_unbound (s, str, reason) ->
+          let env = env_from_summary s subst in
+          Env.enter_unbound_value str reason env
+      | Env_module_unbound (s, str, reason) ->
+          let env = env_from_summary s subst in
+          Env.enter_unbound_module str reason env
     in
       Hashtbl.add env_cache (sum, subst) env;
       env

@@ -83,6 +83,10 @@ static void st_thread_cleanup(void)
 
 /* Thread termination */
 
+CAMLnoreturn_start
+static void st_thread_exit(void)
+CAMLnoreturn_end;
+
 static void st_thread_exit(void)
 {
   TRACE("st_thread_exit");
@@ -93,13 +97,6 @@ static void st_thread_join(st_thread_id thr)
 {
   TRACE1("st_thread_join", h);
   WaitForSingleObject(thr, INFINITE);
-}
-
-/* Scheduling hints */
-
-static INLINE void st_thread_yield(void)
-{
-  Sleep(0);
 }
 
 /* Thread-specific state */
@@ -152,6 +149,15 @@ static INLINE void st_masterlock_release(st_masterlock * m)
 static INLINE int st_masterlock_waiters(st_masterlock * m)
 {
   return 1;                     /* info not maintained */
+}
+
+/* Scheduling hints */
+
+static INLINE void st_thread_yield(st_masterlock * m)
+{
+  LeaveCriticalSection(m);
+  Sleep(0);
+  EnterCriticalSection(m);
 }
 
 /* Mutexes */
@@ -377,7 +383,8 @@ static void st_check_error(DWORD retcode, char * msg)
                       sizeof(err)/sizeof(wchar_t),
                       NULL);
   if (! ret) {
-    ret = swprintf(err, sizeof(err)/sizeof(wchar_t), L"error code %lx", retcode);
+    ret =
+      swprintf(err, sizeof(err)/sizeof(wchar_t), L"error code %lx", retcode);
   }
   msglen = strlen(msg);
   errlen = win_wide_char_to_multi_byte(err, ret, NULL, 0);

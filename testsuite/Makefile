@@ -18,28 +18,14 @@ NO_PRINT=`$(MAKE) empty --no-print-directory >/dev/null 2>&1 \
 	  && echo --no-print-directory`
 
 FIND=find
-include ../config/Makefile
+TOPDIR := ..
+include $(TOPDIR)/Makefile.tools
 
-ifeq "$(UNIX_OR_WIN32)" "unix"
-  ifeq "$(SYSTEM)" "cygwin"
-    find := /usr/bin/find
-  else # Non-cygwin Unix
-    find := find
-  endif
-else # Windows
-  find := /usr/bin/find
-  FLEXDLL_SUBMODULE_PRESENT := $(wildcard ../flexdll/Makefile)
-  ifeq "$(FLEXDLL_SUBMODULE_PRESENT)" ""
-    FLEXLINK_PREFIX=
-  else
-    ROOT:=$(shell cd .. && pwd| cygpath -m -f -)
-    EMPTY=
-    FLEXLINK_PREFIX:=OCAML_FLEXLINK="$(ROOT)/boot/ocamlrun \
-                                     $(ROOT)/flexdll/flexlink.exe" $(EMPTY)
-  endif
-endif
+OCAMLTESTDIR_CYGPATH=$(shell $(CYGPATH) $(BASEDIR)/$(DIR)/_ocamltest)
 
 failstamp := failure.stamp
+
+TESTLOG ?= _log
 
 ocamltest_directory := ../ocamltest
 
@@ -47,14 +33,39 @@ ocamltest_program := $(or \
   $(wildcard $(ocamltest_directory)/ocamltest.opt$(EXE)),\
   $(wildcard $(ocamltest_directory)/ocamltest$(EXE)))
 
-ocamltest := $(FLEXLINK_PREFIX) $(ocamltest_program)
+ifeq "$(UNIX_OR_WIN32)" "unix"
+  ifeq "$(SYSTEM)" "cygwin"
+    find := /usr/bin/find
+  else # Non-cygwin Unix
+    find := find
+  endif
+  FLEXLINK_ENV =
+else # Windows
+  find := /usr/bin/find
+  FLEXDLL_SUBMODULE_PRESENT := $(wildcard ../flexdll/Makefile)
+  ifeq "$(FLEXDLL_SUBMODULE_PRESENT)" ""
+    FLEXLINK_ENV =
+  else
+    ROOT := $(shell cd .. && pwd| cygpath -m -f -)
+    FLEXLINK_ENV = \
+      OCAML_FLEXLINK="$(ROOT)/boot/ocamlrun $(ROOT)/flexdll/flexlink.exe"
+  endif
+endif
+
+ifeq "$(FLEXLINK_ENV)" ""
+  ocamltest := MKDLL="$(MKDLL)" SORT=$(SORT) MAKE=$(MAKE) $(ocamltest_program)
+else
+  MKDLL=$(WINTOPDIR)/boot/ocamlrun $(WINTOPDIR)/flexdll/flexlink.exe \
+                                   $(FLEXLINK_FLAGS)
+
+  ocamltest := $(FLEXLINK_ENV) MKDLL="$(MKDLL)" SORT=$(SORT) MAKE=$(MAKE) \
+                               $(ocamltest_program)
+endif
 
 .PHONY: default
 default:
 	@echo "Available targets:"
 	@echo "  all             launch all tests"
-	@echo "  legacy          launch legacy tests"
-	@echo "  new             launch new (ocamltest based) tests"
 	@echo "  all-foo         launch all tests beginning with foo"
 	@echo "  all-enabled     launch all enabled tests"
 	@echo "  parallel        launch all tests using GNU parallel"
@@ -74,43 +85,29 @@ default:
 
 .PHONY: all
 all:
-	@rm -f _log
-	@$(MAKE) $(NO_PRINT) legacy-without-report
-	@$(MAKE) $(NO_PRINT) new-without-report
-	@$(MAKE) $(NO_PRINT) report
-
-.PHONY: legacy
-legacy:
-	@rm -f _log
-	@$(MAKE) $(NO_PRINT) legacy-without-report
-	@$(MAKE) $(NO_PRINT) report
-
-.PHONY: legacy-without-report
-legacy-without-report: lib tools
-	@for dir in tests/*; do \
-	  $(MAKE) $(NO_PRINT) exec-one DIR=$$dir; \
-	done 2>&1 | tee -a _log
-	@$(MAKE) $(NO_PRINT) retries
-
-.PHONY: new
-new:
-	@rm -f _log
+	@rm -f $(TESTLOG)
 	@$(MAKE) $(NO_PRINT) new-without-report
 	@$(MAKE) $(NO_PRINT) report
 
 .PHONY: new-without-report
 new-without-report: lib tools
 	@rm -f $(failstamp)
-	@(for file in `$(find) tests -name ocamltests`; do \
-	  dir=`dirname $$file`; \
+	@(IFS=$$(printf "\r\n"); \
+	$(ocamltest) -find-test-dirs tests | while read dir; do \
 	  echo Running tests from \'$$dir\' ... ; \
-	  (IFS=$$(printf "\r\n"); while read testfile; do \
-	    TERM=dumb OCAMLRUNPARAM= \
-	      $(ocamltest) $$dir/$$testfile || \
-	      touch $(failstamp); \
-	  done < $$file) || touch $(failstamp); \
-	done || touch $(failstamp)) 2>&1 | tee -a _log
-	@if [ -f $(failstamp) ]; then rm $(failstamp); exit 1; fi
+	  $(MAKE) exec-ocamltest DIR=$$dir \
+	    OCAMLTESTENV="" OCAMLTESTFLAGS=""; \
+	done || echo outer loop >> $(failstamp)) 2>&1 | tee -a $(TESTLOG)
+	@$(MAKE) check-failstamp
+
+.PHONY: check-failstamp
+check-failstamp:
+	@if [ -f $(failstamp) ]; then \
+	  echo 'Unexpected error in the test infrastructure:'; \
+	  cat $(failstamp); \
+	  rm $(failstamp); \
+	  exit 1; \
+	fi
 
 .PHONY: all-enabled
 all-enabled: lib tools
@@ -126,11 +123,11 @@ all-enabled: lib tools
 all-%: lib tools
 	@for dir in tests/$**; do \
 	  $(MAKE) $(NO_PRINT) exec-one DIR=$$dir; \
-	done 2>&1 | tee _log
+	done 2>&1 | tee $(TESTLOG)
 	@$(MAKE) $(NO_PRINT) retries
 	@$(MAKE) report
 
-# The targets below use GNU parallel to paralellize tests
+# The targets below use GNU parallel to parallelize tests
 # 'make all' and 'make parallel' should be equivalent
 #
 # parallel uses specific logic to make sure the output of the commands
@@ -167,7 +164,7 @@ parallel-%: lib tools
 	@for dir in tests/$**; do echo $$dir; done \
 	 | parallel --gnu --no-notice --keep-order \
 	     "$(MAKE) $(NO_PRINT) exec-one DIR={} 2>&1" \
-	 | tee _log
+	 | tee $(TESTLOG)
 	@$(MAKE) $(NO_PRINT) retries
 	@$(MAKE) report
 
@@ -182,7 +179,7 @@ list: lib tools
 	fi
 	@while read LINE; do \
 	  $(MAKE) $(NO_PRINT) exec-one DIR=$$LINE; \
-	done <$(FILE) 2>&1 | tee _log
+	done <$(FILE) 2>&1 | tee $(TESTLOG)
 	@$(MAKE) $(NO_PRINT) retries
 	@$(MAKE) report
 
@@ -197,20 +194,33 @@ one: lib tools
 	  exit 1; \
 	fi
 	@$(MAKE) $(NO_PRINT) exec-one DIR=$(DIR)
+	@$(MAKE) check-failstamp
 
 .PHONY: exec-one
 exec-one:
-	@if [ ! -f $(DIR)/Makefile -a ! -f $(DIR)/ocamltests ]; then \
+	@if $(ocamltest) -list-tests $(DIR) >/dev/null 2>&1; then \
+	  echo "Running tests from '$$DIR' ..."; \
+	  $(MAKE) exec-ocamltest DIR=$(DIR) \
+	    OCAMLTESTENV="OCAMLTESTDIR=$(OCAMLTESTDIR_CYGPATH)" \
+	    OCAMLTESTFLAGS=""; \
+	else \
 	  for dir in $(DIR)/*; do \
 	    if [ -d $$dir ]; then \
 	      $(MAKE) exec-one DIR=$$dir; \
 	    fi; \
 	  done; \
-	elif [ -f $(DIR)/Makefile ]; then \
-	  echo "Running tests from '$$DIR' ..."; \
-	  cd $(DIR) && \
-	  $(MAKE) TERM=dumb BASEDIR=$(BASEDIR) || echo '=> unexpected error'; \
 	fi
+
+.PHONY: exec-ocamltest
+exec-ocamltest:
+	@if [ -z "$(DIR)" ]; then exit 1; fi
+	@if [ ! -d "$(DIR)" ]; then exit 1; fi
+	@(IFS=$$(printf "\r\n"); \
+	$(ocamltest) -list-tests $(DIR) | while read testfile; do \
+	   TERM=dumb $(OCAMLTESTENV) \
+	     $(ocamltest) $(OCAMLTESTFLAGS) $(DIR)/$$testfile || \
+	   echo " ... testing '$$testfile' => unexpected error"; \
+	done) || echo directory "$(DIR)" >>$(failstamp)
 
 .PHONY: clean-one
 clean-one:
@@ -234,11 +244,17 @@ promote:
 	  echo "Directory '$(DIR)' does not exist."; \
 	  exit 1; \
 	fi
-	@cd $(DIR) && $(MAKE) TERM=dumb BASEDIR=$(BASEDIR) promote
+	@if $(ocamltest) -list-tests $(DIR) >/dev/null 2>&1; then \
+	  $(MAKE) exec-ocamltest DIR=$(DIR) \
+	    OCAMLTESTENV="OCAMLTESTDIR=$(OCAMLTESTDIR_CYGPATH)" \
+	    OCAMLTESTFLAGS="-promote"; \
+	else \
+	  cd $(DIR) && $(MAKE) TERM=dumb BASEDIR=$(BASEDIR) promote; \
+	fi
 
 .PHONY: lib
 lib:
-	@cd lib && $(MAKE) -s BASEDIR=$(BASEDIR)
+	@$(MAKE) -s -C lib
 
 .PHONY: tools
 tools:
@@ -246,27 +262,24 @@ tools:
 
 .PHONY: clean
 clean:
-	@cd lib && $(MAKE) BASEDIR=$(BASEDIR) clean
+	@$(MAKE) -C lib clean
 	@cd tools && $(MAKE) BASEDIR=$(BASEDIR) clean
 	@rm -f disabled-dirs
-	@for file in `$(FIND) interactive tests -name Makefile`; do \
-	  (cd `dirname $$file` && $(MAKE) BASEDIR=$(BASEDIR) clean); \
-	done
 	$(FIND) . -name '*_ocamltest*' | xargs rm -rf
 	rm -f $(failstamp)
 
 .PHONY: report
 report:
-	@if [ ! -f _log ]; then echo "No '_log' file."; exit 1; fi
-	@awk -f makefiles/summarize.awk <_log
+	@if [ ! -f $(TESTLOG) ]; then echo "No $(TESTLOG) file."; exit 1; fi
+	@awk -f summarize.awk < $(TESTLOG)
 
 .PHONY: retry-list
 retry-list:
 	@while read LINE; do \
 	  if [ -n "$$LINE" ] ; then \
-	    echo re-ran $$LINE>>_log; \
+	    echo re-ran $$LINE>> $(TESTLOG); \
 	    $(MAKE) $(NO_PRINT) clean-one DIR=$$LINE; \
-	    $(MAKE) $(NO_PRINT) exec-one DIR=$$LINE 2>&1 | tee -a _log ; \
+	    $(MAKE) $(NO_PRINT) exec-one DIR=$$LINE 2>&1 | tee -a $(TESTLOG) ; \
 	  fi \
 	done <_retries;
 	@$(MAKE) $(NO_PRINT) retries
@@ -274,7 +287,7 @@ retry-list:
 .PHONY: retries
 retries:
 	@awk -v retries=1 -v max_retries=$(MAX_TESTSUITE_DIR_RETRIES) \
-	     -f makefiles/summarize.awk <_log >_retries
+	     -f summarize.awk < $(TESTLOG) > _retries
 	@test `cat _retries | wc -l` -eq 0 || $(MAKE) $(NO_PRINT) retry-list
 	@rm -f _retries
 

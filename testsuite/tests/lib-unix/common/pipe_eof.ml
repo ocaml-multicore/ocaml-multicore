@@ -1,3 +1,10 @@
+(* TEST
+* hasunix
+include unix
+** bytecode
+** native
+*)
+
 let drain pipe =
   let max = 2048 in
   let buf = Buffer.create 2048 in

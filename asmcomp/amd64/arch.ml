@@ -42,6 +42,11 @@ type specific_operation =
   | Ibswap of int                      (* endianness conversion *)
   | Isqrtf                             (* Float square root *)
   | Ifloatsqrtf of addressing_mode     (* Float square root from memory *)
+  | Isextend32                         (* 32 to 64 bit conversion with sign
+                                          extension *)
+  | Izextend32                         (* 32 to 64 bit conversion with zero
+                                          extension *)
+
 and float_operation =
     Ifloatadd | Ifloatsub | Ifloatmul | Ifloatdiv
 
@@ -126,6 +131,10 @@ let print_specific_operation printreg op ppf arg =
                    (Array.sub arg 1 (Array.length arg - 1))
   | Ibswap i ->
       fprintf ppf "bswap_%i %a" i printreg arg.(0)
+  | Isextend32 ->
+      fprintf ppf "sextend32 %a" printreg arg.(0)
+  | Izextend32 ->
+      fprintf ppf "zextend32 %a" printreg arg.(0)
 
 let win64 =
   match Config.system with

@@ -13,7 +13,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(* Lexer definitions for the Tests Specification Language *)
+(* Lexer definitions for the Tests Specification Language and for
+   response files *)
 
 {
 open Tsl_parser
@@ -21,14 +22,12 @@ open Tsl_parser
 let comment_start_pos = ref []
 
 let lexer_error message =
-  Printf.eprintf "%s\n%!" message;
-  exit 2
-
+  failwith (Printf.sprintf "Tsl lexer: %s" message)
 }
 
 let newline = ('\013'* '\010')
 let blank = [' ' '\009' '\012']
-let identchar = ['A'-'Z' 'a'-'z' '_' '\'' '0'-'9']
+let identchar = ['A'-'Z' 'a'-'z' '_' '.' '-' '\'' '0'-'9']
 
 rule token = parse
   | blank * { token lexbuf }
@@ -39,11 +38,13 @@ rule token = parse
   | "*)" { TSL_END_OCAML_STYLE }
   | "," { COMA }
   | '*'+ { TEST_DEPTH (String.length (Lexing.lexeme lexbuf)) }
+  | "+=" { PLUSEQUAL }
   | "=" { EQUAL }
   | identchar *
     { let s = Lexing.lexeme lexbuf in
       match s with
         | "include" -> INCLUDE
+        | "set" -> SET
         | "with" -> WITH
         | _ -> IDENTIFIER s
     }
@@ -52,12 +53,8 @@ rule token = parse
       comment_start_pos := [Lexing.lexeme_start_p lexbuf];
       comment lexbuf
     }
-  | "\"" [^'"']* "\""
-    { let s = Lexing.lexeme lexbuf in
-      let string_length = (String.length s) -2 in
-      let s' = String.sub s 1 string_length in
-      STRING s'
-    }
+  | '"'
+    { STRING (string "" lexbuf) }
   | _
     {
       let pos = Lexing.lexeme_start_p lexbuf in
@@ -68,6 +65,30 @@ rule token = parse
         file line column (Lexing.lexeme lexbuf) in
       lexer_error message
     }
+  | eof
+    { lexer_error "unexpected eof" }
+(* Backslashes are ignored in strings except at the end of lines where they
+   cause the newline to be ignored. After an escaped newline, any blank
+   characters at the start of the line are ignored and optionally one blank
+   character may be escaped with a backslash.
+
+   In particular, this means that the following:
+script = "some-directory\\
+         \ foo"
+   is interpreted as the OCaml string "some-directory\\ foo".
+   *)
+and string acc = parse
+  | [^ '\\' '"' ]+
+    { string (acc ^ Lexing.lexeme lexbuf) lexbuf }
+  | '\\' newline blank* ('\\' (blank as blank))?
+    { let space =
+        match blank with None -> "" | Some blank -> String.make 1 blank
+      in
+      string (acc ^ space) lexbuf }
+  | '\\'
+    {string (acc ^ "\\") lexbuf}
+  | '"'
+    {acc}
 and comment = parse
   | "(*"
     {
@@ -94,3 +115,14 @@ and comment = parse
     {
       comment lexbuf
     }
+
+(* Parse one line of a response file (for scripts and hooks) *)
+and modifier = parse
+  | '-' (identchar* as variable)
+    { variable, `Remove }
+  | (identchar* as variable) "=\"" (_* as str) '"'
+    { variable, `Add str }
+  | (identchar* as variable) "+=\"" (_* as str) '"'
+    { variable, `Append str }
+  | _
+    { failwith "syntax error in script response file" }

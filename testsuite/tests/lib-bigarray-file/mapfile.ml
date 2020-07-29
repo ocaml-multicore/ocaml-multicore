@@ -1,3 +1,9 @@
+(* TEST
+   * hasunix
+   include unix
+   ** native
+*)
+
 open Bigarray
 
 (* Test harness *)

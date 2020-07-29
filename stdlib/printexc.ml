@@ -15,6 +15,8 @@
 
 open Printf
 
+type t = exn = ..
+
 let printers = ref []
 
 let locfmt = format_of_string "File \"%s\", line %d, characters %d-%d: %s"
@@ -41,31 +43,37 @@ let fields x =
   | 2 -> sprintf "(%s)" (field x 1)
   | _ -> sprintf "(%s%s)" (field x 1) (other_fields x 2)
 
-let to_string x =
+let use_printers x =
   let rec conv = function
     | hd :: tl ->
-        (match try hd x with _ -> None with
-        | Some s -> s
-        | None -> conv tl)
-    | [] ->
-        match x with
-        | Out_of_memory -> "Out of memory"
-        | Stack_overflow -> "Stack overflow"
-        | Match_failure(file, line, char) ->
-            sprintf locfmt file line char (char+5) "Pattern matching failed"
-        | Assert_failure(file, line, char) ->
-            sprintf locfmt file line char (char+6) "Assertion failed"
-        | Undefined_recursive_module(file, line, char) ->
-            sprintf locfmt file line char (char+6) "Undefined recursive module"
-        | _ ->
-            let x = Obj.repr x in
-            if Obj.tag x <> 0 then
-              (Obj.magic (Obj.field x 0) : string)
-            else
-              let constructor =
-                (Obj.magic (Obj.field (Obj.field x 0) 0) : string) in
-              constructor ^ (fields x) in
+        (match hd x with
+         | None | exception _ -> conv tl
+         | Some s -> Some s)
+    | [] -> None in
   conv !printers
+
+let to_string_default = function
+  | Out_of_memory -> "Out of memory"
+  | Stack_overflow -> "Stack overflow"
+  | Match_failure(file, line, char) ->
+      sprintf locfmt file line char (char+5) "Pattern matching failed"
+  | Assert_failure(file, line, char) ->
+      sprintf locfmt file line char (char+6) "Assertion failed"
+  | Undefined_recursive_module(file, line, char) ->
+      sprintf locfmt file line char (char+6) "Undefined recursive module"
+  | x ->
+      let x = Obj.repr x in
+      if Obj.tag x <> 0 then
+        (Obj.magic (Obj.field x 0) : string)
+      else
+        let constructor =
+          (Obj.magic (Obj.field (Obj.field x 0) 0) : string) in
+        constructor ^ (fields x)
+
+let to_string e =
+  match use_printers e with
+  | Some s -> s
+  | None -> to_string_default e
 
 let print fct arg =
   try
@@ -282,12 +290,12 @@ let handle_uncaught_exception' exn debugger_in_use =
     (* Get the backtrace now, in case one of the [at_exit] function
        destroys it. *)
     let raw_backtrace =
-      if debugger_in_use (* Same test as in [byterun/printexc.c] *) then
+      if debugger_in_use (* Same test as in [runtime/printexc.c] *) then
         empty_backtrace
       else
         try_get_raw_backtrace ()
     in
-    (try Pervasives.do_at_exit () with _ -> ());
+    (try Stdlib.do_at_exit () with _ -> ());
     match !uncaught_exception_handler with
     | None ->
         eprintf "Fatal error: exception %s\n" (to_string exn);
@@ -310,7 +318,7 @@ let handle_uncaught_exception' exn debugger_in_use =
           "Fatal error: out of memory in uncaught exception handler"
 
 (* This function is called by [caml_fatal_uncaught_exception] in
-   [byterun/printexc.c] which expects no exception is raised. *)
+   [runtime/printexc.c] which expects no exception is raised. *)
 let handle_uncaught_exception exn debugger_in_use =
   try
     handle_uncaught_exception' exn debugger_in_use

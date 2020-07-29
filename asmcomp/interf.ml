@@ -61,17 +61,7 @@ let build_graph fundecl =
     for i = 0 to Array.length v - 1 do
       let r1 = v.(i) in
       Reg.Set.iter (add_interf r1) s
-    done
-  in
-
-  let add_interf_arr v a =
-    for i = 0 to Array.length v - 1 do
-      let ri = v.(i) in
-      for j = 0 to Array.length a - 1 do
-        add_interf ri a.(j)
-      done
-    done
-  in
+    done in
 
   (* Record interferences between elements of an array *)
   let add_interf_self v =
@@ -80,8 +70,7 @@ let build_graph fundecl =
       for j = i+1 to Array.length v - 1 do
         add_interf ri v.(j)
       done
-    done
-  in
+    done in
 
   (* Record interferences between the destination of a move and a set
      of live registers. Since the destination is equal to the source,
@@ -103,13 +92,7 @@ let build_graph fundecl =
         interf i.next
     | Iop(Itailcall_ind _) -> ()
     | Iop(Itailcall_imm _) -> ()
-    | Iop op ->
-        begin match op with
-        | Iloadmut ->
-            add_interf_arr i.arg i.res;
-            add_interf_arr destroyed (Array.concat [i.arg; i.res])
-        | _ -> ()
-        end;
+    | Iop _ ->
         add_interf_set i.res i.live;
         add_interf_self i.res;
         interf i.next
@@ -122,8 +105,6 @@ let build_graph fundecl =
           interf cases.(i)
         done;
         interf i.next
-    | Iloop body ->
-        interf body; interf i.next
     | Icatch(_rec_flag, handlers, body) ->
         interf body;
         List.iter (fun (_, handler) -> interf handler) handlers;
@@ -143,15 +124,14 @@ let build_graph fundecl =
       float arguments in integer registers, PR#6227.) *)
 
   let add_pref weight r1 r2 =
-    if weight > 0 then begin
-      let i = r1.stamp and j = r2.stamp in
-      if i <> j
-      && r1.loc = Unknown
-      && Proc.register_class r1 = Proc.register_class r2
-      && (let p = if i < j then (i, j) else (j, i) in
-          not (IntPairSet.mem p !mat))
-      then r1.prefer <- (r2, weight) :: r1.prefer
-    end in
+    let i = r1.stamp and j = r2.stamp in
+    if i <> j
+    && r1.loc = Unknown
+    && Proc.register_class r1 = Proc.register_class r2
+    && (let p = if i < j then (i, j) else (j, i) in
+        not (IntPairSet.mem p !mat))
+    then r1.prefer <- (r2, weight) :: r1.prefer
+  in
 
   (* Add a mutual preference between two regs *)
   let add_mutual_pref weight r1 r2 =
@@ -167,6 +147,7 @@ let build_graph fundecl =
   (* Compute preferences and spill costs *)
 
   let rec prefer weight i =
+    assert (weight > 0);
     add_spill_cost weight i.arg;
     add_spill_cost weight i.res;
     match i.desc with
@@ -186,29 +167,24 @@ let build_graph fundecl =
     | Iop _ ->
         prefer weight i.next
     | Iifthenelse(_tst, ifso, ifnot) ->
-        prefer (weight / 2) ifso;
-        prefer (weight / 2) ifnot;
+        prefer weight ifso;
+        prefer weight ifnot;
         prefer weight i.next
     | Iswitch(_index, cases) ->
         for i = 0 to Array.length cases - 1 do
-          prefer (weight / 2) cases.(i)
+          prefer weight cases.(i)
         done;
-        prefer weight i.next
-    | Iloop body ->
-        (* Avoid overflow of weight and spill_cost *)
-        prefer (if weight < 1000 then 8 * weight else weight) body;
         prefer weight i.next
     | Icatch(rec_flag, handlers, body) ->
         prefer weight body;
-        List.iter (fun (_nfail, handler) ->
-            let weight =
-              match rec_flag with
-              | Cmm.Recursive ->
-                  (* Avoid overflow of weight and spill_cost *)
-                  if weight < 1000 then 8 * weight else weight
-              | Cmm.Nonrecursive ->
-                  weight in
-            prefer weight handler) handlers;
+        let weight_h =
+          match rec_flag with
+          | Cmm.Recursive ->
+              (* Avoid overflow of weight and spill_cost *)
+              if weight < 1000 then 8 * weight else weight
+          | Cmm.Nonrecursive ->
+              weight in
+        List.iter (fun (_nfail, handler) -> prefer weight_h handler) handlers;
         prefer weight i.next
     | Iexit _ ->
         ()

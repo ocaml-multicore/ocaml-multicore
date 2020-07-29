@@ -1,3 +1,12 @@
+(* TEST
+
+* hassysthreads
+include systhreads
+** bytecode
+** native
+
+*)
+
 (* Producer-consumer with events and multiple producers *)
 
 open Event

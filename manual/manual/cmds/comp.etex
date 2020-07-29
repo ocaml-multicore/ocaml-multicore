@@ -1,5 +1,4 @@
 \chapter{Batch compilation (ocamlc)} \label{c:camlc}
-\pdfchapter{Batch compilation (ocamlc)}
 %HEVEA\cutname{comp.html}
 
 This chapter describes the OCaml batch compiler "ocamlc",
@@ -8,7 +7,7 @@ these object files to produce standalone bytecode executable files.
 These executable files are then run by the bytecode interpreter
 "ocamlrun".
 
-\section{Overview of the compiler}
+\section{s:comp-overview}{Overview of the compiler}
 
 The "ocamlc" command has a command-line interface similar to the one of
 most C compilers. It accepts several types of arguments and processes them
@@ -101,7 +100,18 @@ phase can be run directly, as in:
 The produced file has the executable bit set, and it manages to launch
 the bytecode interpreter by itself.
 
-\section{Options}\label{s:comp-options}
+The compiler is able to emit some information on its internal stages.
+It can output ".cmt" files for the implementation of the compilation unit
+and ".cmti" for signatures if the option "-bin-annot" is passed to it (see the
+description of "-bin-annot" below).
+Each such file contains a typed abstract syntax tree (AST), that is produced
+during the type checking procedure. This tree contains all available information
+about the location and the specific type of each term in the source file.
+The AST is partial if type checking was unsuccessful.
+
+These ".cmt" and ".cmti" files are typically useful for code inspection tools.
+
+\section{s:comp-options}{Options}
 
 The following command-line options are recognized by "ocamlc".
 The options "-pack", "-a", "-c" and "-output-obj" are mutually exclusive.
@@ -113,7 +123,7 @@ The options "-pack", "-a", "-c" and "-output-obj" are mutually exclusive.
 % compilers and toplevel
 \input{unified-options.tex}
 
-\paragraph{Contextual control of command-line options}
+\paragraph{contextual-cli-control}{Contextual control of command-line options}
 
 The compiler command line can be modified ``from the outside''
 with the following mechanisms. These are experimental
@@ -122,8 +132,13 @@ development work, not in released packages.
 
 \begin{options}
 \item["OCAMLPARAM" \rm(environment variable)]
-Arguments that will be inserted before or after the arguments from the
-command line.
+A set of arguments that will be inserted before or after the arguments from
+the command line. Arguments are specified in a comma-separated list
+of "name=value" pairs. A "_" is used to specify the position of
+the command line arguments, i.e. "a=x,_,b=y" means that "a=x" should be
+executed before parsing the arguments, and "b=y" after. Finally,
+an alternative separator can be specified as the
+first character of the string, within the set ":|; ,".
 \item["ocaml_compiler_internal_params" \rm(file in the stdlib directory)]
 A mapping of file names to lists of arguments that
 will be added to the command line (and "OCAMLPARAM") arguments.
@@ -133,7 +148,7 @@ Windows for "flexlink" instead of the
 configured value. Primarily used for bootstrapping.
 \end{options}
 
-\section{Modules and the file system}
+\section{s:modules-file-system}{Modules and the file system}
 
 This short section is intended to clarify the relationship between the
 names of the modules corresponding to compilation units and the names
@@ -173,7 +188,7 @@ to find by itself the ".cmo" file that implements a module with a
 given name: it relies instead on the user providing the list of ".cmo"
 files by hand.
 
-\section{Common errors} \label{s:comp-errors}
+\section{s:comp-errors}{Common errors}
 
 This section describes and explains the most frequently encountered
 error messages.
@@ -267,12 +282,12 @@ are two ways to fix this error:
 type (without type variables) to \var{name}. For instance, instead of
 writing
 \begin{verbatim}
-    let sort_int_list = Sort.list (<)
+    let sort_int_list = List.sort Stdlib.compare
     (* inferred type 'a list -> 'a list, with 'a not generalized *)
 \end{verbatim}
 write
 \begin{verbatim}
-    let sort_int_list = (Sort.list (<) : int list -> int list);;
+    let sort_int_list = (List.sort Stdlib.compare : int list -> int list);;
 \end{verbatim}
 \item If you really need \var{name} to have a polymorphic type, turn
 its defining expression into a function by adding an extra parameter.
@@ -339,11 +354,11 @@ command line, and possibly the "-custom" option.
 
 \end{options}
 
-\section{Warning reference} \label{s:comp-warnings}
+\section{s:comp-warnings}{Warning reference}
 
 This section describes and explains in detail some warnings:
 
-\subsection{Warning 9: missing fields in a record pattern}
+\subsection{ss:warn9}{Warning 9: missing fields in a record pattern}
 
   When pattern matching on records, it can be useful to match only few
   fields of a record. Eliding fields can be done either implicitly
@@ -357,13 +372,12 @@ This section describes and explains in detail some warnings:
   after the addition of new fields to a record type.
 
 \begin{verbatim}
-type 'a point = {x='a ;y='a}
+type 'a point = {x : 'a; y : 'a}
 let dx { x } = x (* implicit field elision: trigger warning 9 *)
 let dy { y; _ } = y (* explicit field elision: do not trigger warning 9 *)
 \end{verbatim}
 
-\subsection{Warning 52: fragile constant pattern}
-\label{ss:warn52}
+\subsection{ss:warn52}{Warning 52: fragile constant pattern}
 
   Some constructors, such as the exception constructors "Failure" and
   "Invalid_argument", take as parameter a "string" value holding
@@ -419,6 +433,11 @@ let dy { y; _ } = y (* explicit field elision: do not trigger warning 9 *)
   this attribute set: "Invalid_argument", "Failure", "Sys_error" will
   all raise this warning if you match for a specific string argument.
 
+  Additionally, built-in exceptions with a structured argument that
+  includes a string also have the attribute set: "Assert_failure" and
+  "Match_failure" will raise the warning for a pattern that uses a
+  literal string to match the first element of their tuple argument.
+
   If your code raises this warning, you should {\em not} change the
   way you test for the specific string to avoid the warning (for
   example using a string equality inside the right-hand-side instead
@@ -445,7 +464,7 @@ try (int_of_string count_str, bool_of_string choice_str) with
   | Failure "bool_of_string" -> (-1, false)
 \end{verbatim}
   should be rewritten into more atomic tests. For example,
-  using the "exception" patterns documented in Section~\ref{s:exception-match},
+  using the "exception" patterns documented in Section~\ref{sss:exception-match},
   one can write:
 \begin{verbatim}
 match int_of_string count_str with
@@ -464,8 +483,7 @@ specific string values. This is dangerous API design and it should be
 discouraged: it's better to define more precise exception constructors
 than store useful information in strings.
 
-\subsection{Warning 57: Ambiguous or-pattern variables under guard}
-\label{ss:warn57}
+\subsection{ss:warn57}{Warning 57: Ambiguous or-pattern variables under guard}
 
   The semantics of or-patterns in OCaml is specified with
   a left-to-right bias: a value \var{v} matches the pattern \var{p} "|" \var{q}

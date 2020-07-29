@@ -35,7 +35,7 @@ let word_addressed = false
     2 - 5               function arguments and results (volatile)
     6                   function arguments and results (preserved by C)
     7 - 9               general purpose, preserved by C
-    10                  allocation limit (preserved by C)
+    10                  domain state pointer (preserved by C)
     11                  allocation pointer (preserved by C)
     12                  general purpose  (preserved by C)
     13                  trap pointer (preserved by C)
@@ -161,6 +161,25 @@ let loc_external_results res =
 
 let loc_exn_bucket = phys_reg 0
 
+(* See "S/390 ELF Application Binary Interface Supplement"
+   (http://refspecs.linuxfoundation.org/ELF/zSeries/lzsabi0_s390/x1542.html)
+*)
+
+let int_dwarf_reg_numbers = [| 2; 3; 4; 5; 6; 7; 8; 9; 12; |]
+
+let float_dwarf_reg_numbers =
+  [| 16; 17; 18; 19; 20; 21; 22; 23;
+     24; 28; 25; 29; 26; 30; 27; 31;
+  |]
+
+let dwarf_register_numbers ~reg_class =
+  match reg_class with
+  | 0 -> int_dwarf_reg_numbers
+  | 1 -> float_dwarf_reg_numbers
+  | _ -> Misc.fatal_errorf "Bad register class %d" reg_class
+
+let stack_ptr_dwarf_register_number = 15
+
 (* Volatile registers: none *)
 
 let regs_are_volatile _rs = false
@@ -179,6 +198,10 @@ let destroyed_at_oper = function
   | _ -> [||]
 
 let destroyed_at_raise = all_phys_regs
+
+(* %r14 is destroyed at [Lreloadretaddr], but %r14 is not used for register
+   allocation, and thus does not need to (and indeed cannot) occur here. *)
+let destroyed_at_reloadretaddr = [| |]
 
 (* Maximal register pressure *)
 
@@ -202,13 +225,19 @@ let op_is_pure = function
 
 (* Layout of the stack *)
 
-let num_stack_slots = [| 0; 0 |]
-let contains_calls = ref false
+let frame_required fd =
+  fd.fun_contains_calls
+    || fd.fun_num_stack_slots.(0) > 0
+    || fd.fun_num_stack_slots.(1) > 0
+
+let prologue_required fd =
+  frame_required fd
 
 (* Calling the assembler *)
 
 let assemble_file infile outfile =
-  Ccomp.command (Config.asm ^ " -o " ^
-                 Filename.quote outfile ^ " " ^ Filename.quote infile)
+  Ccomp.command (Config.asm ^ " " ^
+                 (String.concat " " (Misc.debug_prefix_map_flags ())) ^
+                 " -o " ^ Filename.quote outfile ^ " " ^ Filename.quote infile)
 
 let init () = ()

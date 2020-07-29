@@ -111,7 +111,8 @@ let parse_declaration valdecl ~native_repr_args ~native_repr_res =
   let old_style_noalloc = old_style_noalloc || old_style_float in
   if old_style_float then
     Location.deprecated valdecl.pval_loc
-      "[@@unboxed] + [@@noalloc] should be used instead of \"float\""
+      "[@@unboxed] + [@@noalloc] should be used\n\
+       instead of \"float\""
   else if old_style_noalloc then
     Location.deprecated valdecl.pval_loc
       "[@@noalloc] should be used instead of \"noalloc\"";
@@ -199,24 +200,28 @@ let native_name p =
 let byte_name p =
   p.prim_name
 
+let native_name_is_external p =
+  let nat_name = native_name p in
+  nat_name <> "" && nat_name.[0] <> '%'
+
 let report_error ppf err =
   match err with
   | Old_style_float_with_native_repr_attribute ->
     Format.fprintf ppf "Cannot use \"float\" in conjunction with \
-                        [%@unboxed]/[%@untagged]"
+                        [%@unboxed]/[%@untagged]."
   | Old_style_noalloc_with_noalloc_attribute ->
     Format.fprintf ppf "Cannot use \"noalloc\" in conjunction with \
-                        [%@%@noalloc]"
+                        [%@%@noalloc]."
   | No_native_primitive_with_repr_attribute ->
     Format.fprintf ppf
-      "The native code version of the primitive is mandatory when \
-       attributes [%@untagged] or [%@unboxed] are present"
+      "[@The native code version of the primitive is mandatory@ \
+       when attributes [%@untagged] or [%@unboxed] are present.@]"
 
 let () =
   Location.register_error_of_exn
     (function
       | Error (loc, err) ->
-        Some (Location.error_of_printer loc report_error err)
+        Some (Location.error_of_printer ~loc report_error err)
       | _ ->
         None
     )

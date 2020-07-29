@@ -1,3 +1,12 @@
+(* TEST
+
+* hassysthreads
+include systhreads
+** bytecode
+** native
+
+*)
+
 (* Classic producer-consumer *)
 
 type 'a prodcons =

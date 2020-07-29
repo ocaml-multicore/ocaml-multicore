@@ -55,9 +55,13 @@ external make_forward : 'a -> 'a lazy_t = "caml_lazy_make_forward"
 
 external force : 'a t -> 'a = "%lazy_force"
 
-(* let force = force *)
+(* let force l = CamlinternalLazy.force_gen ~only_val:false l *)
 
-let force_val = CamlinternalLazy.force_val
+let force_val l = CamlinternalLazy.force_gen ~only_val:true l
+
+let try_force l =  CamlinternalLazy.try_force_gen ~only_val:false l
+
+let try_force_val l = CamlinternalLazy.try_force_gen ~only_val:true l
 
 let from_fun (f : unit -> 'arg) =
   let x = Obj.new_block Obj.lazy_tag 1 in

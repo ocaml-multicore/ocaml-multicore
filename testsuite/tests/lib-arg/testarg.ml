@@ -1,3 +1,7 @@
+(* TEST
+   compare_programs = "false" (* See https://github.com/ocaml/ocaml/pull/8853 *)
+*)
+
 let current = ref 0;;
 
 let accum = ref [];;
@@ -192,7 +196,8 @@ let test_align () =
   let spec =
     [
       "-foo", Arg.String ignore, "FOO Do foo with FOO";
-      "-bar", Arg.Tuple [Arg.String ignore; Arg.String ignore], "FOO BAR\tDo bar with FOO and BAR";
+      "-bar", Arg.Tuple [Arg.String ignore; Arg.String ignore],
+              "FOO BAR\tDo bar with FOO and BAR";
       "-cha", Arg.Unit ignore, " Another option";
       "-sym", Arg.Symbol (["a"; "b"], ignore), "\ty\tfoo";
       "-sym2", Arg.Symbol (["a"; "b"], ignore), "x bar";

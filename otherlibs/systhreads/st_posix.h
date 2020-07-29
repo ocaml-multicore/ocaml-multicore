@@ -15,6 +15,7 @@
 
 /* POSIX thread implementation of the "st" interface */
 
+#include <assert.h>
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
@@ -24,6 +25,7 @@
 #define _POSIX_PTHREAD_SEMANTICS
 #endif
 #include <signal.h>
+#include <time.h>
 #include <sys/time.h>
 #ifdef __linux__
 #include <unistd.h>
@@ -76,6 +78,10 @@ static INLINE void st_thread_cleanup(void)
 
 /* Thread termination */
 
+CAMLnoreturn_start
+static void st_thread_exit(void)
+CAMLnoreturn_end;
+
 static void st_thread_exit(void)
 {
   pthread_exit(NULL);
@@ -85,16 +91,6 @@ static void st_thread_join(st_thread_id thr)
 {
   pthread_join(thr, NULL);
   /* best effort: ignore errors */
-}
-
-/* Scheduling hints */
-
-static void INLINE st_thread_yield(void)
-{
-#ifndef __linux__
-  /* sched_yield() doesn't do what we want in Linux 2.6 and up (PR#2663) */
-  sched_yield();
-#endif
 }
 
 /* Thread-specific state */
@@ -156,9 +152,48 @@ static void st_masterlock_release(st_masterlock * m)
   pthread_cond_signal(&m->is_free);
 }
 
+CAMLno_tsan  /* This can be called for reading [waiters] without locking. */
 static INLINE int st_masterlock_waiters(st_masterlock * m)
 {
   return m->waiters;
+}
+
+/* Scheduling hints */
+
+/* This is mostly equivalent to release(); acquire(), but better. In particular,
+   release(); acquire(); leaves both us and the waiter we signal() racing to
+   acquire the lock. Calling yield or sleep helps there but does not solve the
+   problem. Sleeping ourselves is much more reliable--and since we're handing
+   off the lock to a waiter we know exists, it's safe, as they'll certainly
+   re-wake us later.
+*/
+static INLINE void st_thread_yield(st_masterlock * m)
+{
+  pthread_mutex_lock(&m->lock);
+  /* We must hold the lock to call this. */
+  assert(m->busy);
+
+  /* We already checked this without the lock, but we might have raced--if
+     there's no waiter, there's nothing to do and no one to wake us if we did
+     wait, so just keep going. */
+  if (m->waiters == 0) {
+    pthread_mutex_unlock(&m->lock);
+    return;
+  }
+
+  m->busy = 0;
+  pthread_cond_signal(&m->is_free);
+  m->waiters++;
+  do {
+    /* Note: the POSIX spec prevents the above signal from pairing with this
+       wait, which is good: we'll reliably continue waiting until the next
+       yield() or enter_blocking_section() call (or we see a spurious condvar
+       wakeup, which are rare at best.) */
+       pthread_cond_wait(&m->is_free, &m->lock);
+  } while (m->busy);
+  m->busy = 1;
+  m->waiters--;
+  pthread_mutex_unlock(&m->lock);
 }
 
 /* Mutexes */
@@ -256,7 +291,8 @@ static int st_event_create(st_event * res)
   rc = pthread_mutex_init(&e->lock, NULL);
   if (rc != 0) { caml_stat_free(e); return rc; }
   rc = pthread_cond_init(&e->triggered, NULL);
-  if (rc != 0) { pthread_mutex_destroy(&e->lock); caml_stat_free(e); return rc; }
+  if (rc != 0)
+  { pthread_mutex_destroy(&e->lock); caml_stat_free(e); return rc; }
   e->status = 0;
   *res = e;
   return 0;

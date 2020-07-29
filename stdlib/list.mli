@@ -26,6 +26,9 @@
    longer than about 10000 elements.
 *)
 
+type 'a t = 'a list = [] | (::) of 'a * 'a list (**)
+(** An alias for the type of lists. *)
+
 val length : 'a list -> int
 (** Return the length (number of elements) of the given list. *)
 
@@ -74,7 +77,7 @@ val rev : 'a list -> 'a list
 (** List reversal. *)
 
 val init : int -> (int -> 'a) -> 'a list
-(** [List.init len f] is [f 0; f 1; ...; f (len-1)], evaluated left to right.
+(** [List.init len f] is [[f 0; f 1; ...; f (len-1)]], evaluated left to right.
 
     @raise Invalid_argument if len < 0.
     @since 4.06.0
@@ -130,6 +133,20 @@ val rev_map : ('a -> 'b) -> 'a list -> 'b list
 (** [List.rev_map f l] gives the same result as
    {!List.rev}[ (]{!List.map}[ f l)], but is tail-recursive and
    more efficient. *)
+
+val filter_map : ('a -> 'b option) -> 'a list -> 'b list
+(** [filter_map f l] applies [f] to every element of [l], filters
+    out the [None] elements and returns the list of the arguments of
+    the [Some] elements.
+    @since 4.08.0
+*)
+
+val concat_map : ('a -> 'b list) -> 'a list -> 'b list
+(** [List.concat_map f l] gives the same result as
+    {!List.concat}[ (]{!List.map}[ f l)]. Tail-recursive.
+
+    @since 4.10.0
+*)
 
 val fold_left : ('a -> 'b -> 'a) -> 'a -> 'b list -> 'a
 (** [List.fold_left f a [b1; ...; bn]] is
@@ -220,6 +237,13 @@ val find_opt: ('a -> bool) -> 'a list -> 'a option
     satisfies [p] in the list [l].
     @since 4.05 *)
 
+val find_map: ('a -> 'b option) -> 'a list -> 'b option
+(** [find_map f l] applies [f] to the elements of [l] in order,
+    and returns the first result of the form [Some v], or [None]
+    if none exist.
+    @since 4.10.0
+*)
+
 val filter : ('a -> bool) -> 'a list -> 'a list
 (** [filter p l] returns all the elements of the list [l]
    that satisfy the predicate [p].  The order of the elements
@@ -309,7 +333,7 @@ val sort : ('a -> 'a -> int) -> 'a list -> 'a list
    compare as equal, a positive integer if the first is greater,
    and a negative integer if the first is smaller (see Array.sort for
    a complete specification).  For example,
-   {!Pervasives.compare} is a suitable comparison function.
+   {!Stdlib.compare} is a suitable comparison function.
    The resulting list is sorted in increasing order.
    [List.sort] is guaranteed to run in constant heap space
    (in addition to the size of the result list) and logarithmic
@@ -345,3 +369,13 @@ val merge : ('a -> 'a -> int) -> 'a list -> 'a list -> 'a list
     before the elements of [l2].
     Not tail-recursive (sum of the lengths of the arguments).
 *)
+
+(** {1 Iterators} *)
+
+val to_seq : 'a list -> 'a Seq.t
+(** Iterate on the list
+    @since 4.07 *)
+
+val of_seq : 'a Seq.t -> 'a list
+(** Create a list from the iterator
+    @since 4.07 *)

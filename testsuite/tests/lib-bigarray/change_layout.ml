@@ -1,3 +1,7 @@
+(* TEST
+   compare_programs = "false" (* See https://github.com/ocaml/ocaml/pull/8853 *)
+*)
+
 (** Test the various change_layout for Genarray and the various Array[n] *)
 
 open Bigarray
@@ -61,7 +65,8 @@ let testG n =
   Genarray.set gen pos (-1.);
   let different = Genarray.get gen pos <> initial in
   let gen' = Genarray.change_layout gen fortran in
-  Genarray.set gen' ( Array.init rank @@ fun n -> 1 + pos.( rank - 1 - n ) ) initial;
+  Genarray.set gen' ( Array.init rank @@ fun n -> 1 + pos.( rank - 1 - n ) )
+    initial;
   if not (different && initial = Genarray.get gen pos) then Some pos
   else None
 

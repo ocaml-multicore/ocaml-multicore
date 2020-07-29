@@ -242,6 +242,25 @@ The environment variable "OCAML_COLOR" is considered if \-color is not
 provided. Its values are auto/always/never as above.
 
 .TP
+.BI \-error\-style \ mode
+Control the way error messages and warnings are printed.
+The following modes are supported:
+
+.B short
+only print the error and its location;
+
+.B contextual
+like "short", but also display the source code snippet corresponding
+to the location of the error.
+
+The default setting is
+.B contextual.
+
+The environment variable "OCAML_ERROR_STYLE" is considered if
+\-error\-style is not provided. Its values are short/contextual as
+above.
+
+.TP
 .B \-compact
 Optimize the produced code for space rather than for time. This
 results in smaller but slightly slower programs. The default is to
@@ -251,6 +270,13 @@ optimize for speed.
 Print the version number of
 .BR ocamlopt (1)
 and a detailed summary of its configuration, then exit.
+.TP
+.BI \-config-var
+Print the value of a specific configuration variable
+from the
+.B \-config
+output, then exit. If the variable does not exist,
+the exit code is non-zero.
 .TP
 .BI \-depend\ ocamldep-args
 Compute dependencies, as ocamldep would do.
@@ -323,6 +349,9 @@ in a slight expansion in code size. Higher values for the
 option cause larger and larger functions to become candidate for
 inlining, but can result in a serious increase in code size.
 .TP
+.B \-insn\-sched
+Enables the instruction scheduling pass in the compiler backend.
+.TP
 .BI \-intf \ filename
 Compile the file
 .I filename
@@ -360,6 +389,17 @@ setting the
 option ensures that this module will
 always be linked if it is put in a library and this library is linked.
 .TP
+.B \-linscan
+Use linear scan register allocation.  Compiling with this allocator is faster
+than with the usual graph coloring allocator, sometimes quite drastically so for
+long functions and modules. On the other hand, the generated code can be a bit
+slower.
+.TP
+.B \-match\-context\-rows
+Set number of rows of context used during pattern matching
+compilation. Lower values cause faster compilation, but
+less optimized code. The default value is 32.
+.TP
 .B \-no-alias-deps
 Do not record dependencies for module aliases.
 .TP
@@ -389,8 +429,11 @@ and pass the correct C libraries and options on the command line.
 Allow the compiler to use some optimizations that are valid only for code
 that is never dynlinked.
 .TP
+.B \-no\-insn\-sched
+Disables the instruction scheduling pass in the compiler backend.
+.TP
 .B -nostdlib
-Do not automatically add the standard library directory the list of
+Do not automatically add the standard library directory to the list of
 directories searched for compiled interface files (.cmi), compiled
 object code files (.cmx), and libraries (.cmxa). See also option
 .BR \-I .
@@ -441,31 +484,6 @@ option.
 This option can also be used to produce a compiled shared/dynamic
 library (.so extension).
 .TP
-.B \-p
-Generate extra code to write profile information when the program is
-executed.  The profile information can then be examined with the
-analysis program
-.BR gprof (1).
-The
-.B \-p
-option must be given both at
-compile-time and at link-time.  Linking object files not compiled with
-.B \-p
-is possible, but results in less precise profiling.
-
-See the
-.BR gprof (1)
-man page for more information about the profiles.
-
-Full support for
-.BR gprof (1)
-is only available for certain platforms
-(currently: Intel x86/Linux and Alpha/Digital Unix).
-On other platforms, the
-.B \-p
-option will result in a less precise
-profile (no call graph information, only a time profile).
-.TP
 .B \-pack
 Build an object file (.cmx and .o files) and its associated compiled
 interface (.cmi) that combines the .cmx object
@@ -495,15 +513,6 @@ with
 See
 .IR "The OCaml user's manual" ,
 chapter "Native-code compilation" for more details.
-.TP
-.BI \-plugin \ plugin
-Dynamically load the code of the given
-.I plugin
-(a .cmo, .cma or .cmxs file) in the compiler. The plugin must exist in
-the same kind of code as the compiler (ocamlopt.byte must load bytecode
-plugins, while ocamlopt.opt must load native code plugins), and
-extension adaptation is done automatically for .cma files (to .cmxs files
-if the compiler is compiled in native code).
 .TP
 .BI \-pp \ command
 Cause the compiler to call the given
@@ -551,11 +560,16 @@ code for the source file
 is saved in the file
 .IR x .s.
 .TP
+.BI \-stop\-after \ pass
+Stop compilation after the given compilation pass. The currently
+supported passes are:
+.BR parsing ,
+.BR typing .
+.TP
 .B \-safe\-string
 Enforce the separation between types
 .BR string \ and\  bytes ,
-thereby making strings read-only. This will become the default in
-a future version of OCaml.
+thereby making strings read-only. This is the default.
 .TP
 .B \-shared
 Build a plugin (usually .cmxs) that can be dynamically loaded with
@@ -582,11 +596,6 @@ warning messages.
 .TP
 .B \-strict\-sequence
 The left-hand part of a sequence must have type unit.
-.TP
-.B \-thread
-Compile or link multithreaded programs, in combination with the
-system threads library described in
-.IR "The OCaml user's manual" .
 .TP
 .B \-unboxed\-types
 When a type is unboxable (i.e. a record with a single argument or a
@@ -618,9 +627,9 @@ exception.
 .B \-unsafe\-string
 Identify the types
 .BR string \ and\  bytes ,
-thereby making strings writable. For reasons of backward compatibility,
-this is the default setting for the moment, but this will change in a future
-version of OCaml.
+thereby making strings writable.
+This is intended for compatibility with old source code and should not
+be used with new software.
 .TP
 .B \-v
 Print the version number of the compiler and the location of the
@@ -674,6 +683,13 @@ Show the description of all available warning numbers.
 .TP
 .B \-where
 Print the location of the standard library, then exit.
+.TP
+.B \-with-runtime
+Include the runtime system in the generated program. This is the default.
+.TP
+.B \-without-runtime
+The compiler does not include the runtime system (nor a reference to it) in the
+generated program; it must be supplied separately.
 .TP
 .BI \- \ file
 Process

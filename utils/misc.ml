@@ -17,18 +17,37 @@
 
 exception Fatal_error
 
-let fatal_error msg =
-  prerr_string ">> Fatal error: "; prerr_endline msg; raise Fatal_error
+let fatal_errorf fmt =
+  Format.kfprintf
+    (fun _ -> raise Fatal_error)
+    Format.err_formatter
+    ("@?>> Fatal error: " ^^ fmt ^^ "@.")
 
-let fatal_errorf fmt = Format.kasprintf fatal_error fmt
+let fatal_error msg = fatal_errorf "%s" msg
 
 (* Exceptions *)
 
-let try_finally work cleanup =
-  let result = (try work () with e -> cleanup (); raise e) in
-  cleanup ();
-  result
-;;
+let try_finally ?(always=(fun () -> ())) ?(exceptionally=(fun () -> ())) work =
+  match work () with
+    | result ->
+      begin match always () with
+        | () -> result
+        | exception always_exn ->
+          let always_bt = Printexc.get_raw_backtrace () in
+          exceptionally ();
+          Printexc.raise_with_backtrace always_exn always_bt
+      end
+    | exception work_exn ->
+      let work_bt = Printexc.get_raw_backtrace () in
+      begin match always () with
+        | () ->
+          exceptionally ();
+          Printexc.raise_with_backtrace work_exn work_bt
+        | exception always_exn ->
+          let always_bt = Printexc.get_raw_backtrace () in
+          exceptionally ();
+          Printexc.raise_with_backtrace always_exn always_bt
+      end
 
 type ref_and_value = R : 'a ref * 'a -> ref_and_value
 
@@ -93,16 +112,13 @@ module Stdlib = struct
       | (hd1 :: tl1, hd2 :: tl2) -> eq hd1 hd2 && equal eq tl1 tl2
       | (_, _) -> false
 
-    let filter_map f l =
-      let rec aux acc l =
-        match l with
-        | [] -> List.rev acc
-        | h :: t ->
-          match f h with
-          | None -> aux acc t
-          | Some v -> aux (v :: acc) t
-      in
-      aux [] l
+    let rec find_map f = function
+      | x :: xs ->
+          begin match f x with
+          | None -> find_map f xs
+          | Some _ as y -> y
+          end
+      | [] -> None
 
     let map2_prefix f l1 l2 =
       let rec aux acc l1 l2 =
@@ -134,34 +150,43 @@ module Stdlib = struct
           | t::q -> aux (n-1) (t::acc) q
       in
       aux n [] l
+
+    let rec is_prefix ~equal t ~of_ =
+      match t, of_ with
+      | [], [] -> true
+      | _::_, [] -> false
+      | [], _::_ -> true
+      | x1::t, x2::of_ -> equal x1 x2 && is_prefix ~equal t ~of_
+
+    type 'a longest_common_prefix_result = {
+      longest_common_prefix : 'a list;
+      first_without_longest_common_prefix : 'a list;
+      second_without_longest_common_prefix : 'a list;
+    }
+
+    let find_and_chop_longest_common_prefix ~equal ~first ~second =
+      let rec find_prefix ~longest_common_prefix_rev l1 l2 =
+        match l1, l2 with
+        | elt1 :: l1, elt2 :: l2 when equal elt1 elt2 ->
+          let longest_common_prefix_rev = elt1 :: longest_common_prefix_rev in
+          find_prefix ~longest_common_prefix_rev l1 l2
+        | l1, l2 ->
+          { longest_common_prefix = List.rev longest_common_prefix_rev;
+            first_without_longest_common_prefix = l1;
+            second_without_longest_common_prefix = l2;
+          }
+      in
+      find_prefix ~longest_common_prefix_rev:[] first second
   end
 
   module Option = struct
     type 'a t = 'a option
 
-    let equal eq o1 o2 =
-      match o1, o2 with
-      | None, None -> true
-      | Some e1, Some e2 -> eq e1 e2
-      | _, _ -> false
-
-    let iter f = function
-      | Some x -> f x
-      | None -> ()
-
-    let map f = function
-      | Some x -> Some (f x)
-      | None -> None
-
-    let fold f a b =
-      match a with
-      | None -> b
-      | Some a -> f a b
-
-    let value_default f ~default a =
-      match a with
-      | None -> default
-      | Some a -> f a
+    let print print_contents ppf t =
+      match t with
+      | None -> Format.pp_print_string ppf "None"
+      | Some contents ->
+        Format.fprintf ppf "@[(Some@ %a)@]" print_contents contents
   end
 
   module Array = struct
@@ -173,11 +198,44 @@ module Stdlib = struct
         else if p (Array.unsafe_get a1 i) (Array.unsafe_get a2 i) then true
         else loop (succ i) in
       loop 0
-  end
-end
 
-let may = Stdlib.Option.iter
-let may_map = Stdlib.Option.map
+    let for_alli p a =
+      let n = Array.length a in
+      let rec loop i =
+        if i = n then true
+        else if p i (Array.unsafe_get a i) then loop (succ i)
+        else false in
+      loop 0
+
+    let all_somes a =
+      try
+        Some (Array.map (function None -> raise_notrace Exit | Some x -> x) a)
+      with
+      | Exit -> None
+  end
+
+  module String = struct
+    include String
+    module Set = Set.Make(String)
+    module Map = Map.Make(String)
+    module Tbl = Hashtbl.Make(struct
+      include String
+      let hash = Hashtbl.hash
+    end)
+
+    let for_all f t =
+      let len = String.length t in
+      let rec loop i =
+        i = len || (f t.[i] && loop (i + 1))
+      in
+      loop 0
+
+    let print ppf t =
+      Format.pp_print_string ppf t
+  end
+
+  external compare : 'a -> 'a -> int = "%compare"
+end
 
 (* File functions *)
 
@@ -236,6 +294,15 @@ let expand_directory alt s =
   then Filename.concat alt
                        (String.sub s 1 (String.length s - 1))
   else s
+
+let path_separator =
+  match Sys.os_type with
+  | "Win32" -> ';'
+  | _ -> ':'
+
+let split_path_contents ?(sep = path_separator) = function
+  | "" -> []
+  | s -> String.split_on_char sep s
 
 (* Hashtable functions *)
 
@@ -296,6 +363,12 @@ let output_to_file_via_temporary ?(mode = [Open_text]) filename fn =
   | exception exn ->
       close_out oc; remove_file temp_filename; raise exn
 
+let protect_writing_to_file ~filename ~f =
+  let outchan = open_out_bin filename in
+  try_finally ~always:(fun () -> close_out outchan)
+    ~exceptionally:(fun () -> remove_file filename)
+    (fun () -> f outchan)
+
 (* Integer operations *)
 
 let rec log2 n =
@@ -308,10 +381,12 @@ let no_overflow_add a b = (a lxor b) lor (a lxor (lnot (a+b))) < 0
 
 let no_overflow_sub a b = (a lxor (lnot b)) lor (b lxor (a-b)) < 0
 
-let no_overflow_mul a b = b <> 0 && (a * b) / b = a
+(* Taken from Hacker's Delight, chapter "Overflow Detection" *)
+let no_overflow_mul a b =
+  not ((a = min_int && b < 0) || (b <> 0 && (a * b) / b <> a))
 
 let no_overflow_lsl a k =
-  0 <= k && k < Sys.word_size && min_int asr k <= a && a <= max_int asr k
+  0 <= k && k < Sys.word_size - 1 && min_int asr k <= a && a <= max_int asr k
 
 module Int_literal_converter = struct
   (* To convert integer literals, allowing max_int + 1 (PR#4210) *)
@@ -375,6 +450,11 @@ let rev_split_words s =
 let get_ref r =
   let v = !r in
   r := []; v
+
+let set_or_ignore f opt x =
+  match f x with
+  | None -> ()
+  | Some y -> opt := Some y
 
 let fst3 (x, _, _) = x
 let snd3 (_,x,_) = x
@@ -500,6 +580,7 @@ let spellcheck env name =
          else if dist = best_dist then (head :: best_choice, dist)
          else acc
   in
+  let env = List.sort_uniq (fun s1 s2 -> String.compare s2 s1) env in
   fst (List.fold_left (compare name) ([], max_int) env)
 
 let did_you_mean ppf get_choices =
@@ -520,10 +601,6 @@ let did_you_mean ppf get_choices =
 let cut_at s c =
   let pos = String.index s c in
   String.sub s 0 pos, String.sub s (pos+1) (String.length s - pos - 1)
-
-
-module StringSet = Set.Make(struct type t = string let compare = compare end)
-module StringMap = Map.Make(struct type t = string let compare = compare end)
 
 (* Color handling *)
 module Color = struct
@@ -588,9 +665,9 @@ module Color = struct
   (* map a tag to a style, if the tag is known.
      @raise Not_found otherwise *)
   let style_of_tag s = match s with
-    | "error" -> (!cur_styles).error
-    | "warning" -> (!cur_styles).warning
-    | "loc" -> (!cur_styles).loc
+    | Format.String_tag "error" -> (!cur_styles).error
+    | Format.String_tag "warning" -> (!cur_styles).warning
+    | Format.String_tag "loc" -> (!cur_styles).loc
     | _ -> raise Not_found
 
   let color_enabled = ref true
@@ -611,13 +688,13 @@ module Color = struct
   (* add color handling to formatter [ppf] *)
   let set_color_tag_handling ppf =
     let open Format in
-    let functions = pp_get_formatter_tag_functions ppf () in
+    let functions = pp_get_formatter_stag_functions ppf () in
     let functions' = {functions with
-      mark_open_tag=(mark_open_tag ~or_else:functions.mark_open_tag);
-      mark_close_tag=(mark_close_tag ~or_else:functions.mark_close_tag);
+      mark_open_stag=(mark_open_tag ~or_else:functions.mark_open_stag);
+      mark_close_stag=(mark_close_tag ~or_else:functions.mark_close_stag);
     } in
     pp_set_mark_tags ppf true; (* enable tags *)
-    pp_set_formatter_tag_functions ppf functions';
+    pp_set_formatter_stag_functions ppf functions';
     (* also setup margins *)
     pp_set_margin ppf (pp_get_margin std_formatter());
     ()
@@ -633,10 +710,17 @@ module Color = struct
 
   type setting = Auto | Always | Never
 
+  let default_setting = Auto
+
   let setup =
     let first = ref true in (* initialize only once *)
     let formatter_l =
       [Format.std_formatter; Format.err_formatter; Format.str_formatter]
+    in
+    let enable_color = function
+      | Auto -> should_enable_color ()
+      | Always -> true
+      | Never -> false
     in
     fun o ->
       if !first then (
@@ -644,12 +728,18 @@ module Color = struct
         Format.set_mark_tags true;
         List.iter set_color_tag_handling formatter_l;
         color_enabled := (match o with
-            | Some Always -> true
-            | Some Auto -> should_enable_color ()
-            | Some Never -> false
-            | None -> should_enable_color ())
+          | Some s -> enable_color s
+          | None -> enable_color default_setting)
       );
       ()
+end
+
+module Error_style = struct
+  type setting =
+    | Contextual
+    | Short
+
+  let default_setting = Contextual
 end
 
 let normalise_eol s =
@@ -691,49 +781,161 @@ let delete_eol_spaces src =
   let stop = loop 0 0 in
   Bytes.sub_string dst 0 stop
 
-type hook_info = {
-  sourcefile : string;
-}
+let pp_two_columns ?(sep = "|") ?max_lines ppf (lines: (string * string) list) =
+  let left_column_size =
+    List.fold_left (fun acc (s, _) -> max acc (String.length s)) 0 lines in
+  let lines_nb = List.length lines in
+  let ellipsed_first, ellipsed_last =
+    match max_lines with
+    | Some max_lines when lines_nb > max_lines ->
+        let printed_lines = max_lines - 1 in (* the ellipsis uses one line *)
+        let lines_before = printed_lines / 2 + printed_lines mod 2 in
+        let lines_after = printed_lines / 2 in
+        (lines_before, lines_nb - lines_after - 1)
+    | _ -> (-1, -1)
+  in
+  Format.fprintf ppf "@[<v>";
+  List.iteri (fun k (line_l, line_r) ->
+    if k = ellipsed_first then Format.fprintf ppf "...@,";
+    if ellipsed_first <= k && k <= ellipsed_last then ()
+    else Format.fprintf ppf "%*s %s %s@," left_column_size line_l sep line_r
+  ) lines;
+  Format.fprintf ppf "@]"
 
-exception HookExnWrapper of
-    {
-      error: exn;
-      hook_name: string;
-      hook_info: hook_info;
-    }
+(* showing configuration and configuration variables *)
+let show_config_and_exit () =
+  Config.print_config stdout;
+  exit 0
 
-exception HookExn of exn
+let show_config_variable_and_exit x =
+  match Config.config_var x with
+  | Some v ->
+      (* we intentionally don't print a newline to avoid Windows \r
+         issues: bash only strips the trailing \n when using a command
+         substitution $(ocamlc -config-var foo), so a trailing \r would
+         remain if printing a newline under Windows and scripts would
+         have to use $(ocamlc -config-var foo | tr -d '\r')
+         for portability. Ugh. *)
+      print_string v;
+      exit 0
+  | None ->
+      exit 2
 
-let raise_direct_hook_exn e = raise (HookExn e)
+let get_build_path_prefix_map =
+  let init = ref false in
+  let map_cache = ref None in
+  fun () ->
+    if not !init then begin
+      init := true;
+      match Sys.getenv "BUILD_PATH_PREFIX_MAP" with
+      | exception Not_found -> ()
+      | encoded_map ->
+        match Build_path_prefix_map.decode_map encoded_map with
+          | Error err ->
+              fatal_errorf
+                "Invalid value for the environment variable \
+                 BUILD_PATH_PREFIX_MAP: %s" err
+          | Ok map -> map_cache := Some map
+    end;
+    !map_cache
 
-let fold_hooks list hook_info ast =
-  List.fold_left (fun ast (hook_name,f) ->
-    try
-      f hook_info ast
-    with
-    | HookExn e -> raise e
-    | error -> raise (HookExnWrapper {error; hook_name; hook_info})
-       (* when explicit reraise with backtrace will be available,
-          it should be used here *)
+let debug_prefix_map_flags () =
+  if not Config.as_has_debug_prefix_map then
+    []
+  else begin
+    match get_build_path_prefix_map () with
+    | None -> []
+    | Some map ->
+      List.fold_right
+        (fun map_elem acc ->
+           match map_elem with
+           | None -> acc
+           | Some { Build_path_prefix_map.target; source; } ->
+             (Printf.sprintf "--debug-prefix-map %s=%s"
+                (Filename.quote source)
+                (Filename.quote target)) :: acc)
+        map
+        []
+  end
 
-  ) ast (List.sort compare list)
+let print_if ppf flag printer arg =
+  if !flag then Format.fprintf ppf "%a@." printer arg;
+  arg
 
-module type HookSig = sig
-  type t
 
-  val add_hook : string -> (hook_info -> t -> t) -> unit
-  val apply_hooks : hook_info -> t -> t
-end
+type filepath = string
+type modname = string
+type crcs = (modname * Digest.t option) list
 
-module MakeHooks(M: sig
-    type t
-  end) : HookSig with type t = M.t
-= struct
+type alerts = string Stdlib.String.Map.t
 
-  type t = M.t
 
-  let hooks = ref []
-  let add_hook name f = hooks := (name, f) :: !hooks
-  let apply_hooks sourcefile intf =
-    fold_hooks !hooks sourcefile intf
+module EnvLazy = struct
+  type ('a,'b) t = ('a,'b) eval ref
+
+  and ('a,'b) eval =
+    | Done of 'b
+    | Raise of exn
+    | Thunk of 'a
+
+  type undo =
+    | Nil
+    | Cons : ('a, 'b) t * 'a * undo -> undo
+
+  type log = undo ref
+
+  let force f x =
+    match !x with
+    | Done x -> x
+    | Raise e -> raise e
+    | Thunk e ->
+        match f e with
+        | y ->
+          x := Done y;
+          y
+        | exception e ->
+          x := Raise e;
+          raise e
+
+  let get_arg x =
+    match !x with Thunk a -> Some a | _ -> None
+
+  let create x =
+    ref (Thunk x)
+
+  let create_forced y =
+    ref (Done y)
+
+  let create_failed e =
+    ref (Raise e)
+
+  let log () =
+    ref Nil
+
+  let force_logged log f x =
+    match !x with
+    | Done x -> x
+    | Raise e -> raise e
+    | Thunk e ->
+      match f e with
+      | (Error _ as err : _ result) ->
+          x := Done err;
+          log := Cons(x, e, !log);
+          err
+      | Ok _ as res ->
+          x := Done res;
+          res
+      | exception e ->
+          x := Raise e;
+          raise e
+
+  let backtrack log =
+    let rec loop = function
+      | Nil -> ()
+      | Cons(x, e, rest) ->
+          x := Thunk e;
+          loop rest
+    in
+    loop !log
+
 end

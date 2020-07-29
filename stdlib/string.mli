@@ -32,21 +32,19 @@
   substring of [s] if [len >= 0] and [start] and [start+len] are
   valid positions in [s].
 
-  OCaml strings used to be modifiable in place, for instance via the
-  {!String.set} and {!String.blit} functions described below. This
-  usage is deprecated and only possible when the compiler is put in
-  "unsafe-string" mode by giving the [-unsafe-string] command-line
-  option (which is currently the default for reasons of backward
-  compatibility). This is done by making the types [string] and
-  [bytes] (see module {!Bytes}) interchangeable so that functions
-  expecting byte sequences can also accept strings as arguments and
-  modify them.
+  Note: OCaml strings used to be modifiable in place, for instance via
+  the {!String.set} and {!String.blit} functions described below. This
+  usage is only possible when the compiler is put in "unsafe-string"
+  mode by giving the [-unsafe-string] command-line option. This
+  compatibility mode makes the types [string] and [bytes] (see module
+  {!Bytes}) interchangeable so that functions expecting byte sequences
+  can also accept strings as arguments and modify them.
 
-  All new code should avoid this feature and be compiled with the
-  [-safe-string] command-line option to enforce the separation between
-  the types [string] and [bytes].
-
- *)
+  The distinction between [bytes] and [string] was introduced in OCaml
+  4.02, and the "unsafe-string" compatibility mode was the default
+  until OCaml 4.05. Starting with 4.06, the compatibility mode is
+  opt-in; we intend to remove the option in the future.
+*)
 
 external length : string -> int = "%string_length"
 (** Return the length (number of characters) of the given string. *)
@@ -310,7 +308,7 @@ type t = string
 
 val compare: t -> t -> int
 (** The comparison function for strings, with the same specification as
-    {!Pervasives.compare}.  Along with the type [t], this function [compare]
+    {!Stdlib.compare}.  Along with the type [t], this function [compare]
     allows the module [String] to be passed as argument to the functors
     {!Set.Make} and {!Map.Make}. *)
 
@@ -332,6 +330,21 @@ val split_on_char: char -> string -> string list
 
     @since 4.04.0
 *)
+
+(** {1 Iterators} *)
+
+val to_seq : t -> char Seq.t
+(** Iterate on the string, in increasing index order. Modifications of the
+    string during iteration will be reflected in the iterator.
+    @since 4.07 *)
+
+val to_seqi : t -> (int * char) Seq.t
+(** Iterate on the string, in increasing order, yielding indices along chars
+    @since 4.07 *)
+
+val of_seq : char Seq.t -> t
+(** Create a string from the generator
+    @since 4.07 *)
 
 (**/**)
 

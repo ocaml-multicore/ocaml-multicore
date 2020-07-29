@@ -13,6 +13,9 @@
 (*                                                                        *)
 (**************************************************************************)
 
+(* An alias for the type of arrays. *)
+type 'a t = 'a array
+
 (* Array operations *)
 
 external length : 'a array -> int = "%array_length"
@@ -27,6 +30,8 @@ external append_prim : 'a array -> 'a array -> 'a array = "caml_array_append"
 external concat : 'a array list -> 'a array = "caml_array_concat"
 external unsafe_blit :
   'a array -> int -> 'a array -> int -> int -> unit = "caml_array_blit"
+external unsafe_fill :
+  'a array -> int -> int -> 'a -> unit = "caml_array_fill"
 external create_float: int -> float array = "caml_make_float_vect"
 let make_float = create_float
 
@@ -78,7 +83,7 @@ let sub a ofs len =
 let fill a ofs len v =
   if ofs < 0 || len < 0 || ofs > length a - len
   then invalid_arg "Array.fill"
-  else for i = ofs to ofs + len - 1 do unsafe_set a i v done
+  else unsafe_fill a ofs len v
 
 let blit a1 ofs1 a2 ofs2 len =
   if len < 0 || ofs1 < 0 || ofs1 > length a1 - len
@@ -302,3 +307,40 @@ let stable_sort cmp a =
 
 
 let fast_sort = stable_sort
+
+(** {1 Iterators} *)
+
+let to_seq a =
+  let rec aux i () =
+    if i < length a
+    then
+      let x = unsafe_get a i in
+      Seq.Cons (x, aux (i+1))
+    else Seq.Nil
+  in
+  aux 0
+
+let to_seqi a =
+  let rec aux i () =
+    if i < length a
+    then
+      let x = unsafe_get a i in
+      Seq.Cons ((i,x), aux (i+1))
+    else Seq.Nil
+  in
+  aux 0
+
+let of_rev_list = function
+    [] -> [||]
+  | hd::tl as l ->
+      let len = list_length 0 l in
+      let a = create len hd in
+      let rec fill i = function
+          [] -> a
+        | hd::tl -> unsafe_set a i hd; fill (i-1) tl
+      in
+      fill (len-2) tl
+
+let of_seq i =
+  let l = Seq.fold_left (fun acc x -> x::acc) [] i in
+  of_rev_list l

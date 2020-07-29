@@ -115,7 +115,7 @@ displaying and processing by
 The
 .IR dot (1)
 tool is available from
-.IR http://www.research.att.com/sw/tools/graphviz/ .
+.IR https://graphviz.org/ .
 The textual representation of the graph is written to the file
 .IR ocamldoc.out ,
 or to the file specified with the
@@ -160,7 +160,7 @@ Hide the given complete module names in the generated documentation.
 .I modules
 is a list of complete module names are separated by commas (,),
 without blanks. For instance:
-.IR Pervasives,M2.M3 .
+.IR Stdlib,M2.M3 .
 .TP
 .B \-inv\-merge\-ml\-mli
 Reverse the precedence of implementations and interfaces when merging.
@@ -235,6 +235,11 @@ instead of
 This option is meaningful only in conjunction with the
 .BR \-latex , \ \-texi ,\ or \ \-dot
 options.
+.TP
+.BI \-open \ module
+Opens
+.I module
+before typing.
 .TP
 .BI \-pp \ command
 Pipe sources through preprocessor

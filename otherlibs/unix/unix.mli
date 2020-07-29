@@ -234,8 +234,11 @@ val system : string -> process_status
 (** Execute the given command, wait until it terminates, and return
    its termination status. The string is interpreted by the shell
    [/bin/sh] (or the command interpreter [cmd.exe] on Windows) and
-   therefore can contain redirections, quotes, variables, etc. The
-   result [WEXITED 127] indicates that the shell couldn't be
+   therefore can contain redirections, quotes, variables, etc.
+   To properly quote whitespace and shell special characters occuring
+   in file names or command arguments, the use of
+   {!Filename.quote_command} is recommended.
+   The result [WEXITED 127] indicates that the shell couldn't be
    executed. *)
 
 val getpid : unit -> int
@@ -306,6 +309,9 @@ val openfile : string -> open_flag list -> file_perm -> file_descr
 
 val close : file_descr -> unit
 (** Close a file descriptor. *)
+
+val fsync : file_descr -> unit
+(** Flush file buffers to disk. *)
 
 val read : file_descr -> bytes -> int -> int -> int
 (** [read fd buff ofs len] reads [len] bytes from descriptor [fd],
@@ -395,15 +401,11 @@ val lseek : file_descr -> int -> seek_command -> int
     offset (from the beginning of the file). *)
 
 val truncate : string -> int -> unit
-(** Truncates the named file to the given size.
-
-  On Windows: not implemented. *)
+(** Truncates the named file to the given size. *)
 
 val ftruncate : file_descr -> int -> unit
 (** Truncates the file corresponding to the given descriptor
-   to the given size.
-
-  On Windows: not implemented. *)
+   to the given size. *)
 
 
 (** {1 File status} *)
@@ -426,7 +428,7 @@ type stats =
     st_nlink : int;             (** Number of links *)
     st_uid : int;               (** User id of the owner *)
     st_gid : int;               (** Group ID of the file's group *)
-    st_rdev : int;              (** Device minor number *)
+    st_rdev : int;              (** Device ID (if special file) *)
     st_size : int;              (** Size in bytes *)
     st_atime : float;           (** Last access time *)
     st_mtime : float;           (** Last modification time *)
@@ -470,7 +472,7 @@ module LargeFile :
         st_nlink : int;             (** Number of links *)
         st_uid : int;               (** User id of the owner *)
         st_gid : int;               (** Group ID of the file's group *)
-        st_rdev : int;              (** Device minor number *)
+        st_rdev : int;              (** Device ID (if special file) *)
         st_size : int64;            (** Size in bytes *)
         st_atime : float;           (** Last access time *)
         st_mtime : float;           (** Last modification time *)
@@ -490,17 +492,17 @@ module LargeFile :
   regular integers (type [int]), thus allowing operating on files
   whose sizes are greater than [max_int]. *)
 
-(** {6 Mapping files into memory} *)
+(** {1 Mapping files into memory} *)
 
 val map_file :
-  file_descr -> ?pos:int64 -> ('a, 'b) CamlinternalBigarray.kind ->
-  'c CamlinternalBigarray.layout -> bool -> int array ->
-  ('a, 'b, 'c) CamlinternalBigarray.genarray
-(** Memory mapping of a file as a big array.
+  file_descr -> ?pos:int64 -> ('a, 'b) Stdlib.Bigarray.kind ->
+  'c Stdlib.Bigarray.layout -> bool -> int array ->
+  ('a, 'b, 'c) Stdlib.Bigarray.Genarray.t
+(** Memory mapping of a file as a Bigarray.
   [map_file fd kind layout shared dims]
-  returns a big array of kind [kind], layout [layout],
+  returns a Bigarray of kind [kind], layout [layout],
   and dimensions as specified in [dims].  The data contained in
-  this big array are the contents of the file referred to by
+  this Bigarray are the contents of the file referred to by
   the file descriptor [fd] (as opened previously with
   [Unix.openfile], for example).  The optional [pos] parameter
   is the byte offset in the file of the data being mapped;
@@ -514,10 +516,10 @@ val map_file :
   affected.
 
   [Genarray.map_file] is much more efficient than reading
-  the whole file in a big array, modifying that big array,
+  the whole file in a Bigarray, modifying that Bigarray,
   and writing it afterwards.
 
-  To adjust automatically the dimensions of the big array to
+  To adjust automatically the dimensions of the Bigarray to
   the actual size of the file, the major dimension (that is,
   the first dimension for an array with C layout, and the last
   dimension for an array with Fortran layout) can be given as
@@ -526,11 +528,11 @@ val map_file :
   number of sub-arrays as determined by the non-major dimensions,
   otherwise [Failure] is raised.
 
-  If all dimensions of the big array are given, the file size is
-  matched against the size of the big array.  If the file is larger
-  than the big array, only the initial portion of the file is
-  mapped to the big array.  If the file is smaller than the big
-  array, the file is automatically grown to the size of the big array.
+  If all dimensions of the Bigarray are given, the file size is
+  matched against the size of the Bigarray.  If the file is larger
+  than the Bigarray, only the initial portion of the file is
+  mapped to the Bigarray.  If the file is smaller than the big
+  array, the file is automatically grown to the size of the Bigarray.
   This requires write permissions on [fd].
 
   Array accesses are bounds-checked, but the bounds are determined by
@@ -564,9 +566,19 @@ val rename : string -> string -> unit
     owner, etc) of [new] can either be preserved or be replaced by
     those of [old].  *)
 
-val link : string -> string -> unit
-(** [link source dest] creates a hard link named [dest] to the file
-   named [source]. *)
+val link :  ?follow:bool -> string -> string -> unit
+(** [link ?follow source dest] creates a hard link named [dest] to the file
+   named [source].
+
+   @param follow indicates whether a [source] symlink is followed or a
+   hardlink to [source] itself will be created. On {e Unix} systems this is
+   done using the [linkat(2)] function. If [?follow] is not provided, then the
+   [link(2)] function is used whose behaviour is OS-dependent, but more widely
+   available.
+
+   @raise ENOSYS On {e Unix} if [~follow:_] is requested, but linkat is
+                 unavailable.
+   @raise ENOSYS On {e Windows} if [~follow:false] is requested. *)
 
 
 (** {1 File permissions and ownership} *)
@@ -771,28 +783,102 @@ val open_process_in : string -> in_channel
    The standard output of the command is redirected to a pipe,
    which can be read via the returned input channel.
    The command is interpreted by the shell [/bin/sh]
-   (or [cmd.exe] on Windows), cf. [system]. *)
+   (or [cmd.exe] on Windows), cf. {!Unix.system}.
+   The {!Filename.quote_command} function can be used to
+   quote the command and its arguments as appropriate for the shell being
+   used.  If the command does not need to be run through the shell,
+   {!Unix.open_process_args_in} can be used as a more robust and
+   more efficient alternative to {!Unix.open_process_in}. *)
 
 val open_process_out : string -> out_channel
 (** Same as {!Unix.open_process_in}, but redirect the standard input of
    the command to a pipe.  Data written to the returned output channel
    is sent to the standard input of the command.
    Warning: writes on output channels are buffered, hence be careful
-   to call {!Pervasives.flush} at the right times to ensure
-   correct synchronization. *)
+   to call {!Stdlib.flush} at the right times to ensure
+   correct synchronization.
+   If the command does not need to be run through the shell,
+   {!Unix.open_process_args_out} can be used instead of
+   {!Unix.open_process_out}. *)
 
 val open_process : string -> in_channel * out_channel
 (** Same as {!Unix.open_process_out}, but redirects both the standard input
    and standard output of the command to pipes connected to the two
    returned channels.  The input channel is connected to the output
-   of the command, and the output channel to the input of the command. *)
+   of the command, and the output channel to the input of the command.
+   If the command does not need to be run through the shell,
+   {!Unix.open_process_args} can be used instead of
+   {!Unix.open_process}. *)
 
 val open_process_full :
   string -> string array -> in_channel * out_channel * in_channel
 (** Similar to {!Unix.open_process}, but the second argument specifies
    the environment passed to the command.  The result is a triple
    of channels connected respectively to the standard output, standard input,
-   and standard error of the command. *)
+   and standard error of the command.
+   If the command does not need to be run through the shell,
+   {!Unix.open_process_args_full} can be used instead of
+   {!Unix.open_process_full}. *)
+
+val open_process_args_in : string -> string array -> in_channel
+(** High-level pipe and process management. The first argument specifies the
+   command to run, and the second argument specifies the argument array passed
+   to the command.  This function runs the command in parallel with the program.
+   The standard output of the command is redirected to a pipe, which can be read
+   via the returned input channel.
+
+    @since 4.08.0 *)
+
+val open_process_args_out : string -> string array -> out_channel
+(** Same as {!Unix.open_process_args_in}, but redirect the standard input of the
+   command to a pipe.  Data written to the returned output channel is sent to
+   the standard input of the command.  Warning: writes on output channels are
+   buffered, hence be careful to call {!Stdlib.flush} at the right times to
+   ensure correct synchronization.
+
+    @since 4.08.0 *)
+
+val open_process_args : string -> string array -> in_channel * out_channel
+(** Same as {!Unix.open_process_args_out}, but redirects both the standard input
+   and standard output of the command to pipes connected to the two returned
+   channels.  The input channel is connected to the output of the command, and
+   the output channel to the input of the command.
+
+    @since 4.08.0 *)
+
+val open_process_args_full :
+  string -> string array -> string array ->
+    in_channel * out_channel * in_channel
+(** Similar to {!Unix.open_process_args}, but the third argument specifies the
+   environment passed to the command.  The result is a triple of channels
+   connected respectively to the standard output, standard input, and standard
+   error of the command.
+
+    @since 4.08.0 *)
+
+val process_in_pid : in_channel -> int
+(** Return the pid of a process opened via {!Unix.open_process_in} or
+   {!Unix.open_process_args_in}.
+
+    @since 4.08.0 *)
+
+val process_out_pid : out_channel -> int
+(** Return the pid of a process opened via {!Unix.open_process_out} or
+   {!Unix.open_process_args_out}.
+
+    @since 4.08.0 *)
+
+val process_pid : in_channel * out_channel -> int
+(** Return the pid of a process opened via {!Unix.open_process} or
+   {!Unix.open_process_args}.
+
+    @since 4.08.0 *)
+
+val process_full_pid : in_channel * out_channel * in_channel -> int
+(** Return the pid of a process opened via {!Unix.open_process_full} or
+   {!Unix.open_process_args_full}.
+
+    @since 4.08.0 *)
 
 val close_process_in : in_channel -> process_status
 (** Close channels opened by {!Unix.open_process_in},
@@ -1415,7 +1501,7 @@ val getsockopt_error : file_descr -> error option
 val open_connection : sockaddr -> in_channel * out_channel
 (** Connect to a server at the given address.
    Return a pair of buffered channels connected to the server.
-   Remember to call {!Pervasives.flush} on the output channel at the right
+   Remember to call {!Stdlib.flush} on the output channel at the right
    times to ensure correct synchronization. *)
 
 val shutdown_connection : in_channel -> unit
@@ -1423,7 +1509,7 @@ val shutdown_connection : in_channel -> unit
    that is, transmit an end-of-file condition to the server reading
    on the other side of the connection. This does not fully close the
    file descriptor associated with the channel, which you must remember
-   to free via {!Pervasives.close_in}. *)
+   to free via {!Stdlib.close_in}. *)
 
 val establish_server : (in_channel -> out_channel -> unit) -> sockaddr -> unit
 (** Establish a server on the given address.

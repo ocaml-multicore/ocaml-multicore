@@ -76,7 +76,8 @@ val no_std_include : bool ref
 val print_types : bool ref
 val make_archive : bool ref
 val debug : bool ref
-val fast : bool ref
+val debug_full : bool ref
+val unsafe : bool ref
 val use_linscan : bool ref
 val link_everything : bool ref
 val custom_runtime : bool ref
@@ -84,16 +85,18 @@ val no_check_prims : bool ref
 val bytecode_compatible_32 : bool ref
 val output_c_object : bool ref
 val output_complete_object : bool ref
+val output_complete_executable : bool ref
 val all_ccopts : string list ref
 val classic : bool ref
 val nopervasives : bool ref
+val match_context_rows : int ref
 val open_modules : string list ref
 val preprocessor : string option ref
 val all_ppx : string list ref
+val absname : bool ref
 val annotations : bool ref
 val binary_annotations : bool ref
 val use_threads : bool ref
-val use_vmthreads : bool ref
 val noassert : bool ref
 val verbose : bool ref
 val noprompt : bool ref
@@ -103,6 +106,7 @@ val noinit : bool ref
 val noversion : bool ref
 val use_prims : string ref
 val use_runtime : string ref
+val plugin : bool ref
 val principal : bool ref
 val real_paths : bool ref
 val recursive_types : bool ref
@@ -110,7 +114,6 @@ val strict_sequence : bool ref
 val strict_formats : bool ref
 val applicative_functors : bool ref
 val make_runtime : bool ref
-val gprofile : bool ref
 val c_compiler : string option ref
 val no_auto_link : bool ref
 val dllpaths : string list ref
@@ -119,6 +122,7 @@ val for_package : string option ref
 val error_size : int ref
 val float_const_prop : bool ref
 val transparent_modules : bool ref
+val unique_ids : bool ref
 val dump_source : bool ref
 val dump_parsetree : bool ref
 val dump_typedtree : bool ref
@@ -130,6 +134,7 @@ val dump_rawflambda : bool ref
 val dump_flambda : bool ref
 val dump_flambda_let : int option ref
 val dump_instr : bool ref
+val keep_camlprimc_file : bool ref
 val keep_asm_file : bool ref
 val optimize_for_speed : bool ref
 val dump_cmm : bool ref
@@ -181,6 +186,7 @@ val shared : bool ref
 val dlcode : bool ref
 val pic_code : bool ref
 val runtime_variant : string ref
+val with_runtime : bool ref
 val force_slash : bool ref
 val keep_docs : bool ref
 val keep_locs : bool ref
@@ -201,15 +207,42 @@ val dump_flambda_verbose : bool ref
 val classic_inlining : bool ref
 val afl_instrument : bool ref
 val afl_inst_ratio : int ref
+val function_sections : bool ref
 
 val all_passes : string list ref
 val dumped_pass : string -> bool
 val set_dumped_pass : string -> bool -> unit
 
-val parse_color_setting : string -> Misc.Color.setting option
+val dump_into_file : bool ref
+
+(* Support for flags that can also be set from an environment variable *)
+type 'a env_reader = {
+  parse : string -> 'a option;
+  print : 'a -> string;
+  usage : string;
+  env_var : string;
+}
+
 val color : Misc.Color.setting option ref
+val color_reader : Misc.Color.setting env_reader
+
+val error_style : Misc.Error_style.setting option ref
+val error_style_reader : Misc.Error_style.setting env_reader
 
 val unboxed_types : bool ref
+
+val insn_sched : bool ref
+val insn_sched_default : bool
+
+module Compiler_pass : sig
+  type t = Parsing | Typing
+  val of_string : string -> t option
+  val to_string : t -> string
+  val passes : t list
+  val pass_names : string list
+end
+val stop_after : Compiler_pass.t option ref
+val should_stop_after : Compiler_pass.t -> bool
 
 val arg_spec : (string * Arg.spec * string) list ref
 
@@ -221,8 +254,7 @@ val arg_spec : (string * Arg.spec * string) list ref
 val add_arguments : string -> (string * Arg.spec * string) list -> unit
 
 (* [parse_arguments anon_arg usage] will parse the arguments, using
-  the arguments provided in [Clflags.arg_spec]. It allows plugins to
-  provide their own arguments.
+  the arguments provided in [Clflags.arg_spec].
 *)
 val parse_arguments : Arg.anon_fun -> string -> unit
 

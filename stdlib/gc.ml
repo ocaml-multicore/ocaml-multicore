@@ -2,7 +2,8 @@
 (*                                                                        *)
 (*                                 OCaml                                  *)
 (*                                                                        *)
-(*             Damien Doligez, projet Para, INRIA Rocquencourt            *)
+(*            Damien Doligez, projet Para, INRIA Rocquencourt             *)
+(*            Jacques-Henri Jourdan, projet Gallium, INRIA Paris          *)
 (*                                                                        *)
 (*   Copyright 1996 Institut National de Recherche en Informatique et     *)
 (*     en Automatique.                                                    *)
@@ -41,6 +42,9 @@ type control = {
   mutable stack_limit : int;
   mutable allocation_policy : int;
   window_size : int;
+  custom_major_ratio : int;
+  custom_minor_ratio : int;
+  custom_minor_max_size : int;
 }
 
 external stat : unit -> stat = "caml_gc_stat"

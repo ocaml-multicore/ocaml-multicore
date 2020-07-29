@@ -58,6 +58,7 @@ open Asttypes
 type type_expr =
   { mutable desc: type_desc;
     mutable level: int;
+    mutable scope: int;
     id: int }
 
 and type_desc =
@@ -134,7 +135,7 @@ and type_desc =
     [< `X | `Y > `X ]  (row_closed = true)
 
     type t = [> `X ] as 'a      (row_more = Tvar a)
-    type t = private [> `X ]    (row_more = Tconstr (t#row, [], ref Mnil)
+    type t = private [> `X ]    (row_more = Tconstr (t#row, [], ref Mnil))
 
     And for:
 
@@ -159,9 +160,13 @@ and row_desc =
       row_more: type_expr;
       row_bound: unit; (* kept for compatibility *)
       row_closed: bool;
-      row_fixed: bool;
+      row_fixed: fixed_explanation option;
       row_name: (Path.t * type_expr list) option }
-
+and fixed_explanation =
+  | Univar of type_expr (** The row type was bound to an univar *)
+  | Fixed_private (** The row type is private *)
+  | Reified of Path.t (** The row was reified *)
+  | Rigid (** The row type was made rigid during constraint verification *)
 and row_field =
     Rpresent of type_expr option
   | Reither of bool * type_expr list * bool * row_field option ref
@@ -259,7 +264,6 @@ and value_kind =
                                         (* Self *)
   | Val_anc of (string * Ident.t) list * string
                                         (* Ancestor *)
-  | Val_unbound                         (* Unbound variable *)
 
 (* Variance *)
 
@@ -274,6 +278,7 @@ module Variance : sig
   val union  : t -> t -> t
   val inter  : t -> t -> t
   val subset : t -> t -> bool
+  val eq : t -> t -> bool
   val set : f -> bool -> t -> t
   val mem : f -> t -> bool
   val conjugate : t -> t                (* exchange positive and negative *)
@@ -291,11 +296,11 @@ type type_declaration =
     type_manifest: type_expr option;
     type_variance: Variance.t list;
     (* covariant, contravariant, weakly contravariant, injective *)
-    type_newtype_level: (int * int) option;
-    (* definition level * expansion level *)
+    type_is_newtype: bool;
+    type_expansion_scope: int;
     type_loc: Location.t;
     type_attributes: Parsetree.attributes;
-    type_immediate: bool; (* true iff type should not be a pointer *)
+    type_immediate: Type_immediacy.t;
     type_unboxed: unboxed_status;
   }
 
@@ -310,7 +315,7 @@ and record_representation =
   | Record_float                        (* All fields are floats *)
   | Record_unboxed of bool    (* Unboxed single-field record, inlined or not *)
   | Record_inlined of int               (* Inlined record *)
-  | Record_extension                    (* Inlined record under extension *)
+  | Record_extension of Path.t          (* Inlined record under extension *)
 
 and label_declaration =
   {
@@ -401,26 +406,35 @@ type class_type_declaration =
 
 (* Type expressions for the module language *)
 
+type visibility =
+  | Exported
+  | Hidden
+
 type module_type =
     Mty_ident of Path.t
   | Mty_signature of signature
-  | Mty_functor of Ident.t * module_type option * module_type
-  | Mty_alias of alias_presence * Path.t
+  | Mty_functor of functor_parameter * module_type
+  | Mty_alias of Path.t
 
-and alias_presence =
-  | Mta_present
-  | Mta_absent
+and functor_parameter =
+  | Unit
+  | Named of Ident.t option * module_type
+
+and module_presence =
+  | Mp_present
+  | Mp_absent
 
 and signature = signature_item list
 
 and signature_item =
-    Sig_value of Ident.t * value_description
-  | Sig_type of Ident.t * type_declaration * rec_status
-  | Sig_typext of Ident.t * extension_constructor * ext_status
-  | Sig_module of Ident.t * module_declaration * rec_status
-  | Sig_modtype of Ident.t * modtype_declaration
-  | Sig_class of Ident.t * class_declaration * rec_status
-  | Sig_class_type of Ident.t * class_type_declaration * rec_status
+    Sig_value of Ident.t * value_description * visibility
+  | Sig_type of Ident.t * type_declaration * rec_status * visibility
+  | Sig_typext of Ident.t * extension_constructor * ext_status * visibility
+  | Sig_module of
+      Ident.t * module_presence * module_declaration * rec_status * visibility
+  | Sig_modtype of Ident.t * modtype_declaration * visibility
+  | Sig_class of Ident.t * class_declaration * rec_status * visibility
+  | Sig_class_type of Ident.t * class_type_declaration * rec_status * visibility
 
 and module_declaration =
   {
@@ -493,3 +507,11 @@ type label_description =
     lbl_loc: Location.t;
     lbl_attributes: Parsetree.attributes;
   }
+
+(** Extracts the list of "value" identifiers bound by a signature.
+    "Value" identifiers are identifiers for signature components that
+    correspond to a run-time value: values, extensions, modules, classes.
+    Note: manifest primitives do not correspond to a run-time value! *)
+val bound_value_identifiers: signature -> Ident.t list
+
+val signature_item_id : signature_item -> Ident.t

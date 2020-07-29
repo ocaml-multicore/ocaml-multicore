@@ -18,16 +18,24 @@ resources.
 
 ## Variants
 
-* Parallel Minor GC (default) -- A variant that performs stop-the-world parallel
-  minor collection. The branch is `parallel_minor_gc`.
-* Concurrent Minor GC -- A variant that garbage collects each domain's minor
-  heap concurrently. The branch is `master`.
-* Parallel Minor GC + No effect syntax -- This branch does not have syntax
+* **Parallel Minor GC (default)** -- A variant that performs stop-the-world parallel
+  minor collection. The branch is
+  [`parallel_minor_gc`](https://github.com/ocaml-multicore/ocaml-multicore/tree/parallel_minor_gc).
+* **Concurrent Minor GC** -- A variant that garbage collects each domain's minor
+  heap concurrently. The branch is [`master`](https://github.com/ocaml-multicore/ocaml-multicore/tree/master).
+* **Parallel Minor GC + No effect syntax** -- This branch does not have syntax
   extension for effects (but includes the compiler and runtime system changes).
-  The branch is `no-effect-syntax`. This branch is useful to install ppx
-  libraries.
+  The branch is
+  [`no-effect-syntax`](https://github.com/ocaml-multicore/ocaml-multicore/tree/no-effect-syntax).
+  This branch is useful to install ppx libraries.
 
-The above variants are kept in sync.
+## Installation
+
+If you want to try out Multicore OCaml, the easiest way is to install the compiler using [OPAM](https://github.com/ocaml-multicore/multicore-opam#install-multicore-ocaml). 
+
+Parallel programming examples are available in the [domainslib](https://github.com/ocaml-multicore/domainslib/tree/master/test) library. 
+
+Effect handler (concurrent programming) examples are available in [effects-examples](https://github.com/kayceesrk/effects-examples) repo.
 
 ## Notes
 

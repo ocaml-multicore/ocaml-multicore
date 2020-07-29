@@ -127,8 +127,8 @@ static int convert_time(FILETIME* time, __time64_t* result, __time64_t def)
   ULARGE_INTEGER utime = {{time->dwLowDateTime, time->dwHighDateTime}};
 
   if (utime.QuadPart) {
-    /* There are 11644473600000 seconds between 1 January 1601 (the NT Epoch)
-     * and 1 January 1970 (the Unix Epoch). FILETIME is measured in 100ns ticks.
+    /* There are 11644473600 seconds between 1 January 1601 (the NT Epoch) and 1
+     * January 1970 (the Unix Epoch). FILETIME is measured in 100ns ticks.
      */
     *result = (utime.QuadPart - INT64_LITERAL(116444736000000000U));
   }
@@ -297,7 +297,7 @@ static int safe_do_stat(int do_lstat, int use_64, wchar_t* path, HANDLE fstat, _
   return 1;
 }
 
-static int do_stat(int do_lstat, int use_64, char* opath, HANDLE fstat, __int64* st_ino, struct _stat64* res)
+static int do_stat(int do_lstat, int use_64, const char* opath, HANDLE fstat, __int64* st_ino, struct _stat64* res)
 {
   wchar_t* wpath;
   int ret;

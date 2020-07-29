@@ -22,10 +22,14 @@
       [Toploop.print_out_sig_item]
       [Toploop.print_out_phrase] *)
 
+(** An [out_name] is a string representation of an identifier which can be
+    rewritten on the fly to avoid name collisions *)
+type out_name = { mutable printed_name: string }
+
 type out_ident =
   | Oide_apply of out_ident * out_ident
   | Oide_dot of out_ident * string
-  | Oide_ident of string
+  | Oide_ident of out_name
 
 type out_string =
   | Ostr_string
@@ -69,7 +73,7 @@ type out_type =
   | Otyp_variant of
       bool * out_variant * bool * (string list) option
   | Otyp_poly of string list * out_type
-  | Otyp_module of string * string list * out_type list
+  | Otyp_module of out_ident * string list * out_type list
   | Otyp_attribute of out_type * out_attribute
 
 and out_variant =
@@ -87,7 +91,7 @@ and out_class_sig_item =
 
 type out_module_type =
   | Omty_abstract
-  | Omty_functor of string * out_module_type option * out_module_type
+  | Omty_functor of (string option * out_module_type) option * out_module_type
   | Omty_ident of out_ident
   | Omty_signature of out_sig_item list
   | Omty_alias of out_ident
@@ -109,7 +113,7 @@ and out_type_decl =
     otype_params: (string * (bool * bool)) list;
     otype_type: out_type;
     otype_private: Asttypes.private_flag;
-    otype_immediate: bool;
+    otype_immediate: Type_immediacy.t;
     otype_unboxed: bool;
     otype_cstrs: (out_type * out_type) list }
 and out_extension_constructor =

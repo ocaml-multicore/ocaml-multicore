@@ -36,14 +36,19 @@ val fprintf : out_channel -> ('a, out_channel, unit) format -> 'a
    The types and their meanings are:
 
    - [d], [i]: convert an integer argument to signed decimal.
+     The flag [#] adds underscores to large values for readability.
    - [u], [n], [l], [L], or [N]: convert an integer argument to
      unsigned decimal.  Warning: [n], [l], [L], and [N] are
      used for [scanf], and should not be used for [printf].
+     The flag [#] adds underscores to large values for readability.
    - [x]: convert an integer argument to unsigned hexadecimal,
      using lowercase letters.
+     The flag [#] adds a [0x] prefix to non zero values.
    - [X]: convert an integer argument to unsigned hexadecimal,
      using uppercase letters.
+     The flag [#] adds a [0X] prefix to non zero values.
    - [o]: convert an integer argument to unsigned octal.
+     The flag [#] adds a [0] prefix to non zero values.
    - [s]: insert a string argument.
    - [S]: convert a string argument to OCaml syntax (double quotes, escapes).
    - [c]: insert a character argument.
@@ -53,6 +58,7 @@ val fprintf : out_channel -> ('a, out_channel, unit) format -> 'a
      in the style [dddd.ddd].
    - [F]: convert a floating-point argument to OCaml syntax ([dddd.]
      or [dddd.ddd] or [d.ddd e+-dd]).
+     Converts to hexadecimal with the [#] flag (see [h]).
    - [e] or [E]: convert a floating-point argument to decimal notation,
      in the style [d.ddd e+-dd] (mantissa and exponent).
    - [g] or [G]: convert a floating-point argument to decimal notation,
@@ -61,7 +67,7 @@ val fprintf : out_channel -> ('a, out_channel, unit) format -> 'a
      and the decimal-point character is removed if there is no fractional
      part remaining.
    - [h] or [H]: convert a floating-point argument to hexadecimal notation,
-     in the style [0xh.hhhh e+-dd] (hexadecimal mantissa, exponent in
+     in the style [0xh.hhhh p+-dd] (hexadecimal mantissa, exponent in
      decimal and denotes a power of 2).
    - [B]: convert a boolean argument to the string [true] or [false]
    - [b]: convert a boolean argument (deprecated; do not use in new
@@ -100,9 +106,8 @@ val fprintf : out_channel -> ('a, out_channel, unit) format -> 'a
      sign if positive.
    - space: for signed numerical conversions, prefix number with a
      space if positive.
-   - [#]: request an alternate formatting style for the hexadecimal
-     and octal integer types ([x], [X], [o], [lx], [lX], [lo], [Lx],
-     [LX], [Lo]).
+   - [#]: request an alternate formatting style for the integer types
+     and the floating-point type [F].
 
    The optional [width] is an integer indicating the minimal
    width of the result. For instance, [%6d] prints an integer,
@@ -110,8 +115,9 @@ val fprintf : out_channel -> ('a, out_channel, unit) format -> 'a
 
    The optional [precision] is a dot [.] followed by an integer
    indicating how many digits follow the decimal point in the [%f],
-   [%e], and [%E] conversions. For instance, [%.4f] prints a [float] with
-   4 fractional digits.
+   [%e], [%E], [%h], and [%H] conversions or the maximum number of
+   significant digits to appear for the [%F], [%g] and [%G] conversions.
+   For instance, [%.4f] prints a [float] with 4 fractional digits.
 
    The integer in a [width] or [precision] can also be specified as
    [*], in which case an extra integer argument is taken to specify

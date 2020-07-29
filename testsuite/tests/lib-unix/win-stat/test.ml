@@ -1,3 +1,11 @@
+(* TEST
+modules = "fakeclock.c"
+* libwin32unix
+include unix
+** bytecode
+** native
+*)
+
 open Unix
 
 external set_fake_clock : int64 -> unit = "set_fake_clock"

@@ -1,3 +1,12 @@
+(* TEST
+*)
+
+let string_of_even_opt x =
+  if x mod 2 = 0 then
+    Some (string_of_int x)
+  else
+    None
+
 (* Standard test case *)
 let () =
   let l = List.init 10 (fun x -> x) in
@@ -17,6 +26,13 @@ let () =
   assert (not (List.exists (fun a -> a > 9) l));
   assert (List.exists (fun _ -> true) l);
 
+  begin
+    let f ~limit a = if a >= limit then Some (a, limit) else None in
+    assert (List.find_map (f ~limit:3) [] = None);
+    assert (List.find_map (f ~limit:3) l = Some (3, 3));
+    assert (List.find_map (f ~limit:30) l = None);
+  end;
+
   assert (List.compare_lengths [] [] = 0);
   assert (List.compare_lengths [1;2] ['a';'b'] = 0);
   assert (List.compare_lengths [] [1;2] < 0);
@@ -32,6 +48,11 @@ let () =
   assert (List.compare_length_with [1] 0 > 0);
   assert (List.compare_length_with ['1'] 1 = 0);
   assert (List.compare_length_with ['1'] 2 < 0);
+  assert (List.filter_map string_of_even_opt l = ["0";"2";"4";"6";"8"]);
+  assert (List.concat_map (fun i -> [i; i+1]) [1; 5] = [1; 2; 5; 6]);
+  assert (
+    let count = ref 0 in
+    List.concat_map (fun i -> incr count; [i; !count]) [1; 5] = [1; 1; 5; 2]);
   ()
 ;;
 
@@ -56,7 +77,8 @@ let () =
     let _ = List.init n (fun x -> result := (x = n - 1)) in
     assert !result
   in
-  let threshold = 10_000 in (* Threshold must equal the value in stdlib/list.ml *)
+  (* Threshold must equal the value in stdlib/list.ml *)
+  let threshold = 10_000 in
   test threshold; (* Non tail-recursive case *)
   test (threshold + 1) (* Tail-recursive case *)
 ;;

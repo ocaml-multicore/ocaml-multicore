@@ -1,3 +1,12 @@
+(* TEST
+
+* hassysthreads
+include systhreads
+** bytecode
+** native
+
+*)
+
 let private_data = (Hashtbl.create 17 : (Thread.t, string) Hashtbl.t)
 let private_data_lock = Mutex.create()
 let output_lock = Mutex.create()

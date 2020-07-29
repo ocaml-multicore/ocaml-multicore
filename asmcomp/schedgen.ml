@@ -17,7 +17,7 @@
 
 open Reg
 open Mach
-open Linearize
+open Linear
 
 (* Representation of the code DAG. *)
 
@@ -360,7 +360,8 @@ method schedule_fundecl f =
   let rec schedule i try_nesting =
     match i.desc with
     | Lend -> i
-    | Lpushtrap -> { i with next = schedule i.next (try_nesting + 1) }
+    | Lpushtrap { lbl_handler = _; }
+      -> { i with next = schedule i.next (try_nesting + 1) }
     | Lpoptrap -> { i with next = schedule i.next (try_nesting - 1) }
     | _ ->
         if self#instr_in_basic_block i try_nesting then begin
@@ -383,7 +384,7 @@ method schedule_fundecl f =
       self#reschedule ready_queue 0 (schedule i try_nesting)
     end in
 
-  if f.fun_fast then begin
+  if f.fun_fast && !Clflags.insn_sched then begin
     let new_body = schedule f.fun_body 0 in
     clear_code_dag();
     { fun_name = f.fun_name;
@@ -392,6 +393,11 @@ method schedule_fundecl f =
       fun_fast = f.fun_fast;
       fun_dbg  = f.fun_dbg;
       fun_spacetime_shape = f.fun_spacetime_shape;
+      fun_tailrec_entry_point_label = f.fun_tailrec_entry_point_label;
+      fun_contains_calls = f.fun_contains_calls;
+      fun_num_stack_slots = f.fun_num_stack_slots;
+      fun_frame_required = f.fun_frame_required;
+      fun_prologue_required = f.fun_prologue_required;
     }
   end else
     f

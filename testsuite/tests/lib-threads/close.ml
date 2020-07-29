@@ -1,3 +1,12 @@
+(* TEST
+
+* hassysthreads
+include systhreads
+** bytecode
+** native
+
+*)
+
 let main () =
   let (rd, wr) = Unix.pipe() in
   let t = Thread.create
