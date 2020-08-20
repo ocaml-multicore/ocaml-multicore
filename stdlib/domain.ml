@@ -42,6 +42,22 @@ module Sync = struct
   external poll : unit -> unit = "%poll"
 end
 
+module Mutex = struct
+  type t
+  external create : unit -> t = "caml_mutex_new"
+  external lock : t -> unit = "caml_mutex_lock"
+  external unlock : t -> unit = "caml_mutex_unlock"
+  external try_lock : t -> unit = "caml_mutex_try_lock"
+end
+
+module Condition = struct
+  type t
+  external create : Mutex.t -> t = "caml_condition_new"
+  external wait : t -> unit = "caml_condition_wait"
+  external broadcast : t -> unit = "caml_condition_broadcast"
+  external signal : t -> unit = "caml_condition_signal"
+end
+
 type id = Raw.t
 
 type 'a state =
@@ -56,7 +72,7 @@ type 'a t =
 exception Retry
 let rec spin f =
   try f () with Retry ->
-     (* fixme: spin more gently *)
+     Raw.cpu_relax ();
      spin f
 
 let cas r vold vnew =

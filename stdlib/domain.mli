@@ -111,6 +111,22 @@ module Sync : sig
   (** poll for interrupts *)
 end
 
+module Mutex : sig
+  type t
+  val create : unit -> t
+  val lock : t -> unit
+  val unlock : t -> unit
+  val try_lock : t -> unit
+end
+
+module Condition : sig
+  type t
+  val create : Mutex.t -> t
+  val wait : t -> unit
+  val broadcast : t -> unit
+  val signal : t -> unit
+end
+
 module DLS : sig
 (** Domain-local Storage *)
 

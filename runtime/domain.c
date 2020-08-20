@@ -1457,3 +1457,159 @@ CAMLprim value caml_domain_dls_get(value unused)
   CAMLnoalloc;
   return caml_read_root(Caml_state->dls_root);
 }
+
+/* Mutex variables */
+
+#define Mutex_val(v) (* ((caml_plat_mutex**) Data_custom_val(v)))
+
+static void caml_mutex_finalize(value wrapper)
+{
+  caml_plat_mutex* m = Mutex_val(wrapper);
+  caml_plat_mutex_free(m);
+  caml_stat_free(m);
+}
+
+static int caml_mutex_compare(value wrapper1, value wrapper2)
+{
+  caml_plat_mutex* mut1 = Mutex_val(wrapper1);
+  caml_plat_mutex* mut2 = Mutex_val(wrapper2);
+  return mut1 == mut2 ? 0 : mut1 < mut2 ? -1 : 1;
+}
+
+static intnat caml_mutex_hash(value wrapper)
+{
+  return (intnat) (Mutex_val(wrapper));
+}
+
+static const struct custom_operations caml_mutex_ops = {
+  "_mutex",
+  caml_mutex_finalize,
+  caml_mutex_compare,
+  caml_mutex_hash,
+  custom_serialize_default,
+  custom_deserialize_default,
+  custom_compare_ext_default,
+  custom_fixed_length_default
+};
+
+CAMLprim value caml_mutex_new (value unused)
+{
+  caml_plat_mutex* m;
+  value wrapper;
+
+  m = caml_stat_alloc_noexc(sizeof(caml_plat_mutex));
+  caml_plat_mutex_init(m);
+  wrapper = caml_alloc_custom(&caml_mutex_ops, sizeof(caml_plat_mutex*), 0, 1);
+  Mutex_val(wrapper) = m;
+  return wrapper;
+}
+
+CAMLprim value caml_mutex_lock (value wrapper)
+{
+  CAMLparam1(wrapper);
+  caml_plat_mutex* m = Mutex_val(wrapper);
+  caml_enter_blocking_section();
+  caml_plat_lock(m);
+  caml_leave_blocking_section();
+  CAMLreturn (Val_unit);
+}
+
+CAMLprim value caml_mutex_unlock (value wrapper)
+{
+  CAMLparam1(wrapper);
+  caml_plat_mutex* m = Mutex_val(wrapper);
+  caml_enter_blocking_section();
+  caml_plat_unlock(m);
+  caml_leave_blocking_section();
+  CAMLreturn (Val_unit);
+}
+
+CAMLprim value caml_mutex_try_lock (value wrapper)
+{
+  CAMLparam1(wrapper);
+  caml_plat_mutex* m = Mutex_val(wrapper);
+  caml_enter_blocking_section();
+  caml_plat_try_lock(m);
+  caml_leave_blocking_section();
+  CAMLreturn (Val_unit);
+}
+
+/* Condition operations */
+
+#define Condition_val(v) (* ((caml_plat_cond**) Data_custom_val(v)))
+
+static void caml_condition_finalize (value wrapper)
+{
+  caml_plat_cond* c = Condition_val(wrapper);
+  caml_plat_cond_free(c);
+  caml_stat_free(c);
+}
+
+static int caml_condition_compare(value wrapper1, value wrapper2)
+{
+  caml_plat_cond* cond1 = Condition_val(wrapper1);
+  caml_plat_cond* cond2 = Condition_val(wrapper2);
+  return cond1 == cond2 ? 0 : cond1 < cond2 ? -1 : 1;
+}
+
+static intnat caml_condition_hash(value wrapper)
+{
+  return (intnat) (Condition_val(wrapper));
+}
+
+static struct custom_operations caml_condition_ops = {
+  "_condition",
+  caml_condition_finalize,
+  caml_condition_compare,
+  caml_condition_hash,
+  custom_serialize_default,
+  custom_deserialize_default,
+  custom_compare_ext_default,
+  custom_fixed_length_default
+};
+
+CAMLprim value caml_condition_new (value mutex_wrapper)
+{
+  CAMLparam1(mutex_wrapper);
+  caml_plat_mutex* m;
+  caml_plat_cond* c;
+  value wrapper;
+
+  m = Mutex_val(mutex_wrapper);
+  c = caml_stat_alloc_noexc(sizeof(caml_plat_cond));
+  caml_plat_cond_init(c, m);
+  wrapper =
+    caml_alloc_custom(&caml_condition_ops, sizeof(caml_plat_cond*), 0, 1);
+  Condition_val(wrapper) = c;
+  CAMLreturn (wrapper);
+}
+
+CAMLprim value caml_condition_signal (value wrapper)
+{
+  CAMLparam1(wrapper);
+  caml_plat_cond* c = Condition_val(wrapper);
+  caml_enter_blocking_section();
+  caml_plat_signal(c);
+  caml_leave_blocking_section();
+  CAMLreturn (Val_unit);
+}
+
+CAMLprim value caml_condition_broadcast (value wrapper)
+{
+  CAMLparam1(wrapper);
+  caml_plat_cond* c = Condition_val(wrapper);
+  caml_enter_blocking_section();
+  caml_plat_broadcast(c);
+  caml_leave_blocking_section();
+  CAMLreturn (Val_unit);
+}
+
+CAMLprim value caml_condition_wait (value wrapper)
+{
+  CAMLparam1(wrapper);
+  caml_plat_cond* c = Condition_val(wrapper);
+  caml_enter_blocking_section();
+  caml_plat_wait(c);
+  caml_leave_blocking_section();
+  CAMLreturn (Val_unit);
+}
