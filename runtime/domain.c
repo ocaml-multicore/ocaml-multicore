@@ -1530,7 +1530,8 @@ CAMLprim value caml_mutex_new (value unused)
 
 CAMLprim value caml_mutex_lock (value wrapper)
 {
-  CAMLparam1(wrapper);
+  CAMLparam1(wrapper); /* prevent deallocation of wrapper and destruction of
+                          mutex */
   caml_plat_mutex* m = Mutex_val(wrapper);
   caml_enter_blocking_section();
   caml_plat_lock(m);
