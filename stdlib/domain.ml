@@ -46,16 +46,16 @@ module Mutex = struct
   type t
   external create : unit -> t = "caml_mutex_new"
   external lock : t -> unit = "caml_mutex_lock"
-  external unlock : t -> unit = "caml_mutex_unlock"
-  external try_lock : t -> unit = "caml_mutex_try_lock"
+  external unlock : t -> unit = "caml_mutex_unlock" [@@noalloc]
+  external try_lock : t -> bool = "caml_mutex_try_lock" [@@noalloc]
 end
 
 module Condition = struct
   type t
   external create : Mutex.t -> t = "caml_condition_new"
   external wait : t -> unit = "caml_condition_wait"
-  external broadcast : t -> unit = "caml_condition_broadcast"
-  external signal : t -> unit = "caml_condition_signal"
+  external broadcast : t -> unit = "caml_condition_broadcast" [@@noalloc]
+  external signal : t -> unit = "caml_condition_signal" [@@noalloc]
 end
 
 type id = Raw.t

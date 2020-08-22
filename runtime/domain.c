@@ -1530,33 +1530,32 @@ CAMLprim value caml_mutex_new (value unused)
 
 CAMLprim value caml_mutex_lock (value wrapper)
 {
-  CAMLparam1(wrapper); /* prevent deallocation of wrapper and destruction of
-                          mutex */
-  caml_plat_mutex* m = Mutex_val(wrapper);
-  caml_enter_blocking_section();
-  caml_plat_lock(m);
-  caml_leave_blocking_section();
-  CAMLreturn (Val_unit);
+  caml_plat_mutex* m;
+
+  m = Mutex_val(wrapper);
+  /* first try to acquire mutex without releasing the master lock */
+  if (caml_plat_try_lock(m)) return Val_unit;
+  /* If unsuccessful, block on mutex */
+  Begin_root(wrapper); /* prevent the deallocation of mutex */
+    caml_enter_blocking_section();
+    caml_plat_lock(m);
+    caml_leave_blocking_section();
+  End_roots();
+  return Val_unit;
 }
 
 CAMLprim value caml_mutex_unlock (value wrapper)
 {
-  CAMLparam1(wrapper);
   caml_plat_mutex* m = Mutex_val(wrapper);
-  caml_enter_blocking_section();
   caml_plat_unlock(m);
-  caml_leave_blocking_section();
-  CAMLreturn (Val_unit);
+  return Val_unit;
 }
 
 CAMLprim value caml_mutex_try_lock (value wrapper)
 {
-  CAMLparam1(wrapper);
   caml_plat_mutex* m = Mutex_val(wrapper);
-  caml_enter_blocking_section();
-  caml_plat_try_lock(m);
-  caml_leave_blocking_section();
-  CAMLreturn (Val_unit);
+  if (caml_plat_try_lock(m)) return Val_true;
+  return Val_false;
 }
 
 /* Condition operations */
@@ -1611,22 +1610,16 @@ CAMLprim value caml_condition_new (value mutex_wrapper)
 
 CAMLprim value caml_condition_signal (value wrapper)
 {
-  CAMLparam1(wrapper);
   caml_plat_cond* c = Condition_val(wrapper);
-  caml_enter_blocking_section();
   caml_plat_signal(c);
-  caml_leave_blocking_section();
-  CAMLreturn (Val_unit);
+  return Val_unit;
 }
 
 CAMLprim value caml_condition_broadcast (value wrapper)
 {
-  CAMLparam1(wrapper);
   caml_plat_cond* c = Condition_val(wrapper);
-  caml_enter_blocking_section();
   caml_plat_broadcast(c);
-  caml_leave_blocking_section();
-  CAMLreturn (Val_unit);
+  return Val_unit;
 }
 
 CAMLprim value caml_condition_wait (value wrapper)
