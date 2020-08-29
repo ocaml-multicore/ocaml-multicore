@@ -1250,6 +1250,8 @@ method emit_fundecl f =
   let fun_spacetime_shape =
     self#insert_prologue f ~loc_arg ~rarg ~spacetime_node_hole ~env
   in
+  if not(Polling.allocates_unconditionally body || Polling.is_leaf_func_without_loops body) then
+    self#insert env (Iop(Ipoll)) [||] [||];  
   let body = self#extract_core ~end_instr:body in
   instr_iter (fun instr -> self#mark_instr instr.Mach.desc) body;
   { fun_name = f.Cmm.fun_name;

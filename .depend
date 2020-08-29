@@ -2534,14 +2534,10 @@ asmcomp/mach.cmi : \
 asmcomp/polling.cmo : \
     asmcomp/reg.cmi \
     asmcomp/mach.cmi \
-    lambda/debuginfo.cmi \
-    asmcomp/cmm.cmi \
     asmcomp/polling.cmi
 asmcomp/polling.cmx : \
     asmcomp/reg.cmx \
     asmcomp/mach.cmx \
-    lambda/debuginfo.cmx \
-    asmcomp/cmm.cmx \
     asmcomp/polling.cmi
 asmcomp/polling.cmi : \
     asmcomp/mach.cmi
@@ -2709,6 +2705,7 @@ asmcomp/selectgen.cmo : \
     lambda/simplif.cmi \
     asmcomp/reg.cmi \
     asmcomp/proc.cmi \
+    asmcomp/polling.cmi \
     utils/numbers.cmi \
     utils/misc.cmi \
     asmcomp/mach.cmi \
@@ -2724,6 +2721,7 @@ asmcomp/selectgen.cmx : \
     lambda/simplif.cmx \
     asmcomp/reg.cmx \
     asmcomp/proc.cmx \
+    asmcomp/polling.cmx \
     utils/numbers.cmx \
     utils/misc.cmx \
     asmcomp/mach.cmx \
