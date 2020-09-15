@@ -48,7 +48,7 @@ let test_interrupt_routing () =
      even if they reuse the same internal domain *)
   let d1 = Domain.spawn id in
   join d1;
-  let r = Atomic.make false in
+  let r = Atomic.create false in
   let d2 = Domain.spawn (fun () ->
     Sync.(critical_section (fun () ->
       Atomic.set r true; wait (); Atomic.set r false))) in

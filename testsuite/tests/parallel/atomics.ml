@@ -9,7 +9,7 @@ type u = U of unit
 let () =
   (* See https://github.com/ocaml-multicore/ocaml-multicore/issues/252 *)
   let make_cell (x : unit) : u Atomic.t =
-    let cell = Atomic.make (U x) in
+    let cell = Atomic.create (U x) in
     Atomic.set cell (U x) ;
     cell in
   (* the error shows up with an array of length 256 or larger *)
@@ -22,7 +22,7 @@ let test_fetch_add () =
   let count = 10000 in
   let arr = Array.make (ndoms * count) (-1) in
   let step = 1493 in
-  let r = Atomic.make 0 in
+  let r = Atomic.create 0 in
   (* step is relatively prime to Array.length arr *)
   let loop () =
     let self = (Domain.self () :> int) in
@@ -56,7 +56,7 @@ let test v =
   assert (get v = 20)
 
 let () =
-  let r = Atomic.make 42 in
+  let r = Atomic.create 42 in
   test r;
   Atomic.set r 42;
   Gc.full_major ();

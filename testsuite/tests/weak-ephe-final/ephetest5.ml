@@ -3,7 +3,7 @@
 module E = Ephemeron.K1
 
 module S = struct
-  let make () = Atomic.make false
+  let make () = Atomic.create false
 
   let rec wait s =
     let success =

@@ -77,8 +77,8 @@ module Q : QS = struct
       tail : 'a node Atomic.t }
 
   let create () =
-    let head = (Next (Obj.magic (), Atomic.make Nil)) in
-    { head = Atomic.make head ; tail = Atomic.make head }
+    let head = (Next (Obj.magic (), Atomic.create Nil)) in
+    { head = Atomic.create head ; tail = Atomic.create head }
 
   let is_empty q =
     match Atomic.get q.head with
@@ -108,7 +108,7 @@ module Q : QS = struct
            | Nil -> find_tail_and_enq curr_end node
            | Next (_, n) -> find_tail_and_enq n node
     in
-    let newnode = Next (v, Atomic.make Nil) in
+    let newnode = Next (v, Atomic.create Nil) in
     let tail = Atomic.get q.tail in
     match tail with
     | Nil         -> failwith "HW_MSQueue.push: impossible"
@@ -212,7 +212,7 @@ end
 
 let _ =
   let procs = 4 in
-  let counter = Atomic.make 0 in
+  let counter = Atomic.create 0 in
   let rec finish () =
     let v = Atomic.get counter in
     if not (Atomic.compare_and_set counter v (v+1)) then finish ();

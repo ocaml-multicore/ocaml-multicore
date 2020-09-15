@@ -53,7 +53,7 @@ let () =
 (* Test that notifications interrupt waits *)
 let () =
   let start = timer_ticks () in
-  let flag = Atomic.make false in
+  let flag = Atomic.create false in
   let d1 = spawn (fun () ->
     critical_section (fun () ->
       let r = wait_until Int64.(add start (of_int 1000_000_000)) in
