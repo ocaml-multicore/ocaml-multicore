@@ -63,7 +63,7 @@ let cas r vold vnew =
   if not (Atomic.compare_and_set r vold vnew) then raise Retry
 
 let spawn f =
-  let state = Atomic.make Running in
+  let state = Atomic.create Running in
   let body () =
     let result = match f () with
       | x -> Ok x
