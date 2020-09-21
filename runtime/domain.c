@@ -885,10 +885,11 @@ void caml_handle_gc_interrupt() {
   atomic_uintnat* young_limit = domain_self->interrupt_word_address;
   CAMLalloc_point_here;
 
-  if (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
+  if (!Caml_state->handling_interrupt &&
+      atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
+
     /* interrupt */
     caml_ev_begin("handle_interrupt");
-    if (Caml_state->handling_interrupt) return;
     Caml_state->handling_interrupt = 1;
 
     while (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
