@@ -392,6 +392,7 @@ static void* backup_thread_func(void* v)
 
   domain_self = di;
   SET_Caml_state((void*)(di->tls_area));
+  caml_ev_tag_self_as_backup_thread();
 
   msg = atomic_load_acq (&di->backup_thread_msg);
   while (msg != BT_TERMINATE) {
@@ -881,7 +882,9 @@ void caml_request_minor_gc (void)
   caml_interrupt_self();
 }
 
-void caml_handle_gc_interrupt() {
+void caml_handle_gc_interrupt()
+{
+  caml_ev_begin("handle_gc_interrupt");
   atomic_uintnat* young_limit = domain_self->interrupt_word_address;
   CAMLalloc_point_here;
 
@@ -889,7 +892,7 @@ void caml_handle_gc_interrupt() {
       atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
 
     /* interrupt */
-    caml_ev_begin("handle_interrupt");
+    caml_ev_begin("handle_remote_interrupt");
     Caml_state->handling_interrupt = 1;
 
     while (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
@@ -901,7 +904,7 @@ void caml_handle_gc_interrupt() {
     caml_ev_resume();
 
     Caml_state->handling_interrupt = 0;
-    caml_ev_end("handle_interrupt");
+    caml_ev_end("handle_remote_interrupt");
   }
 
   if (((uintnat)Caml_state->young_ptr - Bhsize_wosize(Max_young_wosize) <
@@ -930,6 +933,7 @@ void caml_handle_gc_interrupt() {
     caml_major_collection_slice(AUTO_TRIGGERED_MAJOR_SLICE);
     caml_ev_end("dispatch_major_slice");
   }
+  caml_ev_end("handle_gc_interrupt");
 }
 
 static void caml_enter_blocking_section_default(void)
@@ -955,9 +959,6 @@ CAMLexport void caml_leave_blocking_section() {
 
   if (self->backup_thread_running) {
     atomic_store_rel(&self->backup_thread_msg, BT_ENTERING_OCAML);
-    caml_plat_lock(&self->interruptor.lock);
-    caml_plat_signal(&self->interruptor.cond);
-    caml_plat_unlock(&self->interruptor.lock);
   }
 
   caml_plat_lock(&self->domain_lock);
@@ -1210,6 +1211,10 @@ static void domain_terminate()
       s->running = 0;
       s->unique_id += Max_domains;
 
+      /* signal the interruptor condition variable
+       * because the backup thread may be waiting on it
+       */
+      caml_plat_broadcast(&s->cond);
       Assert (domain_self->backup_thread_running);
       domain_self->backup_thread_running = 0;
     }
