@@ -48,8 +48,18 @@ unsigned caml_plat_spin_wait(unsigned spins,
                              const char* file, int line,
                              const char* function);
 
-#define SPIN_WAIT                                                       \
-  for (; 1; cpu_relax())
+#define GENSYM_3(name, l) name##l
+#define GENSYM_2(name, l) GENSYM_3(name, l)
+#define GENSYM(name) GENSYM_2(name, __LINE__)
+
+ #define SPIN_WAIT                                                       \
+  unsigned GENSYM(caml__spins) = 0;                                     \
+  for (; 1; cpu_relax(),                                                \
+         GENSYM(caml__spins) =                                          \
+           CAMLlikely(GENSYM(caml__spins) < Max_spins) ?                \
+         GENSYM(caml__spins) + 1 :                                      \
+         caml_plat_spin_wait(GENSYM(caml__spins),                       \
+                             __FILE__, __LINE__, __func__))
 
 INLINE uintnat atomic_load_wait_nonzero(atomic_uintnat* p) {
   SPIN_WAIT {
@@ -79,6 +89,8 @@ void caml_plat_mutex_free(caml_plat_mutex*);
 typedef struct { pthread_cond_t cond; caml_plat_mutex* mutex; } caml_plat_cond;
 #define CAML_PLAT_COND_INITIALIZER(m) { PTHREAD_COND_INITIALIZER, m }
 void caml_plat_cond_init(caml_plat_cond*, caml_plat_mutex*);
+void caml_plat_cond_init_no_mutex(caml_plat_cond* cond);
+void caml_plat_cond_set_mutex(caml_plat_cond *cond, caml_plat_mutex* m);
 void caml_plat_wait(caml_plat_cond*);
 /* like caml_plat_wait, but if caml_time_counter() surpasses the second parameter
    without a signal, then this function returns 1. */
