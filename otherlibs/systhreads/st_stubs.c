@@ -65,6 +65,7 @@ struct caml_thread_struct {
   int backtrace_pos;
   code_t * backtrace_buffer;
   caml_root backtrace_last_exn;
+  value * gc_regs;
   value * gc_regs_buckets;
   value ** gc_regs_slot;
   void * exn_handler;
@@ -126,8 +127,8 @@ static void caml_thread_scan_roots(scanning_action action, void *fdata, struct d
       (*action)(fdata, th->descr, &th->descr);
 
       if (th != Current_thread) {
-	if (th->current_stack != NULL)
-	  caml_do_local_roots(action, fdata, th->local_roots, th->current_stack, 0);
+        if (th->current_stack != NULL)
+	        caml_do_local_roots(action, fdata, th->local_roots, th->current_stack, th->gc_regs);
       }
       th = th->next;
     } while (th != Current_thread);
@@ -143,6 +144,7 @@ void caml_thread_save_runtime_state(void)
 {
   Current_thread->current_stack = Caml_state->current_stack;
   Current_thread->c_stack = Caml_state->c_stack;
+  Current_thread->gc_regs = Caml_state->gc_regs;
   Current_thread->gc_regs_buckets = Caml_state->gc_regs_buckets;
   Current_thread->gc_regs_slot = Caml_state->gc_regs_slot;
   Current_thread->exn_handler = Caml_state->exn_handler;
@@ -161,6 +163,7 @@ void caml_thread_restore_runtime_state(void)
 {
   Caml_state->current_stack = Current_thread->current_stack;
   Caml_state->c_stack = Current_thread->c_stack;
+  Caml_state->gc_regs = Current_thread->gc_regs;
   Caml_state->gc_regs_buckets = Current_thread->gc_regs_buckets;
   Caml_state->gc_regs_slot = Current_thread->gc_regs_slot;
   Caml_state->exn_handler = Current_thread->exn_handler;
@@ -409,6 +412,72 @@ CAMLprim value caml_thread_new(value clos)          /* ML */
   CAMLreturn(th->descr);
 }
 
+/* Register a thread already created from C */
+
+CAMLexport int caml_c_thread_register(void)
+{
+  caml_thread_t th;
+
+  /* Already registered? */
+  if (Caml_state == NULL) {
+    caml_init_domain_self(0);
+  };
+  if (st_tls_get(Thread_key) != NULL) return 0;
+  /* Take master lock to protect access to the runtime */
+  st_masterlock_acquire(&Thread_main_lock);
+  /* Create a thread info block */
+  th = caml_thread_new_info();
+  /* If it fails, we release the lock and return an error. */
+  if (th == NULL) {
+    st_masterlock_release(&Thread_main_lock);
+    return 0;
+  }
+  /* Add thread info block to the list of threads */
+  if (All_threads == NULL) {
+    th->next = th;
+    th->prev = th;
+    All_threads = th;
+  } else {
+    th->next = All_threads->next;
+    th->prev = All_threads;
+    All_threads->next->prev = th;
+    All_threads->next = th;
+  }
+  /* Associate the thread descriptor with the thread */
+  st_tls_set(Thread_key, (void *) th);
+  /* Allocate the thread descriptor on the heap */
+  th->descr = caml_thread_new_descriptor(Val_unit);  /* no closure */
+  /* Release the master lock */
+  st_masterlock_release(&Thread_main_lock);
+  return 1;
+}
+
+/* Unregister a thread that was created from C and registered with
+   the function above */
+
+CAMLexport int caml_c_thread_unregister(void)
+{
+  caml_thread_t th;
+
+  /* If Caml_state is not set, this thread was likely not registered */
+  if (Caml_state == NULL) return 0;
+
+  th = st_tls_get(Thread_key);
+  /* Not registered? */
+  if (th == NULL) return 0;
+  /* Wait until the runtime is available */
+  st_masterlock_acquire(&Thread_main_lock);
+  /*  Forget the thread descriptor */
+  st_tls_set(Thread_key, NULL);
+  /* Remove thread info block from list of threads, and free it */
+  caml_thread_remove_info(th);
+  Current_thread = Current_thread->next;
+  caml_thread_restore_runtime_state();
+  /* Release the runtime */
+  st_masterlock_release(&Thread_main_lock);
+  return 1;
+}
+
 /* Return the current thread */
 
 CAMLprim value caml_thread_self(value unit)         /* ML */
@@ -532,7 +601,7 @@ CAMLprim value caml_mutex_lock(value wrapper)     /* ML */
   st_mutex mut = Mutex_val(wrapper);
 
   /* PR#4351: first try to acquire mutex without releasing the master lock */
-  if (caml_plat_try_lock(mut)) return Val_unit;
+  if (caml_plat_try_lock(mut) == MUTEX_PREVIOUSLY_UNLOCKED) return Val_unit;
   /* If unsuccessful, block on mutex */
   Begin_root(wrapper)
     caml_enter_blocking_section();
@@ -554,7 +623,7 @@ CAMLprim value caml_mutex_try_lock(value wrapper)           /* ML */
 {
   st_mutex mut = Mutex_val(wrapper);
   int retcode = st_mutex_trylock(mut);
-  if (retcode == 1) return Val_false;
+  if (retcode == MUTEX_ALREADY_LOCKED) return Val_false;
   return Val_true;
 }
 
