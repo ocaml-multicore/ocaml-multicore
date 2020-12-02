@@ -67,14 +67,13 @@ tests/promotion/bigrecmod.ml
 
 # Effects syntax has been removed
 effects
-tests/callback/test7.byte
-tests/callback/stack_overflow.byte
-tests/callback/stack_overflow.native
-tests/callback/nested_fiber.native
-tests/backtrace/'backtrace_effects.ml' with ocamlopt
-tests/backtrace/'backtrace_effects_nested.ml' with ocamlc
-tests/backtrace/'backtrace_effects_nested.ml' with ocamlopt
-tests/backtrace/'backtrace_effects.ml' with ocamlc
-tests/parallel/mctest.ml
-tests/parallel/deadcont.byte
-tests/parallel/deadcont.native
+tests/parallel/'mctest.ml' with 1.1 (bytecode)
+tests/parallel/'mctest.ml' with 1.2 (native)
+tests/callback/'stack_overflow.ml' with 1.2 (native)
+tests/callback/'nested_fiber.ml' with 1.1 (bytecode)
+tests/parallel/'deadcont.ml' with 1.2 (native)
+tests/parallel/'deadcont.ml' with 1.1 (bytecode)
+tests/callback/'test7.ml' with 1.1 (bytecode)
+tests/callback/'stack_overflow.ml' with 1.1 (bytecode)
+tests/callback/'test7.ml' with 1.2 (native)
+tests/callback/'nested_fiber.ml' with 1.2 (native)
