@@ -113,7 +113,8 @@ static struct dom_internal all_domains[Max_domains];
 
 CAMLexport atomic_uintnat caml_num_domains_running;
 
-static uintnat minor_heaps_base;
+CAMLexport uintnat caml_minor_heaps_base;
+CAMLexport uintnat caml_minor_heaps_end;
 static __thread dom_internal* domain_self;
 
 static int64_t startup_timestamp;
@@ -156,8 +157,8 @@ asize_t caml_norm_minor_heap_size (intnat wsize)
   if (wsize < Minor_heap_min) wsize = Minor_heap_min;
   bs = caml_mem_round_up_pages(Bsize_wsize (wsize));
 
-  Assert(page_size * 2 < (1 << Minor_heap_align_bits));
-  max = (1 << Minor_heap_align_bits) - page_size * 2;
+  Assert(page_size * 2 < Minor_heap_max);
+  max = Minor_heap_max - page_size * 2;
 
   if (bs > max) bs = max;
 
@@ -175,7 +176,6 @@ int caml_reallocate_minor_heap(asize_t wsize)
   caml_mem_decommit((void*)domain_self->minor_heap_area,
                     domain_self->minor_heap_area_end - domain_self->minor_heap_area);
 
-  /* we allocate a double buffer to allow early release in minor_gc */
   wsize = caml_norm_minor_heap_size(wsize);
 
   if (!caml_mem_commit((void*)domain_self->minor_heap_area, Bsize_wsize(wsize))) {
@@ -336,16 +336,17 @@ void caml_init_domains(uintnat minor_heap_wsz) {
   void* heaps_base;
 
   /* sanity check configuration */
-  if (caml_mem_round_up_pages(1 << Minor_heap_align_bits) != (1 << Minor_heap_align_bits))
-    caml_fatal_error("Minor_heap_align_bits misconfigured for this platform");
+  if (caml_mem_round_up_pages(Minor_heap_max) != Minor_heap_max)
+    caml_fatal_error("Minor_heap_max misconfigured for this platform");
 
   /* reserve memory space for minor heaps */
-  size = (uintnat)1 << (Minor_heap_sel_bits + Minor_heap_align_bits);
+  size = (uintnat)Minor_heap_max * Max_domains;
 
   heaps_base = caml_mem_map(size*2, size*2, 1 /* reserve_only */);
   if (!heaps_base) caml_raise_out_of_memory();
 
-  minor_heaps_base = (uintnat) heaps_base;
+  caml_minor_heaps_base = (uintnat) heaps_base;
+  caml_minor_heaps_end = (uintnat) heaps_base + size;
 
   for (i = 0; i < Max_domains; i++) {
     struct dom_internal* dom = &all_domains[i];
@@ -365,8 +366,8 @@ void caml_init_domains(uintnat minor_heap_wsz) {
     dom->backup_thread_running = 0;
     dom->backup_thread_msg = BT_INIT;
 
-    domain_minor_heap_base = minor_heaps_base +
-      (uintnat)(1 << Minor_heap_align_bits) * (uintnat)i;
+    domain_minor_heap_base = caml_minor_heaps_base +
+      (uintnat)Minor_heap_max * (uintnat)i;
     dom->tls_area = domain_minor_heap_base;
     dom->tls_area_end =
       caml_mem_round_up_pages(dom->tls_area +
@@ -374,7 +375,7 @@ void caml_init_domains(uintnat minor_heap_wsz) {
     dom->minor_heap_area = /* skip guard page */
       caml_mem_round_up_pages(dom->tls_area_end + 1);
     dom->minor_heap_area_end =
-      domain_minor_heap_base + (1 << Minor_heap_align_bits);
+      domain_minor_heap_base + Minor_heap_max;
   }
 
 
@@ -581,9 +582,9 @@ struct domain* caml_domain_self()
 }
 
 struct domain* caml_owner_of_young_block(value v) {
-  Assert(Is_minor(v));
-  int heap_id = ((uintnat)v - minor_heaps_base) /
-    (1 << Minor_heap_align_bits);
+  Assert(Is_young(v));
+  int heap_id = ((uintnat)v - caml_minor_heaps_base) /
+    Minor_heap_max;
   return &all_domains[heap_id].state;
 }
 
@@ -691,6 +692,7 @@ static void decrement_stw_domains_still_processing()
   }
 }
 
+static void caml_poll_gc_work();
 static void stw_handler(struct domain* domain, void* unused2, interrupt* done)
 {
 #ifdef DEBUG
@@ -735,7 +737,7 @@ static void stw_handler(struct domain* domain, void* unused2, interrupt* done)
   /* poll the GC to check for deferred work
      we do this here because blocking or waiting threads only execute
      the interrupt handler and do not poll for deferred work*/
-  caml_handle_gc_interrupt();
+  caml_poll_gc_work();
 }
 
 /* This runs the passed handler on all running domains but must only be run on *one* domain
@@ -781,13 +783,15 @@ int caml_try_run_on_all_domains_with_spin_work(
   int i;
   uintnat domains_participating = 0;
 
+  caml_gc_log("requesting STW");
+
   // Don't take the lock if there's already a stw leader
-  if( atomic_load_acq(&stw_leader) ) {
+  if (atomic_load_acq(&stw_leader)) {
+    caml_ev_begin("stw/leader_collision");
     caml_handle_incoming_interrupts();
+    caml_ev_end("stw/leader_collision");
     return 0;
   }
-
-  caml_gc_log("requesting STW");
 
   /* Try to take the lock by setting ourselves as the stw_leader.
      If it fails, handle interrupts (probably participating in
@@ -795,7 +799,9 @@ int caml_try_run_on_all_domains_with_spin_work(
   caml_plat_lock(&all_domains_lock);
   if (atomic_load_acq(&stw_leader)) {
     caml_plat_unlock(&all_domains_lock);
+    caml_ev_begin("stw/leader_collision");
     caml_handle_incoming_interrupts();
+    caml_ev_end("stw/leader_collision");
     return 0;
   } else {
     atomic_store_rel(&stw_leader, (uintnat)domain_self);
@@ -911,24 +917,9 @@ void caml_request_minor_gc (void)
   caml_interrupt_self();
 }
 
-void caml_handle_gc_interrupt()
+static void caml_poll_gc_work()
 {
-  caml_ev_begin("handle_gc_interrupt");
-  atomic_uintnat* young_limit = domain_self->interrupt_word_address;
   CAMLalloc_point_here;
-
-  if (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
-    /* interrupt */
-    caml_ev_begin("handle_remote_interrupt");
-    while (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
-      uintnat i = INTERRUPT_MAGIC;
-      atomic_compare_exchange_strong(young_limit, &i, (uintnat)Caml_state->young_start);
-    }
-    caml_ev_pause(EV_PAUSE_YIELD);
-    caml_handle_incoming_interrupts();
-    caml_ev_resume();
-    caml_ev_end("handle_remote_interrupt");
-  }
 
   if (((uintnat)Caml_state->young_ptr - Bhsize_wosize(Max_young_wosize) <
        (uintnat)Caml_state->young_start) ||
@@ -956,6 +947,28 @@ void caml_handle_gc_interrupt()
     caml_major_collection_slice(AUTO_TRIGGERED_MAJOR_SLICE);
     caml_ev_end("dispatch_major_slice");
   }
+}
+
+void caml_handle_gc_interrupt()
+{
+  atomic_uintnat* young_limit = domain_self->interrupt_word_address;
+  CAMLalloc_point_here;
+
+  caml_ev_begin("handle_gc_interrupt");
+  if (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
+    /* interrupt */
+    caml_ev_begin("handle_remote_interrupt");
+    while (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
+      uintnat i = INTERRUPT_MAGIC;
+      atomic_compare_exchange_strong(young_limit, &i, (uintnat)Caml_state->young_start);
+    }
+    caml_ev_pause(EV_PAUSE_YIELD);
+    caml_handle_incoming_interrupts();
+    caml_ev_resume();
+    caml_ev_end("handle_remote_interrupt");
+  }
+
+  caml_poll_gc_work();
   caml_ev_end("handle_gc_interrupt");
 }
 
