@@ -382,7 +382,7 @@ CAMLprim value caml_sys_getenv(value var)
   return val;
 }
 
-static caml_root main_argv;
+static value main_argv;
 
 CAMLprim value caml_sys_get_argv(value unit)
 {
@@ -390,19 +390,19 @@ CAMLprim value caml_sys_get_argv(value unit)
   CAMLlocal2 (exe_name, res);
   exe_name = caml_copy_string_of_os(caml_params->exe_name);
   res = caml_alloc_small(2, 0);
-  caml_initialize_field(res, 0, exe_name);
-  caml_initialize_field(res, 1, caml_read_root(main_argv));
+  Field(res, 0) = exe_name;
+  Field(res, 1) = main_argv;
   CAMLreturn(res);
 }
 
 CAMLprim value caml_sys_argv(value unit)
 {
-  return caml_read_root(main_argv);
+  return main_argv;
 }
 
 CAMLprim value caml_sys_modify_argv(value new_argv)
 {
-  caml_modify_root(main_argv, new_argv);
+  caml_modify_generational_global_root(&main_argv, new_argv);
   return Val_unit;
 }
 
@@ -413,7 +413,6 @@ CAMLprim value caml_sys_executable_name(value unit)
 
 void caml_sys_init(char_os * exe_name, char_os **argv)
 {
-  value v;
 #ifdef _WIN32
   /* Initialises the caml_win32_* globals on Windows with the version of
      Windows which is running */
@@ -423,9 +422,9 @@ void caml_sys_init(char_os * exe_name, char_os **argv)
 #endif
 #endif
   caml_init_exe_name(exe_name);
-  v = caml_alloc_array((void *)caml_copy_string_of_os,
+  main_argv = caml_alloc_array((void *)caml_copy_string_of_os,
                        (char const **) argv);
-  main_argv = caml_create_root(v);
+  caml_register_generational_global_root(&main_argv);
 }
 
 #ifdef _WIN32
