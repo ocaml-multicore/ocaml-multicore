@@ -274,8 +274,9 @@ static void create_domain(uintnat initial_minor_heap_wsize) {
       goto reallocate_minor_heap_failure;
     }
 
-    domain_state->dls_root = caml_create_root_noexc(Val_unit);
-    if(domain_state->dls_root == NULL) {
+    domain_state->dls_root = Val_unit;
+    caml_register_generational_global_root(&domain_state->dls_root);
+    if(&domain_state->dls_root == NULL) {
       goto create_root_failure;
     }
 
@@ -300,7 +301,7 @@ static void create_domain(uintnat initial_minor_heap_wsize) {
   caml_free_stack(domain_state->current_stack);
 alloc_main_stack_failure:
 create_stack_cache_failure:
-  caml_delete_root(domain_state->dls_root);
+  caml_remove_generational_global_root(&domain_state->dls_root);
 create_root_failure:
 reallocate_minor_heap_failure:
   caml_teardown_major_gc();
@@ -1253,7 +1254,7 @@ static void domain_terminate()
 
   caml_gc_log("Domain terminating");
   caml_ev_pause(EV_PAUSE_YIELD);
-  caml_delete_root(domain_state->dls_root);
+  caml_remove_generational_global_root(&domain_state->dls_root);
   s->terminating = 1;
 
   while (!finished) {
@@ -1568,12 +1569,12 @@ CAMLprim value caml_ml_domain_cpu_relax(value t)
 CAMLprim value caml_domain_dls_set(value t)
 {
   CAMLnoalloc;
-  caml_modify_root(Caml_state->dls_root, t);
+  caml_modify_generational_global_root(&Caml_state->dls_root, t);
   return Val_unit;
 }
 
 CAMLprim value caml_domain_dls_get(value unused)
 {
   CAMLnoalloc;
-  return caml_read_root(Caml_state->dls_root);
+  return Caml_state->dls_root;
 }
