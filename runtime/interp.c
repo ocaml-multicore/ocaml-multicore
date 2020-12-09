@@ -221,7 +221,7 @@ sp is a local copy of the global variable Caml_state->extern_sp. */
 static __thread intnat caml_bcodcount;
 #endif
 
-static caml_root raise_unhandled;
+static value raise_unhandled;
 
 /* The interpreter itself */
 value caml_interprete(code_t prog, asize_t prog_size)
@@ -273,7 +273,8 @@ value caml_interprete(code_t prog, asize_t prog_size)
     value raise_unhandled_closure =
       caml_alloc_1(Closure_tag,
                    Val_bytecode(raise_unhandled_code));
-    raise_unhandled = caml_create_root(raise_unhandled_closure);
+    raise_unhandled = raise_unhandled_closure;
+    caml_register_generational_global_root(&raise_unhandled);
     caml_global_data = caml_create_root(Val_unit);
     caml_init_callbacks();
     return Val_unit;
@@ -1367,7 +1368,7 @@ do_resume: {
 
       if (parent == NULL) {
         accu = caml_continuation_use(cont);
-        resume_fn = caml_read_root(raise_unhandled);
+        resume_fn = raise_unhandled;
         resume_arg = Field_imm(caml_read_root(caml_global_data), UNHANDLED_EXN);
         goto do_resume;
       }
