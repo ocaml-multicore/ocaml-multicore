@@ -39,7 +39,7 @@
 
 CAMLprim value caml_get_global_data(value unit)
 {
-  return caml_read_root(caml_global_data);
+  return caml_global_data;
 }
 
 CAMLprim value caml_get_section_table(value unit)
@@ -166,7 +166,7 @@ CAMLprim value caml_realloc_global(value size)
   CAMLparam1(size);
   CAMLlocal2(old_global_data, new_global_data);
   mlsize_t requested_size, actual_size, i;
-  old_global_data = caml_read_root(caml_global_data);
+  old_global_data = caml_global_data;
 
   requested_size = Long_val(size);
   actual_size = Wosize_val(old_global_data);
@@ -181,7 +181,7 @@ CAMLprim value caml_realloc_global(value size)
     for (i = actual_size; i < requested_size; i++){
       caml_initialize_field(new_global_data, i, Val_long(0));
     }
-    caml_modify_root(caml_global_data, new_global_data);
+    caml_modify_generational_global_root(&caml_global_data, new_global_data);
   }
   CAMLreturn (Val_unit);
 }

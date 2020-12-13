@@ -275,7 +275,8 @@ value caml_interprete(code_t prog, asize_t prog_size)
                    Val_bytecode(raise_unhandled_code));
     raise_unhandled = raise_unhandled_closure;
     caml_register_generational_global_root(&raise_unhandled);
-    caml_global_data = caml_create_root(Val_unit);
+    caml_global_data = Val_unit;
+    caml_register_generational_global_root(&caml_global_data);
     caml_init_callbacks();
     return Val_unit;
   }
@@ -692,7 +693,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
       *--sp = accu;
       /* Fallthrough */
     Instruct(GETGLOBAL):
-      accu = Field_imm(caml_read_root(caml_global_data), *pc);
+      accu = Field_imm(caml_global_data, *pc);
       pc++;
       Next;
 
@@ -700,7 +701,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
       *--sp = accu;
       /* Fallthrough */
     Instruct(GETGLOBALFIELD): {
-      accu = Field_imm(caml_read_root(caml_global_data), *pc);
+      accu = Field_imm(caml_global_data, *pc);
       pc++;
       Accu_field(*pc);
       pc++;
@@ -708,7 +709,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
     }
 
     Instruct(SETGLOBAL):
-      caml_modify_field(caml_read_root(caml_global_data), *pc, accu);
+      caml_modify_field(caml_global_data, *pc, accu);
       accu = Val_unit;
       pc++;
       Next;
@@ -1290,7 +1291,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
 do_resume: {
       struct stack_info* stk = Ptr_val(accu);
       if (stk == NULL) {
-         accu = Field_imm(caml_read_root(caml_global_data), CONTINUATION_ALREADY_TAKEN_EXN);
+         accu = Field_imm(caml_global_data, CONTINUATION_ALREADY_TAKEN_EXN);
          goto raise_exception;
       }
       while (Stack_parent(stk) != NULL) stk = Stack_parent(stk);
@@ -1324,7 +1325,7 @@ do_resume: {
       struct stack_info* parent_stack = Stack_parent(old_stack);
 
       if (parent_stack == NULL) {
-        accu = Field_imm(caml_read_root(caml_global_data), UNHANDLED_EXN);
+        accu = Field_imm(caml_global_data, UNHANDLED_EXN);
         goto raise_exception;
       }
 
@@ -1369,7 +1370,7 @@ do_resume: {
       if (parent == NULL) {
         accu = caml_continuation_use(cont);
         resume_fn = raise_unhandled;
-        resume_arg = Field_imm(caml_read_root(caml_global_data), UNHANDLED_EXN);
+        resume_arg = Field_imm(caml_global_data, UNHANDLED_EXN);
         goto do_resume;
       }
 
