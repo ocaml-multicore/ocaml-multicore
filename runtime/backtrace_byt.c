@@ -235,9 +235,9 @@ int caml_alloc_backtrace_buffer(void){
 
 void caml_stash_backtrace(value exn, value * sp, int reraise)
 {
-  if (exn != caml_read_root(Caml_state->backtrace_last_exn) || !reraise) {
+  if (exn != Caml_state->backtrace_last_exn || !reraise) {
     Caml_state->backtrace_pos = 0;
-    caml_modify_root(Caml_state->backtrace_last_exn, exn);
+    caml_modify_generational_global_root(&Caml_state->backtrace_last_exn, exn);
   }
 
   if (Caml_state->backtrace_buffer == NULL &&

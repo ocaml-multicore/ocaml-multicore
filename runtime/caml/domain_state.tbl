@@ -84,7 +84,7 @@ DOMAIN_STATE(intnat, backtrace_active)
 
 DOMAIN_STATE(code_t*, backtrace_buffer)
 
-DOMAIN_STATE(caml_root, backtrace_last_exn)
+DOMAIN_STATE(value, backtrace_last_exn)
 
 DOMAIN_STATE(intnat, compare_unordered)
 
