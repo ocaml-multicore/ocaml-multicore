@@ -34,10 +34,15 @@ DOMAIN_STATE(struct stack_info*, current_stack)
 DOMAIN_STATE(void*, exn_handler)
 /* Pointer into into the current stack */
 
-DOMAIN_STATE(value*, gc_regs_buckets)
-
 DOMAIN_STATE(struct c_stack_link*, c_stack)
 /* The C stack associated with this domain. Used by this domain to perform external calls. */
+
+DOMAIN_STATE(struct stack_info**, stack_cache)
+/* This is a list of freelist buckets of stacks */
+
+DOMAIN_STATE(value*, gc_regs_buckets)
+
+DOMAIN_STATE(value*, gc_regs)
 
 DOMAIN_STATE(value**, gc_regs_slot)
 
@@ -137,9 +142,7 @@ DOMAIN_STATE(uintnat, call_imm)
 DOMAIN_STATE(uintnat, call_ind)
 DOMAIN_STATE(uintnat, stackoverflow_checks)
 
-#ifdef DEBUG
 // whether or not a domain is inside of a stop-the-world handler
 // this is used for several debug assertions inside of methods that
 // can only be called from either in or outside this state.
 DOMAIN_STATE(int, inside_stw_handler)
-#endif

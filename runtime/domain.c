@@ -113,7 +113,8 @@ static struct dom_internal all_domains[Max_domains];
 
 CAMLexport atomic_uintnat caml_num_domains_running;
 
-static uintnat minor_heaps_base;
+CAMLexport uintnat caml_minor_heaps_base;
+CAMLexport uintnat caml_minor_heaps_end;
 static __thread dom_internal* domain_self;
 
 static int64_t startup_timestamp;
@@ -156,8 +157,8 @@ asize_t caml_norm_minor_heap_size (intnat wsize)
   if (wsize < Minor_heap_min) wsize = Minor_heap_min;
   bs = caml_mem_round_up_pages(Bsize_wsize (wsize));
 
-  Assert(page_size * 2 < (1 << Minor_heap_align_bits));
-  max = (1 << Minor_heap_align_bits) - page_size * 2;
+  Assert(page_size * 2 < Minor_heap_max);
+  max = Minor_heap_max - page_size * 2;
 
   if (bs > max) bs = max;
 
@@ -175,7 +176,6 @@ int caml_reallocate_minor_heap(asize_t wsize)
   caml_mem_decommit((void*)domain_self->minor_heap_area,
                     domain_self->minor_heap_area_end - domain_self->minor_heap_area);
 
-  /* we allocate a double buffer to allow early release in minor_gc */
   wsize = caml_norm_minor_heap_size(wsize);
 
   if (!caml_mem_commit((void*)domain_self->minor_heap_area, Bsize_wsize(wsize))) {
@@ -274,15 +274,20 @@ static void create_domain(uintnat initial_minor_heap_wsize) {
       goto reallocate_minor_heap_failure;
     }
 
-    Caml_state->current_stack =
-        caml_alloc_main_stack(Stack_size / sizeof(value));
-    if(Caml_state->current_stack == NULL) {
-      goto alloc_main_stack_failure;
+    domain_state->dls_root = caml_create_root_noexc(Val_unit);
+    if(domain_state->dls_root == NULL) {
+      goto create_root_failure;
     }
 
-    domain_state->dls_root = caml_create_root_noexc(Val_unit);
-    if(Caml_state->dls_root == NULL) {
-      goto create_root_failure;
+    domain_state->stack_cache = caml_alloc_stack_cache();
+    if(domain_state->stack_cache == NULL) {
+      goto create_stack_cache_failure;
+    }
+
+    domain_state->current_stack =
+        caml_alloc_main_stack(Stack_size / sizeof(value));
+    if(domain_state->current_stack == NULL) {
+      goto alloc_main_stack_failure;
     }
 
     domain_state->backtrace_buffer = NULL;
@@ -292,9 +297,11 @@ static void create_domain(uintnat initial_minor_heap_wsize) {
 #endif
     goto domain_init_complete;
 
-create_root_failure:
-  caml_free_stack(Caml_state->current_stack);
+  caml_free_stack(domain_state->current_stack);
 alloc_main_stack_failure:
+create_stack_cache_failure:
+  caml_delete_root(domain_state->dls_root);
+create_root_failure:
 reallocate_minor_heap_failure:
   caml_teardown_major_gc();
 init_major_gc_failure:
@@ -313,22 +320,33 @@ domain_init_complete:
   caml_plat_unlock(&all_domains_lock);
 }
 
+CAMLexport void caml_reset_domain_lock(void)
+{
+  dom_internal* self = domain_self;
+  // This is only used to reset the domain_lock state on fork.
+  caml_plat_mutex_init(&self->domain_lock);
+  caml_plat_cond_init(&self->domain_cond, &self->domain_lock);
+
+  return;
+}
+
 void caml_init_domains(uintnat minor_heap_wsz) {
   int i;
   uintnat size;
   void* heaps_base;
 
   /* sanity check configuration */
-  if (caml_mem_round_up_pages(1 << Minor_heap_align_bits) != (1 << Minor_heap_align_bits))
-    caml_fatal_error("Minor_heap_align_bits misconfigured for this platform");
+  if (caml_mem_round_up_pages(Minor_heap_max) != Minor_heap_max)
+    caml_fatal_error("Minor_heap_max misconfigured for this platform");
 
   /* reserve memory space for minor heaps */
-  size = (uintnat)1 << (Minor_heap_sel_bits + Minor_heap_align_bits);
+  size = (uintnat)Minor_heap_max * Max_domains;
 
   heaps_base = caml_mem_map(size*2, size*2, 1 /* reserve_only */);
   if (!heaps_base) caml_raise_out_of_memory();
 
-  minor_heaps_base = (uintnat) heaps_base;
+  caml_minor_heaps_base = (uintnat) heaps_base;
+  caml_minor_heaps_end = (uintnat) heaps_base + size;
 
   for (i = 0; i < Max_domains; i++) {
     struct dom_internal* dom = &all_domains[i];
@@ -348,8 +366,8 @@ void caml_init_domains(uintnat minor_heap_wsz) {
     dom->backup_thread_running = 0;
     dom->backup_thread_msg = BT_INIT;
 
-    domain_minor_heap_base = minor_heaps_base +
-      (uintnat)(1 << Minor_heap_align_bits) * (uintnat)i;
+    domain_minor_heap_base = caml_minor_heaps_base +
+      (uintnat)Minor_heap_max * (uintnat)i;
     dom->tls_area = domain_minor_heap_base;
     dom->tls_area_end =
       caml_mem_round_up_pages(dom->tls_area +
@@ -357,7 +375,7 @@ void caml_init_domains(uintnat minor_heap_wsz) {
     dom->minor_heap_area = /* skip guard page */
       caml_mem_round_up_pages(dom->tls_area_end + 1);
     dom->minor_heap_area_end =
-      domain_minor_heap_base + (1 << Minor_heap_align_bits);
+      domain_minor_heap_base + Minor_heap_max;
   }
 
 
@@ -467,6 +485,14 @@ static void install_backup_thread (dom_internal* di)
   }
 }
 
+static void caml_domain_start_default(void)
+{
+  return;
+}
+
+CAMLexport void (*caml_domain_start_hook)(void) =
+   caml_domain_start_default;
+
 static void domain_terminate();
 
 static void* domain_thread_func(void* v)
@@ -492,6 +518,7 @@ static void* domain_thread_func(void* v)
     install_backup_thread(domain_self);
     caml_gc_log("Domain starting (unique_id = %"ARCH_INTNAT_PRINTF_FORMAT"u)",
                 domain_self->interruptor.unique_id);
+    caml_domain_start_hook();
     caml_callback(caml_read_root(callback), Val_unit);
     caml_delete_root(callback);
     domain_terminate();
@@ -555,9 +582,9 @@ struct domain* caml_domain_self()
 }
 
 struct domain* caml_owner_of_young_block(value v) {
-  Assert(Is_minor(v));
-  int heap_id = ((uintnat)v - minor_heaps_base) /
-    (1 << Minor_heap_align_bits);
+  Assert(Is_young(v));
+  int heap_id = ((uintnat)v - caml_minor_heaps_base) /
+    Minor_heap_max;
   return &all_domains[heap_id].state;
 }
 
@@ -665,6 +692,7 @@ static void decrement_stw_domains_still_processing()
   }
 }
 
+static void caml_poll_gc_work();
 static void stw_handler(struct domain* domain, void* unused2, interrupt* done)
 {
 #ifdef DEBUG
@@ -709,7 +737,7 @@ static void stw_handler(struct domain* domain, void* unused2, interrupt* done)
   /* poll the GC to check for deferred work
      we do this here because blocking or waiting threads only execute
      the interrupt handler and do not poll for deferred work*/
-  caml_handle_gc_interrupt();
+  caml_poll_gc_work();
 }
 
 /* This runs the passed handler on all running domains but must only be run on *one* domain
@@ -755,13 +783,15 @@ int caml_try_run_on_all_domains_with_spin_work(
   int i;
   uintnat domains_participating = 0;
 
+  caml_gc_log("requesting STW");
+
   // Don't take the lock if there's already a stw leader
-  if( atomic_load_acq(&stw_leader) ) {
+  if (atomic_load_acq(&stw_leader)) {
+    caml_ev_begin("stw/leader_collision");
     caml_handle_incoming_interrupts();
+    caml_ev_end("stw/leader_collision");
     return 0;
   }
-
-  caml_gc_log("requesting STW");
 
   /* Try to take the lock by setting ourselves as the stw_leader.
      If it fails, handle interrupts (probably participating in
@@ -769,7 +799,9 @@ int caml_try_run_on_all_domains_with_spin_work(
   caml_plat_lock(&all_domains_lock);
   if (atomic_load_acq(&stw_leader)) {
     caml_plat_unlock(&all_domains_lock);
+    caml_ev_begin("stw/leader_collision");
     caml_handle_incoming_interrupts();
+    caml_ev_end("stw/leader_collision");
     return 0;
   } else {
     atomic_store_rel(&stw_leader, (uintnat)domain_self);
@@ -779,6 +811,16 @@ int caml_try_run_on_all_domains_with_spin_work(
   caml_ev_begin("stw/leader");
   caml_gc_log("causing STW");
 
+  /* setup all fields for this stw_request, must have those needed
+     for domains waiting at the enter spin barrier */
+  stw_request.enter_spin_callback = enter_spin_callback;
+  stw_request.enter_spin_data = enter_spin_data;
+  stw_request.callback = handler;
+  stw_request.data = data;
+  stw_request.leave_spin_callback = leave_spin_callback;
+  stw_request.leave_spin_data = leave_spin_data;
+  stw_request.leave_when_done = leave_when_done;
+  atomic_store_rel(&stw_request.barrier, 0);
   atomic_store_rel(&stw_request.domains_still_running, 1);
 
   if( leader_setup ) {
@@ -817,18 +859,12 @@ int caml_try_run_on_all_domains_with_spin_work(
 
   Assert(domains_participating > 0);
 
+  /* setup the domain_participating fields */
   stw_request.num_domains = domains_participating;
-  stw_request.leave_when_done = leave_when_done;
-  atomic_store_rel(&stw_request.barrier, 0);
   atomic_store_rel(&stw_request.num_domains_still_processing,
                    domains_participating);
-  stw_request.callback = handler;
-  stw_request.data = data;
-  stw_request.enter_spin_callback = enter_spin_callback;
-  stw_request.enter_spin_data = enter_spin_data;
-  stw_request.leave_spin_callback = leave_spin_callback;
-  stw_request.leave_spin_data = leave_spin_data;
 
+  /* release from the enter barrier */
   atomic_store_rel(&stw_request.domains_still_running, 0);
 
   #ifdef DEBUG
@@ -881,24 +917,9 @@ void caml_request_minor_gc (void)
   caml_interrupt_self();
 }
 
-void caml_handle_gc_interrupt()
+static void caml_poll_gc_work()
 {
-  caml_ev_begin("handle_gc_interrupt");
-  atomic_uintnat* young_limit = domain_self->interrupt_word_address;
   CAMLalloc_point_here;
-
-  if (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
-    /* interrupt */
-    caml_ev_begin("handle_remote_interrupt");
-    while (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
-      uintnat i = INTERRUPT_MAGIC;
-      atomic_compare_exchange_strong(young_limit, &i, (uintnat)Caml_state->young_start);
-    }
-    caml_ev_pause(EV_PAUSE_YIELD);
-    caml_handle_incoming_interrupts();
-    caml_ev_resume();
-    caml_ev_end("handle_remote_interrupt");
-  }
 
   if (((uintnat)Caml_state->young_ptr - Bhsize_wosize(Max_young_wosize) <
        (uintnat)Caml_state->young_start) ||
@@ -926,16 +947,96 @@ void caml_handle_gc_interrupt()
     caml_major_collection_slice(AUTO_TRIGGERED_MAJOR_SLICE);
     caml_ev_end("dispatch_major_slice");
   }
+}
+
+void caml_handle_gc_interrupt()
+{
+  atomic_uintnat* young_limit = domain_self->interrupt_word_address;
+  CAMLalloc_point_here;
+
+  caml_ev_begin("handle_gc_interrupt");
+  if (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
+    /* interrupt */
+    caml_ev_begin("handle_remote_interrupt");
+    while (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
+      uintnat i = INTERRUPT_MAGIC;
+      atomic_compare_exchange_strong(young_limit, &i, (uintnat)Caml_state->young_start);
+    }
+    caml_ev_pause(EV_PAUSE_YIELD);
+    caml_handle_incoming_interrupts();
+    caml_ev_resume();
+    caml_ev_end("handle_remote_interrupt");
+  }
+
+  caml_poll_gc_work();
   caml_ev_end("handle_gc_interrupt");
+}
+
+CAMLexport inline int caml_bt_is_in_blocking_section(void)
+{
+  dom_internal* self = domain_self;
+  uintnat status = atomic_load_acq(&self->backup_thread_msg);
+  if (status == BT_IN_BLOCKING_SECTION)
+    return 1;
+  else
+    return 0;
+
+}
+
+CAMLexport void caml_acquire_domain_lock(void)
+{
+  dom_internal* self = domain_self;
+  caml_plat_lock(&self->domain_lock);
+  return;
+}
+
+CAMLexport void caml_bt_enter_ocaml(void)
+{
+  dom_internal* self = domain_self;
+
+  Assert(caml_domain_alone() || self->backup_thread_running);
+
+  if (self->backup_thread_running) {
+    atomic_store_rel(&self->backup_thread_msg, BT_ENTERING_OCAML);
+  }
+
+  return;
+}
+
+CAMLexport void caml_release_domain_lock(void)
+{
+  dom_internal* self = domain_self;
+  caml_plat_unlock(&self->domain_lock);
+  return;
+}
+
+CAMLexport void caml_bt_exit_ocaml(void)
+{
+  dom_internal* self = domain_self;
+
+  Assert(caml_domain_alone() || self->backup_thread_running);
+
+  if (self->backup_thread_running) {
+    atomic_store_rel(&self->backup_thread_msg, BT_IN_BLOCKING_SECTION);
+    /* Wakeup backup thread if it is sleeping */
+    caml_plat_signal(&self->domain_cond);
+  }
+
+
+  return;
 }
 
 static void caml_enter_blocking_section_default(void)
 {
+  caml_bt_exit_ocaml();
+  caml_release_domain_lock();
   return;
 }
 
 static void caml_leave_blocking_section_default(void)
 {
+  caml_bt_enter_ocaml();
+  caml_acquire_domain_lock();
   return;
 }
 
@@ -946,32 +1047,14 @@ CAMLexport void (*caml_leave_blocking_section_hook)(void) =
    caml_leave_blocking_section_default;
 
 CAMLexport void caml_leave_blocking_section() {
-  dom_internal* self = domain_self;
-
-  Assert(caml_domain_alone() || self->backup_thread_running);
-
-  if (self->backup_thread_running) {
-    atomic_store_rel(&self->backup_thread_msg, BT_ENTERING_OCAML);
-  }
-
-  caml_plat_lock(&self->domain_lock);
   caml_leave_blocking_section_hook();
   caml_process_pending_signals();
 }
 
 CAMLexport void caml_enter_blocking_section() {
-  dom_internal* self = domain_self;
-
-  Assert(caml_domain_alone() || self->backup_thread_running);
 
   caml_process_pending_signals();
   caml_enter_blocking_section_hook();
-  if (self->backup_thread_running) {
-    atomic_store_rel(&self->backup_thread_msg, BT_IN_BLOCKING_SECTION);
-    /* Wakeup backup thread if it is sleeping */
-    caml_plat_signal(&self->domain_cond);
-  }
-  caml_plat_unlock(&self->domain_lock);
 }
 
 void caml_print_stats () {
@@ -1118,17 +1201,11 @@ static void acknowledge_all_pending_interrupts()
 
 static void handover_ephemerons(caml_domain_state* domain_state)
 {
-  value todo_tail = 0;
-  value live_tail = 0;
-
   if (domain_state->ephe_info->todo == 0 &&
       domain_state->ephe_info->live == 0)
     return;
 
-  todo_tail = caml_bias_ephe_list(domain_state->ephe_info->todo, (struct domain*)NULL);
-  live_tail = caml_bias_ephe_list(domain_state->ephe_info->live, (struct domain*)NULL);
-  caml_add_orphaned_ephe(domain_state->ephe_info->todo, todo_tail,
-                         domain_state->ephe_info->live, live_tail);
+  caml_add_to_orphaned_ephe_list(domain_state->ephe_info);
   if (domain_state->ephe_info->todo != 0) {
     caml_ephe_todo_list_emptied();
   }

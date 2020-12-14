@@ -80,11 +80,20 @@ struct detailed_stats {
 void caml_sample_gc_stats(struct gc_stats* buf);
 void caml_print_stats(void);
 
+CAMLexport void caml_reset_domain_lock(void);
+CAMLexport int caml_bt_is_in_blocking_section(void);
+CAMLexport void caml_bt_enter_ocaml(void);
+CAMLexport void caml_bt_exit_ocaml(void);
+CAMLexport void caml_acquire_domain_lock(void);
+CAMLexport void caml_release_domain_lock(void);
+
 CAMLextern void caml_enter_blocking_section(void);
 CAMLextern void caml_leave_blocking_section(void);
 
 CAMLextern void (*caml_enter_blocking_section_hook)(void);
 CAMLextern void (*caml_leave_blocking_section_hook)(void);
+
+CAMLextern void (*caml_domain_start_hook)(void);
 
 void caml_init_domains(uintnat minor_heap_size);
 void caml_init_domain_self(int);
@@ -94,6 +103,8 @@ struct domain* caml_owner_of_young_block(value);
 struct domain* caml_domain_of_id(int);
 
 CAMLextern atomic_uintnat caml_num_domains_running;
+CAMLextern uintnat caml_minor_heaps_base;
+CAMLextern uintnat caml_minor_heaps_end;
 
 INLINE intnat caml_domain_alone()
 {

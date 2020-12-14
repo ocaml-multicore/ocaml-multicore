@@ -175,9 +175,10 @@ let patomic_fetch_add = "Patomic_fetch_add"
 let patomic_load = "Patomic_load"
 let prunstack = "Prunstack"
 let pperform = "Pperform"
-let presume = "Pperform"
+let presume = "Presume"
 let preperform = "Preperform"
 let ppoll = "Ppoll"
+let pnop = "Pnop"
 
 let pabsfloat_arg = "Pabsfloat_arg"
 let paddbint_arg = "Paddbint_arg"
@@ -287,9 +288,10 @@ let patomic_fetch_add_arg = "Patomic_fetch_add_arg"
 let patomic_load_arg = "Patomic_load_arg"
 let prunstack_arg = "Prunstack_arg"
 let pperform_arg = "Pperform_arg"
-let presume_arg = "Pperform_arg"
+let presume_arg = "Presume_arg"
 let preperform_arg = "Preperform_arg"
 let ppoll_arg = "Ppoll_arg"
+let pnop_arg = "Pnop_arg"
 
 let raise = "raise"
 let raise_arg = "raise_arg"
@@ -433,6 +435,7 @@ let of_primitive : Lambda.primitive -> string = function
   | Presume -> presume
   | Preperform -> preperform
   | Ppoll -> ppoll
+  | Pnop -> pnop
 
 let of_primitive_arg : Lambda.primitive -> string = function
   | Pidentity -> pidentity_arg
@@ -545,3 +548,4 @@ let of_primitive_arg : Lambda.primitive -> string = function
   | Presume -> presume_arg
   | Preperform -> preperform_arg
   | Ppoll -> ppoll_arg
+  | Pnop -> pnop_arg
