@@ -707,9 +707,6 @@ and signature_item i ppf x =
   | Tsig_typext e ->
       line i ppf "Tsig_typext\n";
       type_extension i ppf e;
-  | Tsig_effect ext ->
-      line i ppf "Psig_effect\n";
-      extension_constructor i ppf ext
   | Tsig_exception ext ->
       line i ppf "Tsig_exception\n";
       type_exception i ppf ext
@@ -822,9 +819,6 @@ and structure_item i ppf x =
   | Tstr_typext te ->
       line i ppf "Tstr_typext\n";
       type_extension i ppf te
-  | Tstr_effect ext ->
-      line i ppf "Pstr_effect\n";
-      extension_constructor i ppf ext;
   | Tstr_exception ext ->
       line i ppf "Tstr_exception\n";
       type_exception i ppf ext;

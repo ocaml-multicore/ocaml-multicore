@@ -118,7 +118,6 @@ let structure_item sub {str_desc; str_loc; str_env} =
         let (rec_flag, list) = sub.type_declarations sub (rec_flag, list) in
         Tstr_type (rec_flag, list)
     | Tstr_typext te -> Tstr_typext (sub.type_extension sub te)
-    | Tstr_effect ext -> Tstr_effect (sub.extension_constructor sub ext)
     | Tstr_exception ext -> Tstr_exception (sub.type_exception sub ext)
     | Tstr_module mb -> Tstr_module (sub.module_binding sub mb)
     | Tstr_recmodule list ->
@@ -404,8 +403,6 @@ let signature_item sub x =
         Tsig_typesubst list
     | Tsig_typext te ->
         Tsig_typext (sub.type_extension sub te)
-    | Tsig_effect ext ->
-        Tsig_effect (sub.extension_constructor sub ext)
     | Tsig_exception ext ->
         Tsig_exception (sub.type_exception sub ext)
     | Tsig_module x ->

@@ -1963,10 +1963,6 @@ and is_nonexpansive_mod mexp =
               false (* true would be unsound *)
           | Tstr_exception {tyexn_constructor = {ext_kind = Text_rebind _}} ->
               true
-          | Tstr_effect {ext_kind = Text_decl _} ->
-              false (* true would be unsound *)
-          | Tstr_effect {ext_kind = Text_rebind _} ->
-              true
           | Tstr_typext te ->
               List.for_all
                 (function {ext_kind = Text_decl _} -> false

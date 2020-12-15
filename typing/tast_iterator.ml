@@ -93,7 +93,6 @@ let structure_item sub {str_desc; str_env; _} =
   | Tstr_primitive v -> sub.value_description sub v
   | Tstr_type (rec_flag, list) -> sub.type_declarations sub (rec_flag, list)
   | Tstr_typext te -> sub.type_extension sub te
-  | Tstr_effect ext -> sub.extension_constructor sub ext
   | Tstr_exception ext -> sub.type_exception sub ext
   | Tstr_module mb -> sub.module_binding sub mb
   | Tstr_recmodule list -> List.iter (sub.module_binding sub) list
@@ -277,7 +276,6 @@ let signature_item sub {sig_desc; sig_env; _} =
   | Tsig_type (rf, tdl)  -> sub.type_declarations sub (rf, tdl)
   | Tsig_typesubst list -> sub.type_declarations sub (Nonrecursive, list)
   | Tsig_typext te -> sub.type_extension sub te
-  | Tsig_effect ext -> sub.extension_constructor sub ext
   | Tsig_exception ext -> sub.type_exception sub ext
   | Tsig_module x -> sub.module_declaration sub x
   | Tsig_modsubst x -> sub.module_substitution sub x

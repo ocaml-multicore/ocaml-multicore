@@ -250,7 +250,6 @@ and structure_item_desc =
   | Tstr_primitive of value_description
   | Tstr_type of rec_flag * type_declaration list
   | Tstr_typext of type_extension
-  | Tstr_effect of extension_constructor
   | Tstr_exception of type_exception
   | Tstr_module of module_binding
   | Tstr_recmodule of module_binding list
@@ -328,7 +327,6 @@ and signature_item_desc =
   | Tsig_type of rec_flag * type_declaration list
   | Tsig_typesubst of type_declaration list
   | Tsig_typext of type_extension
-  | Tsig_effect of extension_constructor
   | Tsig_exception of type_exception
   | Tsig_module of module_declaration
   | Tsig_modsubst of module_substitution

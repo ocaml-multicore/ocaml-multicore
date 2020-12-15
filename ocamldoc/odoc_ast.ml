@@ -80,7 +80,6 @@ module Typedtree_search =
         end
       | Typedtree.Tstr_exception ext ->
           Hashtbl.add table (E (Name.from_ident ext.tyexn_constructor.ext_id)) tt
-      | Typedtree.Tstr_effect _ext -> failwith "Not implemented" (* FIXME *)
       | Typedtree.Tstr_type (rf, ident_type_decl_list) ->
           List.iter
             (fun td ->
