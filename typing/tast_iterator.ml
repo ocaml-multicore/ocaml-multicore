@@ -195,14 +195,12 @@ let expr sub {exp_extra; exp_desc; exp_env; _} =
   | Texp_apply (exp, list) ->
       sub.expr sub exp;
       List.iter (fun (_, o) -> Option.iter (sub.expr sub) o) list
-  | Texp_match (exp, cases, effs, _) ->
+  | Texp_match (exp, cases, _) ->
       sub.expr sub exp;
-      sub.cases sub cases;
-      sub.cases sub effs
-  | Texp_try (exp, cases, effs) ->
+      sub.cases sub cases
+  | Texp_try (exp, cases) ->
       sub.expr sub exp;
-      sub.cases sub cases;
-      sub.cases sub effs
+      sub.cases sub cases
   | Texp_tuple list -> List.iter (sub.expr sub) list
   | Texp_construct (_, _, args) -> List.iter (sub.expr sub) args
   | Texp_variant (_, expo) -> Option.iter (sub.expr sub) expo

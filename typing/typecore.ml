@@ -175,7 +175,7 @@ type recarg =
 let mk_expected ?explanation ty = { ty; explanation; }
 
 let case lhs rhs =
-  {c_lhs = lhs; c_cont = None; c_guard = None; c_rhs = rhs}
+  {c_lhs = lhs; c_guard = None; c_rhs = rhs}
 
 (* Typing of constants *)
 
@@ -1828,9 +1828,9 @@ let rec final_subexpression exp =
   match exp.exp_desc with
     Texp_let (_, _, e)
   | Texp_sequence (_, e)
-  | Texp_try (e, _, _)
+  | Texp_try (e, _)
   | Texp_ifthenelse (_, e, _)
-  | Texp_match (_, {c_rhs=e} :: _, _, _)
+  | Texp_match (_, {c_rhs=e} :: _, _)
   | Texp_letmodule (_, _, _, _, e)
   | Texp_letexception (_, e)
   | Texp_open (_, e)
@@ -1851,7 +1851,7 @@ let rec is_nonexpansive exp =
       is_nonexpansive body
   | Texp_apply(e, (_,None)::el) ->
       is_nonexpansive e && List.for_all is_nonexpansive_opt (List.map snd el)
-  | Texp_match(e, cases, _, _) ->
+  | Texp_match(e, cases, _) ->
      (* Not sure this is necessary, if [e] is nonexpansive then we shouldn't
          care if there are exception patterns. But the previous version enforced
          that there be none, so... *)
@@ -2133,13 +2133,11 @@ let check_partial_application statement exp =
             | Texp_extension_constructor _ | Texp_ifthenelse (_, _, None)
             | Texp_function _ ->
                 check_statement ()
-            | Texp_match (_, cases, eff_cases, _) ->
-                List.iter (fun {c_rhs; _} -> check c_rhs) cases;
-                List.iter (fun {c_rhs; _} -> check c_rhs) eff_cases
-            | Texp_try (e, cases, eff_cases) ->
+            | Texp_match (_, cases, _) ->
+                List.iter (fun {c_rhs; _} -> check c_rhs) cases
+            | Texp_try (e, cases) ->
                 check e;
-                List.iter (fun {c_rhs; _} -> check c_rhs) cases;
-                List.iter (fun {c_rhs; _} -> check c_rhs) eff_cases
+                List.iter (fun {c_rhs; _} -> check c_rhs) cases
             | Texp_ifthenelse (_, e1, Some e2) ->
                 check e1; check e2
             | Texp_let (_, _, e) | Texp_sequence (_, e) | Texp_open (_, e)
@@ -2554,7 +2552,7 @@ and type_expect_
           caselist
       in
       re {
-        exp_desc = Texp_match(arg, cases, [], partial);
+        exp_desc = Texp_match(arg, cases, partial);
         exp_loc = loc; exp_extra = [];
         exp_type = instance ty_expected;
         exp_attributes = sexp.pexp_attributes;
@@ -2564,7 +2562,7 @@ and type_expect_
       let cases, _ =
         type_cases env Predef.type_exn ty_expected false loc caselist in
       re {
-        exp_desc = Texp_try(body, cases, []);
+        exp_desc = Texp_try(body, cases);
         exp_loc = loc; exp_extra = [];
         exp_type = body.exp_type;
         exp_attributes = sexp.pexp_attributes;
@@ -4422,7 +4420,7 @@ and type_cases ?exception_allowed ?in_function env ty_arg ty_res
             ~check:(fun s -> Warnings.Unused_var_strict s)
             ~check_as:(fun s -> Warnings.Unused_var s)
         in
-        let cont, ext_env' =
+        let _cont, ext_env' =
           match cont with
           | Some (id, desc) ->
               let ext_env =
@@ -4467,7 +4465,6 @@ and type_cases ?exception_allowed ?in_function env ty_arg ty_res
           type_expect ?in_function ext_env' sexp (mk_expected ty_res') in
         {
          c_lhs = pat;
-         c_cont = cont;
          c_guard = guard;
          c_rhs = {exp with exp_type = instance ty_res'}
         }

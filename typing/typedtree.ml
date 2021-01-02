@@ -79,8 +79,8 @@ and expression_desc =
   | Texp_function of { arg_label : arg_label; param : Ident.t;
       cases : case list; partial : partial; }
   | Texp_apply of expression * (arg_label * expression option) list
-  | Texp_match of expression * case list * case list * partial
-  | Texp_try of expression * case list * case list
+  | Texp_match of expression * case list * partial
+  | Texp_try of expression * case list
   | Texp_tuple of expression list
   | Texp_construct of
       Longident.t loc * constructor_description * expression list
@@ -131,7 +131,6 @@ and meth =
 and case =
     {
      c_lhs: pattern;
-     c_cont: Ident.t option;
      c_guard: expression option;
      c_rhs: expression;
     }

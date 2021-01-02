@@ -251,18 +251,16 @@ let expr sub x =
           sub.expr sub exp,
           List.map (tuple2 id (Option.map (sub.expr sub))) list
         )
-    | Texp_match (exp, cases, eff_cases, p) ->
+    | Texp_match (exp, cases, p) ->
         Texp_match (
           sub.expr sub exp,
           sub.cases sub cases,
-          sub.cases sub eff_cases,
           p
         )
-    | Texp_try (exp, exn_cases, eff_cases) ->
+    | Texp_try (exp, exn_cases) ->
         Texp_try (
           sub.expr sub exp,
-          sub.cases sub exn_cases,
-          sub.cases sub eff_cases
+          sub.cases sub exn_cases
         )
     | Texp_tuple list ->
         Texp_tuple (List.map (sub.expr sub) list)
@@ -683,12 +681,11 @@ let value_bindings sub (rec_flag, list) =
 let cases sub l =
   List.map (sub.case sub) l
 
-let case sub {c_lhs; c_cont; c_guard; c_rhs} =
+let case sub {c_lhs; c_guard; c_rhs} =
   {
     c_lhs = sub.pat sub c_lhs;
     c_guard = Option.map (sub.expr sub) c_guard;
-    c_rhs = sub.expr sub c_rhs;
-    c_cont
+    c_rhs = sub.expr sub c_rhs
   }
 
 let value_binding sub x =

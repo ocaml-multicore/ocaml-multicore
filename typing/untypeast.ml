@@ -419,9 +419,9 @@ let expression sub exp =
                 None -> list
               | Some exp -> (label, sub.expr sub exp) :: list
           ) list [])
-    | Texp_match (exp, cases, _eff_cases, _) ->
+    | Texp_match (exp, cases, _) ->
         Pexp_match (sub.expr sub exp, sub.cases sub cases)
-    | Texp_try (exp, exn_cases, _eff_cases) ->
+    | Texp_try (exp, exn_cases) ->
         let merged_cases = sub.cases sub exn_cases in
         Pexp_try (sub.expr sub exp, merged_cases)
     | Texp_tuple list ->
