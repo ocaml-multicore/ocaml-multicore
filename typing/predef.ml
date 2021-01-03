@@ -35,8 +35,6 @@ and ident_float = ident_create "float"
 and ident_bool = ident_create "bool"
 and ident_unit = ident_create "unit"
 and ident_exn = ident_create "exn"
-and ident_eff = ident_create "eff"
-and ident_continuation = ident_create "continuation"
 and ident_array = ident_create "array"
 and ident_list = ident_create "list"
 and ident_option = ident_create "option"
@@ -47,6 +45,8 @@ and ident_lazy_t = ident_create "lazy_t"
 and ident_string = ident_create "string"
 and ident_extension_constructor = ident_create "extension_constructor"
 and ident_floatarray = ident_create "floatarray"
+and ident_eff = ident_create "eff"
+and ident_continuation = ident_create "continuation"
 
 let path_int = Pident ident_int
 and path_char = Pident ident_char
@@ -55,8 +55,6 @@ and path_float = Pident ident_float
 and path_bool = Pident ident_bool
 and path_unit = Pident ident_unit
 and path_exn = Pident ident_exn
-and path_eff = Pident ident_eff
-and path_continuation = Pident ident_continuation
 and path_array = Pident ident_array
 and path_list = Pident ident_list
 and path_option = Pident ident_option
@@ -67,6 +65,8 @@ and path_lazy_t = Pident ident_lazy_t
 and path_string = Pident ident_string
 and path_extension_constructor = Pident ident_extension_constructor
 and path_floatarray = Pident ident_floatarray
+and path_eff = Pident ident_eff
+and path_continuation = Pident ident_continuation
 
 let type_int = newgenty (Tconstr(path_int, [], ref Mnil))
 and type_char = newgenty (Tconstr(path_char, [], ref Mnil))
@@ -75,9 +75,6 @@ and type_float = newgenty (Tconstr(path_float, [], ref Mnil))
 and type_bool = newgenty (Tconstr(path_bool, [], ref Mnil))
 and type_unit = newgenty (Tconstr(path_unit, [], ref Mnil))
 and type_exn = newgenty (Tconstr(path_exn, [], ref Mnil))
-and type_eff t = newgenty (Tconstr(path_eff, [t], ref Mnil))
-and type_continuation t1 t2 =
-  newgenty (Tconstr(path_continuation, [t1; t2], ref Mnil))
 and type_array t = newgenty (Tconstr(path_array, [t], ref Mnil))
 and type_list t = newgenty (Tconstr(path_list, [t], ref Mnil))
 and type_option t = newgenty (Tconstr(path_option, [t], ref Mnil))
@@ -89,6 +86,9 @@ and type_string = newgenty (Tconstr(path_string, [], ref Mnil))
 and type_extension_constructor =
       newgenty (Tconstr(path_extension_constructor, [], ref Mnil))
 and type_floatarray = newgenty (Tconstr(path_floatarray, [], ref Mnil))
+and type_eff t = newgenty (Tconstr(path_eff, [t], ref Mnil))
+and type_continuation t1 t2 =
+  newgenty (Tconstr(path_continuation, [t1; t2], ref Mnil))
 
 let ident_match_failure = ident_create "Match_failure"
 and ident_out_of_memory = ident_create "Out_of_memory"
@@ -172,20 +172,6 @@ let common_initial_env add_type add_extension empty_env =
   and decl_exn =
     {decl_abstr with
      type_kind = Type_open}
-  and decl_eff =
-    let tvar = newgenvar() in
-    {decl_abstr with
-     type_params = [tvar];
-     type_arity = 1;
-     type_variance = [Variance.full];
-     type_kind = Type_open}
-  and decl_continuation =
-    let tvar1 = newgenvar() in
-    let tvar2 = newgenvar() in
-    {decl_abstr with
-     type_params = [tvar1; tvar2];
-     type_arity = 2;
-     type_variance = [Variance.contravariant; Variance.covariant]}
   and decl_array =
     let tvar = newgenvar() in
     {decl_abstr with
@@ -213,6 +199,20 @@ let common_initial_env add_type add_extension empty_env =
      type_params = [tvar];
      type_arity = 1;
      type_variance = [Variance.covariant]}
+  and decl_eff =
+     let tvar = newgenvar() in
+     {decl_abstr with
+      type_params = [tvar];
+      type_arity = 1;
+      type_variance = [Variance.full];
+      type_kind = Type_open}
+  and decl_continuation =
+     let tvar1 = newgenvar() in
+     let tvar2 = newgenvar() in
+     {decl_abstr with
+      type_params = [tvar1; tvar2];
+      type_arity = 2;
+      type_variance = [Variance.contravariant; Variance.covariant]}
   in
 
   let add_extension id l =
@@ -242,8 +242,6 @@ let common_initial_env add_type add_extension empty_env =
                          [newgenty (Ttuple[type_string; type_int; type_int])] (
   add_extension ident_undefined_recursive_module
                          [newgenty (Ttuple[type_string; type_int; type_int])] (
-  add_extension ident_unhandled [] (
-  add_extension ident_continuation_already_taken [] (
   add_type ident_int64 decl_abstr (
   add_type ident_int32 decl_abstr (
   add_type ident_nativeint decl_abstr (
@@ -252,8 +250,6 @@ let common_initial_env add_type add_extension empty_env =
   add_type ident_list decl_list (
   add_type ident_array decl_array (
   add_type ident_exn decl_exn (
-  add_type ident_eff decl_eff (
-  add_type ident_continuation decl_continuation (
   add_type ident_unit decl_unit (
   add_type ident_bool decl_bool (
   add_type ident_float decl_abstr (
@@ -262,6 +258,10 @@ let common_initial_env add_type add_extension empty_env =
   add_type ident_int decl_abstr_imm (
   add_type ident_extension_constructor decl_abstr (
   add_type ident_floatarray decl_abstr (
+  add_extension ident_unhandled [] (
+  add_extension ident_continuation_already_taken [] (
+  add_type ident_eff decl_eff (
+  add_type ident_continuation decl_continuation (
     empty_env))))))))))))))))))))))))))))))))
 
 let build_initial_env add_type add_exception empty_env =
