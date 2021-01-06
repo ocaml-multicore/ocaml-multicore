@@ -180,7 +180,6 @@ let structure_item sub item =
         Pstr_typext (sub.type_extension sub tyext)
     | Tstr_exception ext ->
         Pstr_exception (sub.type_exception sub ext)
-    | Tstr_effect _ -> failwith "Untypeast.Tstr_effect: impossible"
     | Tstr_module mb ->
         Pstr_module (sub.module_binding sub mb)
     | Tstr_recmodule list ->
@@ -420,9 +419,9 @@ let expression sub exp =
                 None -> list
               | Some exp -> (label, sub.expr sub exp) :: list
           ) list [])
-    | Texp_match (exp, cases, _eff_cases, _) ->
+    | Texp_match (exp, cases, _) ->
         Pexp_match (sub.expr sub exp, sub.cases sub cases)
-    | Texp_try (exp, exn_cases, _eff_cases) ->
+    | Texp_try (exp, exn_cases) ->
         let merged_cases = sub.cases sub exn_cases in
         Pexp_try (sub.expr sub exp, merged_cases)
     | Texp_tuple list ->
@@ -564,7 +563,6 @@ let signature_item sub item =
         Psig_class_type (List.map (sub.class_type_declaration sub) list)
     | Tsig_attribute x ->
         Psig_attribute x
-    | Tsig_effect _ -> failwith "Untypeast.signature_item: Tsig_effect"
   in
   Sig.mk ~loc desc
 
