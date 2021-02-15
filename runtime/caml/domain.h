@@ -142,6 +142,10 @@ void caml_global_barrier_end(barrier_status);
 int caml_global_barrier_num_domains();
 int caml_domain_is_terminating(void);
 
+struct pool;
+void push_pool_remark_to_domain(struct domain* dom, struct pool* p);
+struct pool* pop_pool_remark_for_domain(struct domain* domain);
+
 #endif /* CAML_INTERNALS */
 
 #ifdef __cplusplus

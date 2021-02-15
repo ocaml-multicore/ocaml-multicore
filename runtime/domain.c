@@ -81,6 +81,14 @@ int caml_send_interrupt(struct interruptor* self,
                         void* data);
 void caml_handle_incoming_interrupts(void);
 
+struct remark_stack {
+  caml_plat_mutex lock;
+  int is_accepting; /* is this stack accepting new entries */
+  struct pool** stack;
+  intnat len;   /* allocated size of the stack */
+  intnat count; /* number in the stack */
+};
+
 
 struct dom_internal {
   /* readonly fields, initialised and never modified */
@@ -88,6 +96,9 @@ struct dom_internal {
   int id;
   struct domain state;
   struct interruptor interruptor;
+
+  /* remark stack */
+  struct remark_stack remark_stack;
 
   /* backup thread */
   int backup_thread_running;
@@ -110,6 +121,8 @@ static caml_plat_mutex all_domains_lock = CAML_PLAT_MUTEX_INITIALIZER;
 static caml_plat_cond all_domains_cond = CAML_PLAT_COND_INITIALIZER(&all_domains_lock);
 static atomic_uintnat /* dom_internal* */ stw_leader = 0;
 static struct dom_internal all_domains[Max_domains];
+
+static struct remark_stack global_remark_stack;
 
 CAMLexport atomic_uintnat caml_num_domains_running;
 
@@ -315,6 +328,8 @@ init_signal_stack_failure:
   domain_self = NULL;
 
 domain_init_complete:
+  d->remark_stack.is_accepting = 1;
+
   caml_ev_resume();
   }
   caml_plat_unlock(&all_domains_lock);
@@ -328,6 +343,15 @@ CAMLexport void caml_reset_domain_lock(void)
   caml_plat_cond_init(&self->domain_cond, &self->domain_lock);
 
   return;
+}
+
+void init_remark_stack(struct remark_stack* stk)
+{
+  caml_plat_mutex_init(&stk->lock);
+  stk->is_accepting = 0;
+  stk->stack = NULL;
+  stk->len = 0;
+  stk->count = 0;
 }
 
 void caml_init_domains(uintnat minor_heap_wsz) {
@@ -361,6 +385,8 @@ void caml_init_domains(uintnat minor_heap_wsz) {
     dom->interruptor.unique_id = i;
     dom->id = i;
 
+    init_remark_stack(&dom->remark_stack);
+
     caml_plat_mutex_init(&dom->domain_lock);
     caml_plat_cond_init(&dom->domain_cond, &dom->domain_lock);
     dom->backup_thread_running = 0;
@@ -378,6 +404,7 @@ void caml_init_domains(uintnat minor_heap_wsz) {
       domain_minor_heap_base + Minor_heap_max;
   }
 
+  init_remark_stack(&global_remark_stack);
 
   create_domain(minor_heap_wsz);
   if (!domain_self) caml_fatal_error("Failed to create main domain");
@@ -1241,6 +1268,28 @@ int caml_domain_is_terminating ()
   return s->terminating;
 }
 
+static void stop_accepting_on_domain_remark_stack()
+{
+  struct remark_stack* stk = &caml_domain_self()->internals->remark_stack;
+
+  CAMLassert(stk->is_accepting);
+  caml_plat_lock(&stk->lock);
+  stk->is_accepting = 0;
+  caml_plat_unlock(&stk->lock);
+}
+
+static void teardown_remark_stack()
+{
+  struct remark_stack* stk = &caml_domain_self()->internals->remark_stack;
+
+  CAMLassert(!stk->is_accepting);
+  CAMLassert(stk->count == 0);
+  if(stk->stack) {
+    caml_stat_free(stk->stack);
+    stk->stack = NULL;
+  }
+}
+
 static void domain_terminate()
 {
   caml_domain_state* domain_state = domain_self->state.state;
@@ -1251,6 +1300,8 @@ static void domain_terminate()
   caml_ev_pause(EV_PAUSE_YIELD);
   caml_delete_root(domain_state->dls_root);
   s->terminating = 1;
+
+  stop_accepting_on_domain_remark_stack();
 
   while (!finished) {
     caml_orphan_allocated_words();
@@ -1300,6 +1351,7 @@ static void domain_terminate()
   // run the domain termination hook
   caml_domain_stop_hook();
   caml_stat_free(domain_state->ephe_info);
+  teardown_remark_stack();
   caml_teardown_major_gc();
   caml_teardown_shared_heap(domain_state->shared_heap);
   domain_state->shared_heap = 0;
@@ -1572,4 +1624,56 @@ CAMLprim value caml_domain_dls_get(value unused)
 {
   CAMLnoalloc;
   return caml_read_root(Caml_state->dls_root);
+}
+
+/* TODO: who calls this and when? */
+void free_remark_stack(struct remark_stack* stk) {
+  if( stk->len > 0 ) caml_stat_free(stk->stack);
+}
+
+int push_to_remark_stack(struct remark_stack* stk, struct pool* p) {
+  int push_succeeded = 0;
+  caml_plat_lock(&stk->lock);
+  if(stk->is_accepting) {
+    if(stk->count == stk->len){
+      stk->len = stk->len*2 + 128;
+      stk->stack = caml_stat_resize(stk->stack, stk->len * sizeof(struct pool *));
+    }
+    stk->stack[stk->count++] = p;
+    push_succeeded = 1;
+  }
+  caml_plat_unlock(&stk->lock);
+  return push_succeeded;
+}
+
+struct pool* pop_from_remark_stack(struct remark_stack* stk) {
+  struct pool* p = NULL;
+  caml_plat_lock(&stk->lock);
+  if(stk->count > 0) {
+    p = stk->stack[--stk->count];
+  }
+  caml_plat_unlock(&stk->lock);
+  return p;
+}
+
+/* pushes pool to the requested domain or
+   if that fails the global remark stack */
+void push_pool_remark_to_domain(struct domain* dom, struct pool* p) {
+  int push_succeeded = 0;
+  if (dom) {
+    push_succeeded = push_to_remark_stack(&dom->internals->remark_stack, p);
+  }
+  if (!push_succeeded) {
+    push_succeeded = push_to_remark_stack(&global_remark_stack, p);
+  }
+  CAMLassert(push_succeeded);
+}
+
+/* pop pool from requested domain
+   passing NULL pops from the global remark stack */
+struct pool* pop_pool_remark_for_domain(struct domain* dom) {
+  struct remark_stack* stk = dom
+                ? &dom->internals->remark_stack
+                : &global_remark_stack;
+  return pop_from_remark_stack(stk);
 }

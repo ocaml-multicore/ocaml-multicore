@@ -420,6 +420,18 @@ struct pool* caml_pool_of_shared_block(value v)
   }
 }
 
+struct domain* caml_owner_of_pool(struct pool* p) {
+  return p->owner;
+}
+
+void caml_acquire_pool_adoption_lock() {
+  caml_plat_lock(&pool_freelist.lock);
+}
+
+void caml_release_pool_adoption_lock() {
+  caml_plat_unlock(&pool_freelist.lock);
+}
+
 /* Sweeping */
 
 static intnat pool_sweep(struct caml_heap_state* local, pool** plist, sizeclass sz, int release_to_global_pool) {

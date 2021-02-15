@@ -39,7 +39,6 @@
 /* NB the MARK_STACK_INIT_SIZE must be larger than the number of objects
    that can be in a pool, see POOL_WSIZE */
 #define MARK_STACK_INIT_SIZE (1 << 12)
-#define INITIAL_POOLS_TO_RESCAN_LEN 4
 
 typedef struct {
   value block;
@@ -469,7 +468,6 @@ static void commit_major_slice_work(intnat words_done) {
 }
 
 static void mark_stack_prune(struct mark_stack* stk);
-static struct pool* find_pool_to_rescan();
 
 
 #ifdef DEBUG
@@ -653,15 +651,46 @@ static intnat do_some_marking(intnat budget) {
   return budget;
 }
 
+static intnat pop_from_remark_stack(struct domain* trgt) {
+  /* handle remarking for a domain
+   * - if we own it, then we can remark it
+   * - if we don't own it and someone else does, give it to them
+   * - if it isn't owned by anyone, prevent it being used and then remark it
+   */
+  struct pool* p = pop_pool_remark_for_domain(trgt);
+  if (p) {
+    struct domain* owner = caml_owner_of_pool(p);
+    if (owner == caml_domain_self()) {
+      caml_gc_log("Redarkening pool %p", p);
+      caml_redarken_pool(p, &mark_stack_push_act, 0);
+    } else if (owner != NULL) {
+      push_pool_remark_to_domain(owner, p);
+    } else {
+      caml_acquire_pool_adoption_lock();
+      /* need to double check in case orphan got adopted */
+      owner = caml_owner_of_pool(p);
+      if (owner == NULL) {
+        caml_gc_log("Redarkening orphaned pool %p", p);
+        caml_redarken_pool(p, &mark_stack_push_act, 0);
+      }
+      caml_release_pool_adoption_lock();
+      if (owner != NULL) {
+        push_pool_remark_to_domain(owner, p);
+      }
+    }
+    return 1;
+  }
+  return 0;
+}
+
 /* mark until the budget runs out or marking is done */
 static intnat mark(intnat budget) {
   while (budget > 0 && !Caml_state->marking_done) {
     budget = do_some_marking(budget);
+
     if (budget > 0) {
-      struct pool* p = find_pool_to_rescan();
-      if (p) {
-        caml_redarken_pool(p, &mark_stack_push_act, 0);
-      } else {
+      if(!pop_from_remark_stack(caml_domain_self()) &&
+         !pop_from_remark_stack(NULL)) {
         update_ephe_info_for_marking_done();
         Caml_state->marking_done = 1;
         atomic_fetch_add_verify_ge0(&num_domains_to_mark, -1);
@@ -1377,24 +1406,12 @@ void caml_finish_sweeping () {
   caml_ev_end("major_gc/finish_sweeping");
 }
 
-static struct pool* find_pool_to_rescan()
-{
-  struct pool* p;
-
-  if (Caml_state->pools_to_rescan_count > 0) {
-    p = Caml_state->pools_to_rescan[--Caml_state->pools_to_rescan_count];
-    caml_gc_log("Redarkening pool %p (%d others left)", p, Caml_state->pools_to_rescan_count);
-  } else {
-    p = 0;
-  }
-
-  return p;
-}
 
 static void mark_stack_prune (struct mark_stack* stk)
 {
   int entry_idx, large_idx = 0;
   mark_entry* mark_stack = stk->stack;
+  int count = 0;
 
   struct skiplist chunk_sklist = SKIPLIST_STATIC_INITIALIZER;
   /* Insert used pools into skiplist */
@@ -1410,17 +1427,17 @@ static void mark_stack_prune (struct mark_stack* stk)
     (uintnat)pool + sizeof(pool));
   }
 
-  /* Traverse through entire skiplist and put it into pools to rescan */
+  /* Traverse through entire skiplist and put it into remark stack */
   FOREACH_SKIPLIST_ELEMENT(e, &chunk_sklist, {
-    if(Caml_state->pools_to_rescan_len == Caml_state->pools_to_rescan_count){
-      Caml_state->pools_to_rescan_len = Caml_state->pools_to_rescan_len * 2 + 128;
-      Caml_state->pools_to_rescan =
-        caml_stat_resize(Caml_state->pools_to_rescan, Caml_state->pools_to_rescan_len * sizeof(struct pool *));
-    }
-    Caml_state->pools_to_rescan[Caml_state->pools_to_rescan_count++] = (struct pool*) (e->key);;
+    struct pool* p = (struct pool*) (e->key);
+
+    /* push work to correct queue */
+    struct domain* owner = caml_owner_of_pool(p);
+    push_pool_remark_to_domain(owner, p);
+    count++;
   });
 
-  caml_gc_log("Mark stack overflow. Postponing %d pools", Caml_state->pools_to_rescan_count);
+  caml_gc_log("Mark stack overflow. Postponed %d pools", count);
 
   stk->count = large_idx;
 }
@@ -1464,10 +1481,6 @@ int caml_init_major_gc(caml_domain_state* d) {
   atomic_fetch_add(&num_domains_to_final_update_first, 1);
   atomic_fetch_add(&num_domains_to_final_update_last, 1);
 
-  Caml_state->pools_to_rescan = caml_stat_alloc_noexc(INITIAL_POOLS_TO_RESCAN_LEN * sizeof(struct pool*));
-  Caml_state->pools_to_rescan_len = INITIAL_POOLS_TO_RESCAN_LEN;
-  Caml_state->pools_to_rescan_count = 0;
-
   return 0;
 }
 
@@ -1475,7 +1488,6 @@ void caml_teardown_major_gc() {
   CAMLassert(Caml_state->mark_stack->count == 0);
   caml_stat_free(Caml_state->mark_stack->stack);
   caml_stat_free(Caml_state->mark_stack);
-  if( Caml_state->pools_to_rescan_len > 0 ) caml_stat_free(Caml_state->pools_to_rescan);
   Caml_state->mark_stack = NULL;
 }
 
