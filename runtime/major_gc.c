@@ -1239,7 +1239,7 @@ static intnat major_collection_slice(intnat howmuch,
 
 mark_again:
   while (budget > 0) {
-    if (!domain_state->marking_done) {
+    if (!domain_state->marking_done || check_if_remarking_needed()) {
       if (!was_marking) {
         if (log_events) caml_ev_begin("major_gc/mark");
         was_marking = 1;
