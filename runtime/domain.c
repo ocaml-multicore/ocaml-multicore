@@ -405,6 +405,7 @@ void caml_init_domains(uintnat minor_heap_wsz) {
   }
 
   init_remark_stack(&global_remark_stack);
+  global_remark_stack.is_accepting = 1;
 
   create_domain(minor_heap_wsz);
   if (!domain_self) caml_fatal_error("Failed to create main domain");
@@ -1287,6 +1288,7 @@ static void teardown_remark_stack()
   if(stk->stack) {
     caml_stat_free(stk->stack);
     stk->stack = NULL;
+    stk->len = stk->count = 0;
   }
 }
 
@@ -1626,12 +1628,7 @@ CAMLprim value caml_domain_dls_get(value unused)
   return caml_read_root(Caml_state->dls_root);
 }
 
-/* TODO: who calls this and when? */
-void free_remark_stack(struct remark_stack* stk) {
-  if( stk->len > 0 ) caml_stat_free(stk->stack);
-}
-
-int push_to_remark_stack(struct remark_stack* stk, struct pool* p) {
+static int push_to_remark_stack(struct remark_stack* stk, struct pool* p) {
   int push_succeeded = 0;
   caml_plat_lock(&stk->lock);
   if(stk->is_accepting) {
@@ -1641,16 +1638,22 @@ int push_to_remark_stack(struct remark_stack* stk, struct pool* p) {
     }
     stk->stack[stk->count++] = p;
     push_succeeded = 1;
+    if(stk->count == 1) {
+      caml_atomic_incr_num_domains_to_remark();
+    }
   }
   caml_plat_unlock(&stk->lock);
   return push_succeeded;
 }
 
-struct pool* pop_from_remark_stack(struct remark_stack* stk) {
+static struct pool* pop_from_remark_stack(struct remark_stack* stk) {
   struct pool* p = NULL;
   caml_plat_lock(&stk->lock);
   if(stk->count > 0) {
     p = stk->stack[--stk->count];
+    if(stk->count == 0) {
+      caml_atomic_decr_num_domains_to_remark();
+    }
   }
   caml_plat_unlock(&stk->lock);
   return p;
@@ -1658,7 +1661,7 @@ struct pool* pop_from_remark_stack(struct remark_stack* stk) {
 
 /* pushes pool to the requested domain or
    if that fails the global remark stack */
-void push_pool_remark_to_domain(struct domain* dom, struct pool* p) {
+void caml_push_pool_remark_to_domain(struct domain* dom, struct pool* p) {
   int push_succeeded = 0;
   if (dom) {
     push_succeeded = push_to_remark_stack(&dom->internals->remark_stack, p);
@@ -1671,9 +1674,16 @@ void push_pool_remark_to_domain(struct domain* dom, struct pool* p) {
 
 /* pop pool from requested domain
    passing NULL pops from the global remark stack */
-struct pool* pop_pool_remark_for_domain(struct domain* dom) {
+struct pool* caml_pop_pool_remark_for_domain(struct domain* dom) {
   struct remark_stack* stk = dom
                 ? &dom->internals->remark_stack
                 : &global_remark_stack;
   return pop_from_remark_stack(stk);
+}
+
+int caml_remark_stack_count_for_domain(struct domain* dom) {
+  struct remark_stack* stk = dom
+                ? &dom->internals->remark_stack
+                : &global_remark_stack;
+  return stk->count;
 }

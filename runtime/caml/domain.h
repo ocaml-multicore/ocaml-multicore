@@ -143,8 +143,9 @@ int caml_global_barrier_num_domains();
 int caml_domain_is_terminating(void);
 
 struct pool;
-void push_pool_remark_to_domain(struct domain* dom, struct pool* p);
-struct pool* pop_pool_remark_for_domain(struct domain* domain);
+void caml_push_pool_remark_to_domain(struct domain* dom, struct pool* p);
+struct pool* caml_pop_pool_remark_for_domain(struct domain* domain);
+int caml_remark_stack_count_for_domain(struct domain* domain);
 
 #endif /* CAML_INTERNALS */
 

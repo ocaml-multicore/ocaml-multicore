@@ -48,6 +48,8 @@ intnat caml_major_collection_slice (intnat);
 void caml_finish_sweeping(void);
 void caml_finish_marking (void);
 uintnat caml_get_num_domains_to_mark(void);
+uintnat caml_atomic_incr_num_domains_to_remark(void);
+uintnat caml_atomic_decr_num_domains_to_remark(void);
 int caml_init_major_gc(caml_domain_state*);
 void caml_teardown_major_gc(void);
 void caml_darken(void*, value, value* ignored);

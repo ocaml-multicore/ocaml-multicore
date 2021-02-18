@@ -59,6 +59,7 @@ uintnat caml_major_cycles_completed = 0;
 
 static atomic_uintnat num_domains_to_sweep;
 static atomic_uintnat num_domains_to_mark;
+static atomic_uintnat num_domains_to_remark;
 static atomic_uintnat num_domains_to_ephe_sweep;
 static atomic_uintnat num_domains_to_final_update_first;
 static atomic_uintnat num_domains_to_final_update_last;
@@ -69,6 +70,14 @@ gc_phase_t caml_gc_phase;
 
 uintnat caml_get_num_domains_to_mark () {
   return atomic_load_acq(&num_domains_to_mark);
+}
+
+uintnat caml_atomic_incr_num_domains_to_remark () {
+  return atomic_fetch_add(&num_domains_to_remark, 1);
+}
+
+uintnat caml_atomic_decr_num_domains_to_remark () {
+  return atomic_fetch_add_verify_ge0(&num_domains_to_remark, -1);
 }
 
 extern value caml_ephe_none; /* See weak.c */
@@ -657,14 +666,14 @@ static intnat pop_from_remark_stack(struct domain* trgt) {
    * - if we don't own it and someone else does, give it to them
    * - if it isn't owned by anyone, prevent it being used and then remark it
    */
-  struct pool* p = pop_pool_remark_for_domain(trgt);
+  struct pool* p = caml_pop_pool_remark_for_domain(trgt);
   if (p) {
     struct domain* owner = caml_owner_of_pool(p);
     if (owner == caml_domain_self()) {
       caml_gc_log("Redarkening pool %p", p);
       caml_redarken_pool(p, &mark_stack_push_act, 0);
     } else if (owner != NULL) {
-      push_pool_remark_to_domain(owner, p);
+      caml_push_pool_remark_to_domain(owner, p);
     } else {
       caml_acquire_pool_adoption_lock();
       /* need to double check in case orphan got adopted */
@@ -675,7 +684,7 @@ static intnat pop_from_remark_stack(struct domain* trgt) {
       }
       caml_release_pool_adoption_lock();
       if (owner != NULL) {
-        push_pool_remark_to_domain(owner, p);
+        caml_push_pool_remark_to_domain(owner, p);
       }
     }
     return 1;
@@ -683,8 +692,23 @@ static intnat pop_from_remark_stack(struct domain* trgt) {
   return 0;
 }
 
+static int check_if_remarking_needed() {
+  int remark_needed =
+    caml_remark_stack_count_for_domain(caml_domain_self()) > 0
+     || caml_remark_stack_count_for_domain(NULL) > 0;
+  if (Caml_state->marking_done && remark_needed) {
+    Caml_state->marking_done = 0;
+    atomic_fetch_add(&num_domains_to_mark, 1);
+  }
+  return remark_needed;
+}
+
 /* mark until the budget runs out or marking is done */
 static intnat mark(intnat budget) {
+  /* check if there is remarking work we can do */
+  if(Caml_state->marking_done)
+    check_if_remarking_needed();
+
   while (budget > 0 && !Caml_state->marking_done) {
     budget = do_some_marking(budget);
 
@@ -940,6 +964,7 @@ static void cycle_all_domains_callback(struct domain* domain, void* unused,
   CAMLassert(atomic_load_acq(&ephe_cycle_info.num_domains_todo) ==
              atomic_load_acq(&ephe_cycle_info.num_domains_done));
   CAMLassert(atomic_load(&num_domains_to_mark) == 0);
+  CAMLassert(atomic_load(&num_domains_to_remark) == 0);
   CAMLassert(atomic_load(&num_domains_to_sweep) == 0);
   CAMLassert(atomic_load(&num_domains_to_ephe_sweep) == 0);
 
@@ -1077,6 +1102,7 @@ static int is_complete_phase_sweep_and_mark_main (struct domain *d)
     caml_gc_phase == Phase_sweep_and_mark_main &&
     atomic_load_acq (&num_domains_to_sweep) == 0 &&
     atomic_load_acq (&num_domains_to_mark) == 0 &&
+    atomic_load_acq (&num_domains_to_remark) == 0 &&
     /* Marking is done */
     atomic_load_acq(&ephe_cycle_info.num_domains_todo) ==
     atomic_load_acq(&ephe_cycle_info.num_domains_done) &&
@@ -1092,6 +1118,7 @@ static int is_complete_phase_mark_final (struct domain *d)
     atomic_load_acq (&num_domains_to_final_update_first) == 0 &&
     /* updated finalise first values */
     atomic_load_acq (&num_domains_to_mark) == 0 &&
+    atomic_load_acq (&num_domains_to_remark) == 0 &&
     /* Marking is done */
     atomic_load_acq(&ephe_cycle_info.num_domains_todo) ==
     atomic_load_acq(&ephe_cycle_info.num_domains_done) &&
@@ -1368,6 +1395,9 @@ void caml_finish_major_cycle ()
 }
 
 void caml_empty_mark_stack () {
+  /* check if there is remarking work we can do */
+  check_if_remarking_needed();
+
   while (!Caml_state->marking_done){
     mark(1000);
     caml_handle_incoming_interrupts();
@@ -1380,6 +1410,9 @@ void caml_empty_mark_stack () {
 }
 
 void caml_finish_marking () {
+  /* check if there is remarking work we can do */
+  check_if_remarking_needed();
+
   if (!Caml_state->marking_done) {
     caml_ev_begin("major_gc/finish_marking");
     caml_empty_mark_stack();
@@ -1433,7 +1466,7 @@ static void mark_stack_prune (struct mark_stack* stk)
 
     /* push work to correct queue */
     struct domain* owner = caml_owner_of_pool(p);
-    push_pool_remark_to_domain(owner, p);
+    caml_push_pool_remark_to_domain(owner, p);
     count++;
   });
 
