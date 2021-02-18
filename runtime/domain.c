@@ -1269,14 +1269,19 @@ int caml_domain_is_terminating ()
   return s->terminating;
 }
 
-static void stop_accepting_on_domain_remark_stack()
+static int try_shutdown_remark_stack()
 {
   struct remark_stack* stk = &caml_domain_self()->internals->remark_stack;
+  int success = 0;
 
   CAMLassert(stk->is_accepting);
   caml_plat_lock(&stk->lock);
-  stk->is_accepting = 0;
+  success = stk->count == 0;
+  if (success) {
+    stk->is_accepting = 0;
+  }
   caml_plat_unlock(&stk->lock);
+  return success;
 }
 
 static void teardown_remark_stack()
@@ -1302,8 +1307,6 @@ static void domain_terminate()
   caml_ev_pause(EV_PAUSE_YIELD);
   caml_delete_root(domain_state->dls_root);
   s->terminating = 1;
-
-  stop_accepting_on_domain_remark_stack();
 
   while (!finished) {
     caml_orphan_allocated_words();
@@ -1331,7 +1334,8 @@ static void domain_terminate()
 
     if (handle_incoming(s) == 0 &&
         Caml_state->marking_done &&
-        Caml_state->sweeping_done) {
+        Caml_state->sweeping_done &&
+        try_shutdown_remark_stack()) {
 
       finished = 1;
       s->terminating = 0;
