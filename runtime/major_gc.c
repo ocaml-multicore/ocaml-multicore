@@ -1052,7 +1052,11 @@ static void cycle_all_domains_callback(struct domain* domain, void* unused,
   domain->state->final_info->updated_first = 0;
   domain->state->final_info->updated_last = 0;
 
+  /* To ensure a mutator doesn't resume while global roots are being marked.
+     Mutators can alter the set of global roots, to preserve its correctness,
+     they should not run while global roots are being marked.*/
   caml_global_barrier();
+
   caml_ev_end("major_gc/stw");
   caml_ev_end("major_gc/cycle_domains");
 }
