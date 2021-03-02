@@ -115,6 +115,8 @@ CAMLexport atomic_uintnat caml_num_domains_running;
 
 CAMLexport uintnat caml_minor_heaps_base;
 CAMLexport uintnat caml_minor_heaps_end;
+CAMLexport atomic_uintnat caml_global_minor_heap_ptr;
+
 CAMLexport uintnat caml_tls_areas_base;
 static __thread dom_internal* domain_self;
 
@@ -169,13 +171,41 @@ asize_t caml_norm_minor_heap_size (intnat wsize)
 int caml_reallocate_minor_heap(asize_t wsize)
 {
   caml_domain_state* domain_state = Caml_state;
+  uintnat global_minor_heap_ptr;
+  uintnat new_alloc_ptr;
+
+  caml_ev_begin("reallocate");
+
   Assert(domain_state->young_ptr == domain_state->young_end);
+
+  while (1) {
+
+    global_minor_heap_ptr = atomic_load_explicit(&caml_global_minor_heap_ptr, memory_order_acquire);
+
+    #ifdef DEBUG
+    CAMLassert(global_minor_heap_ptr != 0x0);
+    #endif
+
+    new_alloc_ptr = global_minor_heap_ptr + Bsize_wsize(wsize);
+
+    /* CAS away and bump the allocation pointer: if it fails a domain likely
+       snatched the requested segment. Restart the loop, else break. */
+    if(atomic_compare_exchange_strong(&caml_global_minor_heap_ptr,
+				      &global_minor_heap_ptr,
+				      new_alloc_ptr)) {
+      break;
+    };
+
+  }
 
   /* free old minor heap.
      instead of unmapping the heap, we decommit it, so there's
      no race whereby other code could attempt to reuse the memory. */
   caml_mem_decommit((void*)domain_self->minor_heap_area,
                     domain_self->minor_heap_area_end - domain_self->minor_heap_area);
+
+  /* new minor heap area is the previous (pre-CAS) global_minor_heap_ptr */
+  domain_self->minor_heap_area = global_minor_heap_ptr;
 
   wsize = caml_norm_minor_heap_size(wsize);
 
@@ -197,6 +227,7 @@ int caml_reallocate_minor_heap(asize_t wsize)
   domain_state->young_end = (char*)(domain_self->minor_heap_area + Bsize_wsize(wsize));
   domain_state->young_limit = (uintnat) domain_state->young_start;
   domain_state->young_ptr = domain_state->young_end;
+  caml_ev_end("reallocate");
   return 0;
 }
 
@@ -354,11 +385,11 @@ void caml_init_domains(uintnat minor_heap_wsz) {
 
   caml_minor_heaps_base = (uintnat) heaps_base;
   caml_minor_heaps_end = (uintnat) heaps_base + size;
+  caml_global_minor_heap_ptr = (uintnat) heaps_base;
   caml_tls_areas_base = (uintnat) tls_base;
 
   for (i = 0; i < Max_domains; i++) {
     struct dom_internal* dom = &all_domains[i];
-    uintnat domain_minor_heap_base;
     uintnat domain_tls_base;
 
     caml_plat_mutex_init(&dom->interruptor.lock);
@@ -375,13 +406,11 @@ void caml_init_domains(uintnat minor_heap_wsz) {
     dom->backup_thread_running = 0;
     dom->backup_thread_msg = BT_INIT;
 
-    domain_minor_heap_base = caml_minor_heaps_base +
-      (uintnat)Minor_heap_max * (uintnat)i;
     domain_tls_base = caml_tls_areas_base + tls_size * (uintnat)i;
     dom->tls_area = domain_tls_base;
     dom->tls_area_end = domain_tls_base + tls_size;
-    dom->minor_heap_area = domain_minor_heap_base;
-    dom->minor_heap_area_end = domain_minor_heap_base + Minor_heap_max;
+    dom->minor_heap_area = 0;
+    dom->minor_heap_area_end = 0;
   }
 
 
