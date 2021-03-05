@@ -1779,6 +1779,8 @@ ocamlopt_cflags="$common_cflags"
 ocamlopt_cppflags="$common_cppflags"
 cclibs="$cclibs $mathlib"
 
+AC_CHECK_LIB(execinfo, backtrace, cclibs="$cclibs -lexecinfo",[])]
+
 AS_CASE([$host],
   [*-*-mingw32],
     [bytecclibs="-lws2_32 -lversion"
