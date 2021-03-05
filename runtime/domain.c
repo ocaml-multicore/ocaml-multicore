@@ -115,6 +115,7 @@ CAMLexport atomic_uintnat caml_num_domains_running;
 
 CAMLexport uintnat caml_minor_heaps_base;
 CAMLexport uintnat caml_minor_heaps_end;
+CAMLexport uintnat caml_tls_areas_base;
 static __thread dom_internal* domain_self;
 
 static int64_t startup_timestamp;
@@ -224,7 +225,7 @@ static void create_domain(uintnat initial_minor_heap_wsize) {
           caml_plat_unlock(&s->lock);
           break;
         }
-        caml_domain_state* domain_state =
+	caml_domain_state* domain_state =
           (caml_domain_state*)(d->tls_area);
         atomic_uintnat* young_limit = (atomic_uintnat*)&domain_state->young_limit;
         d->interrupt_word_address = young_limit;
@@ -333,24 +334,32 @@ CAMLexport void caml_reset_domain_lock(void)
 void caml_init_domains(uintnat minor_heap_wsz) {
   int i;
   uintnat size;
+  uintnat tls_size;
+  uintnat tls_areas_size;
   void* heaps_base;
+  void* tls_base;
 
   /* sanity check configuration */
   if (caml_mem_round_up_pages(Minor_heap_max) != Minor_heap_max)
     caml_fatal_error("Minor_heap_max misconfigured for this platform");
 
-  /* reserve memory space for minor heaps */
+  /* reserve memory space for minor heaps and tls_areas */
   size = (uintnat)Minor_heap_max * Max_domains;
+  tls_size = caml_mem_round_up_pages(sizeof(caml_domain_state));
+  tls_areas_size = tls_size * Max_domains;
 
   heaps_base = caml_mem_map(size*2, size*2, 1 /* reserve_only */);
-  if (!heaps_base) caml_raise_out_of_memory();
+  tls_base = caml_mem_map(tls_areas_size, tls_areas_size, 1 /* reserve_only */);
+  if (!heaps_base || !tls_base) caml_raise_out_of_memory();
 
   caml_minor_heaps_base = (uintnat) heaps_base;
   caml_minor_heaps_end = (uintnat) heaps_base + size;
+  caml_tls_areas_base = (uintnat) tls_base;
 
   for (i = 0; i < Max_domains; i++) {
     struct dom_internal* dom = &all_domains[i];
     uintnat domain_minor_heap_base;
+    uintnat domain_tls_base;
 
     caml_plat_mutex_init(&dom->interruptor.lock);
     caml_plat_cond_init(&dom->interruptor.cond,
@@ -368,14 +377,11 @@ void caml_init_domains(uintnat minor_heap_wsz) {
 
     domain_minor_heap_base = caml_minor_heaps_base +
       (uintnat)Minor_heap_max * (uintnat)i;
-    dom->tls_area = domain_minor_heap_base;
-    dom->tls_area_end =
-      caml_mem_round_up_pages(dom->tls_area +
-                              sizeof(caml_domain_state));
-    dom->minor_heap_area = /* skip guard page */
-      caml_mem_round_up_pages(dom->tls_area_end + 1);
-    dom->minor_heap_area_end =
-      domain_minor_heap_base + Minor_heap_max;
+    domain_tls_base = caml_tls_areas_base + tls_size * (uintnat)i;
+    dom->tls_area = domain_tls_base;
+    dom->tls_area_end = domain_tls_base + tls_size;
+    dom->minor_heap_area = domain_minor_heap_base;
+    dom->minor_heap_area_end = domain_minor_heap_base + Minor_heap_max;
   }
 
 
@@ -617,13 +623,10 @@ static struct {
   atomic_uintnat num_domains_still_processing;
   void (*callback)(struct domain*, void*, int participating_count, struct domain** others_participating);
   void* data;
-  int leave_when_done;
   int num_domains;
   atomic_uintnat barrier;
   void (*enter_spin_callback)(struct domain*, void*);
   void* enter_spin_data;
-  void (*leave_spin_callback)(struct domain*, void*);
-  void* leave_spin_data;
 
   struct interrupt reqs[Max_domains];
   struct domain* participating[Max_domains];
@@ -633,10 +636,7 @@ static struct {
   NULL,
   NULL,
   0,
-  0,
   ATOMIC_UINTNAT_INIT(0),
-  NULL,
-  NULL,
   NULL,
   NULL,
   { { 0 } },
@@ -730,16 +730,6 @@ static void stw_handler(struct domain* domain, void* unused2, interrupt* done)
 
   decrement_stw_domains_still_processing();
 
-  if( !stw_request.leave_when_done ) {
-    SPIN_WAIT {
-      if (atomic_load_acq(&stw_request.num_domains_still_processing) == 0)
-        break;
-
-      if (stw_request.leave_spin_callback)
-        stw_request.leave_spin_callback(domain, stw_request.leave_spin_data);
-    }
-  }
-
   caml_ev_end("stw/handler");
 
   /* poll the GC to check for deferred work
@@ -780,10 +770,7 @@ static void caml_wait_interrupt_acknowledged(struct interruptor* self, struct in
 int caml_try_run_on_all_domains_with_spin_work(
   void (*handler)(struct domain*, void*, int, struct domain**), void* data,
   void (*leader_setup)(struct domain*),
-  void (*enter_spin_callback)(struct domain*, void*), void* enter_spin_data,
-  void (*leave_spin_callback)(struct domain*, void*), void* leave_spin_data,
-  int leave_when_done
-  )
+  void (*enter_spin_callback)(struct domain*, void*), void* enter_spin_data)
 {
 #ifdef DEBUG
   caml_domain_state* domain_state = Caml_state;
@@ -821,9 +808,6 @@ int caml_try_run_on_all_domains_with_spin_work(
   stw_request.enter_spin_data = enter_spin_data;
   stw_request.callback = handler;
   stw_request.data = data;
-  stw_request.leave_spin_callback = leave_spin_callback;
-  stw_request.leave_spin_data = leave_spin_data;
-  stw_request.leave_when_done = leave_when_done;
   atomic_store_rel(&stw_request.barrier, 0);
   atomic_store_rel(&stw_request.domains_still_running, 1);
 
@@ -881,13 +865,6 @@ int caml_try_run_on_all_domains_with_spin_work(
 
   decrement_stw_domains_still_processing();
 
-  if( !leave_when_done ) {
-    SPIN_WAIT {
-      if (atomic_load_acq(&stw_request.num_domains_still_processing) == 0)
-        break;
-    }
-  }
-
   caml_ev_end("stw/leader");
   /* other domains might not have finished stw_handler yet, but they
      will finish as soon as they notice num_domains_still_processing
@@ -896,9 +873,9 @@ int caml_try_run_on_all_domains_with_spin_work(
   return 1;
 }
 
-int caml_try_run_on_all_domains(void (*handler)(struct domain*, void*, int, struct domain**), void* data, void (*leader_setup)(struct domain*), int leave_when_done)
+int caml_try_run_on_all_domains(void (*handler)(struct domain*, void*, int, struct domain**), void* data, void (*leader_setup)(struct domain*))
 {
-  return caml_try_run_on_all_domains_with_spin_work(handler, data, leader_setup, 0, 0, 0, 0, leave_when_done);
+  return caml_try_run_on_all_domains_with_spin_work(handler, data, leader_setup, 0, 0);
 }
 
 void caml_interrupt_self() {
