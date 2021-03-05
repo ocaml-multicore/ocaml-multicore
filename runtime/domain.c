@@ -302,9 +302,12 @@ static void create_domain(uintnat initial_minor_heap_wsize) {
       goto init_major_gc_failure;
     }
 
-    if(caml_reallocate_minor_heap(initial_minor_heap_wsize) < 0) {
-      goto reallocate_minor_heap_failure;
-    }
+    /* setting young_limit and young_ptr to minor_heaps_base
+       to trigger minor_heaps reallocation on GC poll */
+    domain_state->young_start = (char*)caml_minor_heaps_base;
+    domain_state->young_end = (char*)caml_minor_heaps_base;
+    domain_state->young_limit = (uintnat) caml_minor_heaps_base;
+    domain_state->young_ptr = (char *) caml_minor_heaps_base;
 
     domain_state->dls_root = caml_create_root_noexc(Val_unit);
     if(domain_state->dls_root == NULL) {
@@ -334,7 +337,6 @@ alloc_main_stack_failure:
 create_stack_cache_failure:
   caml_delete_root(domain_state->dls_root);
 create_root_failure:
-reallocate_minor_heap_failure:
   caml_teardown_major_gc();
 init_major_gc_failure:
   caml_teardown_shared_heap(d->state.state->shared_heap);
@@ -934,6 +936,23 @@ static void caml_poll_gc_work()
   if (((uintnat)Caml_state->young_ptr - Bhsize_wosize(Max_young_wosize) <
        (uintnat)Caml_state->young_start) ||
       Caml_state->requested_minor_gc) {
+
+    /* not a requested_minor_gc, so minor_heap ran out, but can fetch more from
+       the global minor heap segment. */
+    /* TODO(engil): rework logic, double checking requested_minor_gc is odd */
+    if (!Caml_state->requested_minor_gc &&
+	(atomic_load_explicit(&caml_global_minor_heap_ptr, memory_order_acquire)
+	 < caml_minor_heaps_end)) {
+
+      /* if reallocation didn't work, we keep executing this branch and proceed
+	 with a minor collection */
+      /* TODO(engil): same as earlier, rework, because in case we did reallocate
+	 we skip the requested_major_slice branch this time around. */
+      if ( caml_reallocate_minor_heap(caml_params->init_minor_heap_wsz) == 0 )
+	return;
+
+    }
+
     /* out of minor heap or collection forced */
     caml_ev_begin("dispatch_minor_gc");
     Caml_state->requested_minor_gc = 0;
