@@ -66,6 +66,12 @@ static atomic_uintnat num_domains_to_final_update_last;
 
 static atomic_uintnat terminated_domains_allocated_words;
 
+enum global_roots_status{
+  WORK_UNSTARTED,
+  WORK_STARTED
+};
+static atomic_uintnat domain_global_roots_started;
+
 gc_phase_t caml_gc_phase;
 
 uintnat caml_get_num_domains_to_mark () {
@@ -989,6 +995,8 @@ static void cycle_all_domains_callback(struct domain* domain, void* unused,
       atomic_store_rel(&num_domains_to_ephe_sweep, num_domains_in_stw);
       atomic_store_rel(&num_domains_to_final_update_first, num_domains_in_stw);
       atomic_store_rel(&num_domains_to_final_update_last, num_domains_in_stw);
+
+      atomic_store(&domain_global_roots_started, WORK_UNSTARTED);
     }
     // should interrupts be processed here or not?
     // depends on whether marking above may need interrupts
@@ -1000,6 +1008,7 @@ static void cycle_all_domains_callback(struct domain* domain, void* unused,
   if (caml_params->verify_heap) {
     struct heap_verify_state* ver = caml_verify_begin();
     caml_do_roots (&caml_verify_root, ver, domain, 1);
+    caml_scan_global_roots(&caml_verify_root, ver);
     caml_verify_heap(ver);
     caml_gc_log("Heap verified");
     caml_global_barrier();
@@ -1017,6 +1026,11 @@ static void cycle_all_domains_callback(struct domain* domain, void* unused,
 
   caml_ev_begin("major_gc/roots");
   caml_do_roots (&caml_darken, NULL, domain, 0);
+  uintnat work_unstarted = WORK_UNSTARTED;
+  if(atomic_compare_exchange_strong(&domain_global_roots_started, &work_unstarted, WORK_STARTED)){
+      caml_scan_global_roots(&caml_darken, NULL);
+  }
+  
   caml_ev_end("major_gc/roots");
 
   if (domain->state->mark_stack->count == 0) {
@@ -1037,6 +1051,11 @@ static void cycle_all_domains_callback(struct domain* domain, void* unused,
   /* Finalisers */
   domain->state->final_info->updated_first = 0;
   domain->state->final_info->updated_last = 0;
+
+  /* To ensure a mutator doesn't resume while global roots are being marked.
+     Mutators can alter the set of global roots, to preserve its correctness,
+     they should not run while global roots are being marked.*/
+  caml_global_barrier();
 
   caml_ev_end("major_gc/stw");
   caml_ev_end("major_gc/cycle_domains");
@@ -1257,7 +1276,7 @@ mark_again:
       if (barrier_participants) {
         try_complete_gc_phase (d, (void*)0, participant_count, barrier_participants);
       } else {
-        caml_try_run_on_all_domains (&try_complete_gc_phase, 0, 0, 0);
+        caml_try_run_on_all_domains (&try_complete_gc_phase, 0, 0);
       }
       if (budget > 0) goto mark_again;
     }
@@ -1280,11 +1299,13 @@ mark_again:
     /* To handle the case where multiple domains try to finish the major
       cycle simultaneously, we loop until the current cycle has ended,
       ignoring whether caml_try_run_on_all_domains succeeds. */
+
+
     while (saved_major_cycle == caml_major_cycles_completed) {
       if (barrier_participants) {
         cycle_all_domains_callback(d, (void*)0, participant_count, barrier_participants);
       } else {
-        caml_try_run_on_all_domains(&cycle_all_domains_callback, 0, 0, 0);
+        caml_try_run_on_all_domains(&cycle_all_domains_callback, 0, 0);
       }
     }
   }
@@ -1334,7 +1355,7 @@ void caml_finish_major_cycle ()
   uintnat saved_major_cycles = caml_major_cycles_completed;
 
   while( saved_major_cycles == caml_major_cycles_completed ) {
-    caml_try_run_on_all_domains(&finish_major_cycle_callback, (void*)caml_major_cycles_completed, 0, 0);
+    caml_try_run_on_all_domains(&finish_major_cycle_callback, (void*)caml_major_cycles_completed, 0);
   }
 }
 
