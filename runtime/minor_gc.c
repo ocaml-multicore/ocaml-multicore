@@ -510,12 +510,22 @@ void caml_empty_minor_heap_domain_clear (struct domain* domain, void* unused)
 {
   caml_domain_state* domain_state = domain->state;
   struct caml_minor_tables *minor_tables = domain_state->minor_tables;
+  int realloc_retcode;
 
   caml_final_empty_young(domain);
 
   clear_table ((struct generic_table *)&minor_tables->major_ref);
   clear_table ((struct generic_table *)&minor_tables->ephe_ref);
   clear_table ((struct generic_table *)&minor_tables->custom);
+
+  realloc_retcode = caml_reallocate_minor_heap(caml_params->init_minor_heap_wsz);
+
+  if (realloc_retcode == REALLOCATE_HEAP_FULL)
+    abort(); /* FIXME(engil): should not happen? */
+  else if (realloc_retcode == REALLOCATE_OOM)
+    caml_raise_out_of_memory();
+
+  return;
 }
 
 void caml_empty_minor_heap_promote (struct domain* domain, int participating_count, struct domain** participating, int not_alone)
@@ -783,7 +793,6 @@ static void caml_stw_empty_minor_heap_no_major_slice (struct domain* domain, voi
   caml_ev_begin("minor_gc/clear");
   caml_gc_log("running stw empty_minor_heap_domain_clear");
   caml_empty_minor_heap_domain_clear(domain, 0);
-  caml_reallocate_minor_heap(caml_params->init_minor_heap_wsz);
   caml_ev_end("minor_gc/clear");
   caml_gc_log("finished stw empty_minor_heap");
 }

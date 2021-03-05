@@ -43,6 +43,9 @@
 #include "caml/finalise.h"
 #include "caml/gc_ctrl.h"
 
+#define REALLOCATE_OOM -1
+#define REALLOCATE_HEAP_FULL -2
+
 #define BT_IN_BLOCKING_SECTION 0
 #define BT_ENTERING_OCAML 1
 #define BT_TERMINATE 2
@@ -188,6 +191,9 @@ int caml_reallocate_minor_heap(asize_t wsize)
 
     new_alloc_ptr = global_minor_heap_ptr + Bsize_wsize(wsize);
 
+    if (new_alloc_ptr > caml_minor_heaps_end)
+      return REALLOCATE_HEAP_FULL;
+
     /* CAS away and bump the allocation pointer: if it fails a domain likely
        snatched the requested segment. Restart the loop, else break. */
     if(atomic_compare_exchange_strong(&caml_global_minor_heap_ptr,
@@ -210,7 +216,7 @@ int caml_reallocate_minor_heap(asize_t wsize)
   wsize = caml_norm_minor_heap_size(wsize);
 
   if (!caml_mem_commit((void*)domain_self->minor_heap_area, Bsize_wsize(wsize))) {
-    return -1;
+    return REALLOCATE_OOM;
   }
 
 #ifdef DEBUG
@@ -944,12 +950,23 @@ static void caml_poll_gc_work()
 	(atomic_load_explicit(&caml_global_minor_heap_ptr, memory_order_acquire)
 	 < caml_minor_heaps_end)) {
 
+      switch (caml_reallocate_minor_heap(caml_params->init_minor_heap_wsz)) {
+
       /* if reallocation didn't work, we keep executing this branch and proceed
 	 with a minor collection */
+      case REALLOCATE_HEAP_FULL:
+	break;
+
+      case REALLOCATE_OOM:
+	caml_raise_out_of_memory();
+	break;
+
       /* TODO(engil): same as earlier, rework, because in case we did reallocate
 	 we skip the requested_major_slice branch this time around. */
-      if ( caml_reallocate_minor_heap(caml_params->init_minor_heap_wsz) == 0 )
+      default:
 	return;
+
+      };
 
     }
 

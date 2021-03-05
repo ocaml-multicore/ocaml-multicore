@@ -39,6 +39,9 @@ struct domain {
   (CAMLalloc_point_here, \
    CAMLunlikely((uintnat)(dom_st)->young_ptr < (dom_st)->young_limit))
 
+#define REALLOCATE_OOM -1
+#define REALLOCATE_HEAP_FULL -2
+
 asize_t caml_norm_minor_heap_size (intnat);
 int caml_reallocate_minor_heap(asize_t);
 
