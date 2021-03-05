@@ -179,8 +179,6 @@ int caml_reallocate_minor_heap(asize_t wsize)
 
   caml_ev_begin("reallocate");
 
-  Assert(domain_state->young_ptr == domain_state->young_end);
-
   while (1) {
 
     global_minor_heap_ptr = atomic_load_explicit(&caml_global_minor_heap_ptr, memory_order_acquire);
