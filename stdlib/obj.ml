@@ -79,9 +79,6 @@ let int_tag = 1000
 let out_of_heap_tag = 1001
 let unaligned_tag = 1002
 
-external clone_continuation : ('a,'b) continuation -> ('a,'b) continuation =
-  "caml_clone_continuation"
-
 module Closure = struct
   type info = {
     arity: int;
