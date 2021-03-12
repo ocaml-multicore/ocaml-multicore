@@ -180,9 +180,7 @@ int caml_reallocate_minor_heap(asize_t wsize)
 
     global_minor_heap_ptr = atomic_load_explicit(&caml_global_minor_heap_ptr, memory_order_acquire);
 
-    #ifdef DEBUG
     CAMLassert(global_minor_heap_ptr != 0x0);
-    #endif
 
     new_alloc_ptr = global_minor_heap_ptr + Bsize_wsize(wsize);
 
