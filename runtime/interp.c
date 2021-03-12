@@ -276,6 +276,7 @@ value caml_interprete(code_t prog, asize_t prog_size)
     raise_unhandled = raise_unhandled_closure;
     caml_register_generational_global_root(&raise_unhandled);
     caml_global_data = Val_unit;
+    caml_register_generational_global_root(&caml_global_data);
     caml_init_callbacks();
     return Val_unit;
   }
@@ -707,12 +708,14 @@ value caml_interprete(code_t prog, asize_t prog_size)
       Next;
     }
 
-    Instruct(SETGLOBAL):
-      caml_modify_field(caml_global_data, *pc, accu);
+    Instruct(SETGLOBAL):{
+      value global_data = caml_global_data;
+      caml_modify_field(global_data, *pc, accu);
+      caml_modify_generational_global_root(&caml_global_data, global_data);
       accu = Val_unit;
       pc++;
       Next;
-
+    }
 /* Allocation of blocks */
 
     Instruct(PUSHATOM0):

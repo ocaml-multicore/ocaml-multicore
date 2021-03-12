@@ -530,6 +530,8 @@ static void* domain_thread_func(void* v)
                 domain_self->interruptor.unique_id);
     caml_domain_start_hook();
     caml_callback(*domain_callback, Val_unit);
+    caml_remove_generational_global_root(domain_callback);
+    caml_stat_free(domain_callback);
     domain_terminate();
   } else {
     caml_gc_log("Failed to create domain");
@@ -1224,7 +1226,6 @@ static void domain_terminate()
 
   caml_gc_log("Domain terminating");
   caml_ev_pause(EV_PAUSE_YIELD);
-  caml_remove_generational_global_root(&domain_state->dls_root);
   s->terminating = 1;
 
   while (!finished) {
@@ -1270,6 +1271,7 @@ static void domain_terminate()
     caml_plat_unlock(&s->lock);
   }
   caml_sample_gc_collect(domain_state);
+  caml_remove_generational_global_root(&domain_state->dls_root);
 
   caml_stat_free(domain_state->final_info);
   // run the domain termination hook
