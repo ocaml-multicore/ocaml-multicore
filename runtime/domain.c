@@ -43,9 +43,6 @@
 #include "caml/finalise.h"
 #include "caml/gc_ctrl.h"
 
-#define REALLOCATE_OOM -1
-#define REALLOCATE_HEAP_FULL -2
-
 #define BT_IN_BLOCKING_SECTION 0
 #define BT_ENTERING_OCAML 1
 #define BT_TERMINATE 2
