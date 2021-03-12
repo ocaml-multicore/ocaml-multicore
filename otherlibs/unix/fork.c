@@ -28,6 +28,7 @@ CAMLprim value unix_fork(value unit)
     caml_failwith("Unix.fork may not be called while multiple domains are running");
   }
   ret = fork();
+  if (ret == 0) caml_atfork_hook();
   if (ret == -1) uerror("fork", Nothing);
   if (caml_debugger_in_use)
     if ((caml_debugger_fork_mode && ret == 0) ||
