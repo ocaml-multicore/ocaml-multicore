@@ -951,7 +951,7 @@ static void caml_poll_gc_work()
 	break;
 
       case REALLOCATE_OOM:
-	caml_raise_out_of_memory();
+	caml_fatal_error("could not allocate minor heap");
 	break;
 
       /* TODO(engil): same as earlier, rework, because in case we did reallocate

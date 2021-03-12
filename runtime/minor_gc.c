@@ -523,7 +523,7 @@ void caml_empty_minor_heap_domain_clear (struct domain* domain, void* unused)
   if (realloc_retcode == REALLOCATE_HEAP_FULL)
     abort(); /* FIXME(engil): should not happen? */
   else if (realloc_retcode == REALLOCATE_OOM)
-    caml_raise_out_of_memory();
+    caml_fatal_error("could not allocate minor heap");
 
   return;
 }
