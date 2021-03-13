@@ -18,6 +18,7 @@
 type 'a t = 'a lazy_t
 
 exception Undefined
+exception RacyLazy
 
 (* [update_tag blk old new] updates the tag [blk] from [old] to [new] using a
  * CAS loop (in order to handle concurrent conflicts with the GC marking).
@@ -40,7 +41,10 @@ let do_force_block blk =
     make_forward b (Obj.repr result);
     result
   with e ->
-    Obj.set_field b 0 (Obj.repr (fun () -> raise e));
+    begin match e with
+    | RacyLazy -> Obj.set_field b 0 (Obj.repr closure)
+    | _ -> Obj.set_field b 0 (Obj.repr (fun () -> raise e))
+    end;
     assert (update_tag b Obj.forcing_tag Obj.lazy_tag);
     raise e
 
@@ -83,7 +87,7 @@ let update_tag_forcing (blk : 'arg lazy_t) =
 
 let force_gen_lazy_block ~only_val blk =
   match update_tag_forcing blk with
-  | Racy -> raise Undefined
+  | Racy -> raise RacyLazy
   | Forcing when only_val -> do_force_val_block blk
   | Forcing -> do_force_block blk
   | Done v -> v
