@@ -53,13 +53,19 @@ let do_force_val_block blk =
   make_forward b (Obj.repr result);
   result
 
-type status = Racy | Forcing
+type 'a status = Racy | Forcing | Done of 'a
 
-(* Assumes [blk] is a block with tag lazy *)
+(* [blk] might either be a lazy block with any tag (due to parallelism) or a
+ * short-circuited object (when the poll point inserted at the entry to this
+ * function performs a GC, which short-circuits the lazy). Hence, we need to
+ * repeat the tag checks again. *)
 let update_tag_forcing (blk : 'arg lazy_t) =
   let b = Obj.repr blk in
-  if not (update_tag b Obj.lazy_tag Obj.forcing_tag) then
-    (* blk has tag either
+  let t = Obj.tag b in
+  if t <> Obj.lazy_tag && t <> Obj.forcing_tag && t <> Obj.forward_tag then
+    Done (Obj.obj b : 'arg)
+  else if not (update_tag b Obj.lazy_tag Obj.forcing_tag) then begin
+    (* [update_tag] has failed. [blk] has tag that is either
         + Obj.forcing_tag -- currently being forced by this domain or
                              another concurrent domain (or)
         + Obj.forward_tag -- was being forced by another domain which has since
@@ -67,17 +73,20 @@ let update_tag_forcing (blk : 'arg lazy_t) =
     let forcing_domain_id : int = Obj.obj (Obj.field b 0) in
     let my_domain_id = domain_self () in
     (* XXX KC: Need a fence here to prevent the tag read from being reordered
-     * before reading the first field of [b] *)
+     * before reading the first field of [b]. But OK for now since [Obj.tag] is
+     * implemented as a C call, and compilers don't reorder arbitrary C calls.
+     *)
     if Obj.tag b = Obj.forcing_tag && forcing_domain_id = my_domain_id then
       raise Undefined
     else Racy
-  else Forcing
+  end else (* success *) Forcing
 
 let force_gen_lazy_block ~only_val blk =
   match update_tag_forcing blk with
   | Racy -> raise Undefined
   | Forcing when only_val -> do_force_val_block blk
   | Forcing -> do_force_block blk
+  | Done v -> v
 
 (* used in the %lazy_force primitive *)
 let force_lazy_block blk = force_gen_lazy_block ~only_val:false blk
@@ -87,6 +96,7 @@ let try_force_gen_lazy_block ~only_val blk =
   | Racy -> None
   | Forcing when only_val -> Some (do_force_val_block blk)
   | Forcing -> Some (do_force_block blk)
+  | Done v -> Some v
 
 (* [force_gen ~only_val:false] is not used, since [Lazy.force] is
    declared as a primitive whose code inlines the tag tests of its
@@ -95,13 +105,13 @@ let try_force_gen_lazy_block ~only_val blk =
 let force_gen ~only_val (lzv : 'arg lazy_t) =
   let x = Obj.repr lzv in
   let t = Obj.tag x in
-  if t = Obj.forward_tag then (Obj.obj (Obj.field x 0) : 'arg) else
-  if t <> Obj.lazy_tag && t <> Obj.forcing_tag then (Obj.obj x : 'arg)
+  if t = Obj.forward_tag then (Obj.obj (Obj.field x 0) : 'arg)
+  else if t <> Obj.lazy_tag && t <> Obj.forcing_tag then (Obj.obj x : 'arg)
   else force_gen_lazy_block ~only_val lzv
 
 let try_force_gen ~only_val (lzv : 'arg lazy_t) =
   let x = Obj.repr lzv in
   let t = Obj.tag x in
-  if t = Obj.forward_tag then Some (Obj.obj (Obj.field x 0) : 'arg) else
-  if t <> Obj.lazy_tag && t <> Obj.forcing_tag then Some (Obj.obj x : 'arg)
+  if t = Obj.forward_tag then Some (Obj.obj (Obj.field x 0) : 'arg)
+  else if t <> Obj.lazy_tag && t <> Obj.forcing_tag then Some (Obj.obj x : 'arg)
   else try_force_gen_lazy_block ~only_val lzv
