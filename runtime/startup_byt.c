@@ -334,7 +334,10 @@ CAMLexport void caml_main(char_os **argv)
   /* Initialize the abstract machine */
   caml_init_gc ();
   Caml_state->external_raise = NULL;
-  if (caml_params->backtrace_enabled_init) caml_record_backtrace(Val_int(1));
+  if (caml_params->backtrace_enabled_init){
+    caml_init_backtrace();
+    caml_record_backtrace(Val_int(1));
+  }
   /* Initialize the interpreter */
   caml_interprete(NULL, 0);
   /* Initialize the debugger, if needed */
@@ -418,7 +421,10 @@ CAMLexport value caml_startup_code_exn(
   if (exe_name == NULL) exe_name = caml_search_exe_in_path(argv[0]);
   Caml_state->external_raise = NULL;
   caml_sys_init(exe_name, argv);
-  if (caml_params->backtrace_enabled_init) caml_record_backtrace(Val_int(1));
+  if (caml_params->backtrace_enabled_init){
+    caml_init_backtrace();
+    caml_record_backtrace(Val_int(1));
+  }
   Caml_state->external_raise = NULL;
   /* Initialize the interpreter */
   caml_interprete(NULL, 0);

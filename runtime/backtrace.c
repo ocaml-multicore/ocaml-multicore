@@ -42,7 +42,7 @@ CAMLprim value caml_record_backtrace(value vflag)
     Caml_state->backtrace_active = flag;
     Caml_state->backtrace_pos = 0;
     if (flag) {
-      Caml_state->backtrace_last_exn = Val_unit;
+      caml_modify_generational_global_root(&Caml_state->backtrace_last_exn, Val_unit);
     } else {
       caml_remove_generational_global_root(&Caml_state->backtrace_last_exn);
     }
