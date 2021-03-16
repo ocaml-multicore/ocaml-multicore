@@ -290,6 +290,9 @@ static void create_domain(uintnat initial_minor_heap_wsize) {
     }
 
     domain_state->backtrace_buffer = NULL;
+    domain_state->backtrace_last_exn = Val_unit;
+    caml_register_generational_global_root(&domain_state->backtrace_last_exn);
+
 #ifndef NATIVE_CODE
     domain_state->external_raise = NULL;
     domain_state->trap_sp_off = 1;
@@ -1272,6 +1275,7 @@ static void domain_terminate()
   }
   caml_sample_gc_collect(domain_state);
   caml_remove_generational_global_root(&domain_state->dls_root);
+  caml_remove_generational_global_root(&domain_state->backtrace_last_exn);
 
   caml_stat_free(domain_state->final_info);
   // run the domain termination hook

@@ -231,6 +231,7 @@ static caml_thread_t caml_thread_new_info(void)
   th->external_raise = NULL;
   #endif
 
+  caml_register_generational_global_root(&th->backtrace_last_exn);
   return th;
 }
 
@@ -279,6 +280,7 @@ static void caml_thread_reinitialize(void)
   while (th != Current_thread) {
     next = th->next;
     caml_free_stack(th->current_stack);
+    caml_remove_generational_global_root(&th->backtrace_last_exn);
     caml_stat_free(th);
     th = next;
   }

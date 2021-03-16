@@ -28,10 +28,6 @@
 #include "caml/fail.h"
 #include "caml/debugger.h"
 
-void caml_init_backtrace(void)
-{
-  caml_register_generational_global_root(&Caml_state->backtrace_last_exn);
-}
 
 /* Start or stop the backtrace machinery */
 CAMLprim value caml_record_backtrace(value vflag)
