@@ -316,8 +316,7 @@ Caml_inline value alloc_shr(mlsize_t wosize, tag_t tag, int noexc)
   }
   CAML_EV_ALLOC(wosize);
   dom_st->allocated_words += Whsize_wosize(wosize);
-  if (dom_st->allocated_words > dom_st->minor_heap_wsz) {
-    CAML_EV_COUNTER (EV_C_REQUEST_MAJOR_ALLOC_SHR, 1);
+  if (dom_st->allocated_words > global_minor_heap_wsz_per_domain) {
     caml_request_major_slice();
   }
 

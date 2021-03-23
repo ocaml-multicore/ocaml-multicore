@@ -52,7 +52,7 @@ let test_interrupt_routing () =
   let d2 = Domain.spawn (fun () ->
     Sync.(critical_section (fun () ->
       Atomic.set r true; wait (); Atomic.set r false))) in
-  while not (Atomic.get r) do () done;
+  while not (Atomic.get r) do Domain.Sync.poll (); done;
   Sync.notify (get_id d1); (* d2 must not get this interrupt *)
   for i = 1 to 100000 do
     assert (Atomic.get r = true)

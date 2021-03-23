@@ -47,6 +47,8 @@ struct generic_table CAML_TABLE_STRUCT(char);
 static atomic_intnat domains_finished_minor_gc;
 static atomic_intnat domain_finished_root;
 
+asize_t global_minor_heap_wsz_per_domain;
+
 static atomic_uintnat caml_minor_cycles_started = 0;
 
 static caml_plat_mutex global_roots_lock = CAML_PLAT_MUTEX_INITIALIZER;
@@ -129,11 +131,10 @@ void caml_set_minor_heap_size (asize_t wsize)
 {
   caml_domain_state* domain_state = Caml_state;
   struct caml_minor_tables *r = domain_state->minor_tables;
-  if (domain_state->young_ptr != domain_state->young_end) caml_minor_collection ();
 
-  if(caml_reallocate_minor_heap(wsize) < 0) {
-    caml_fatal_error("Fatal error: No memory for minor heap");
-  }
+  global_minor_heap_wsz_per_domain = wsize;
+
+  if (domain_state->young_ptr != domain_state->young_end) caml_minor_collection ();
 
   reset_minor_tables(r);
 }
@@ -518,13 +519,97 @@ void caml_empty_minor_heap_domain_clear (struct domain* domain, void* unused)
   clear_table ((struct generic_table *)&minor_tables->ephe_ref);
   clear_table ((struct generic_table *)&minor_tables->custom);
 
+  return;
+}
+
+void caml_adjust_global_minor_heap(int participating_domains) {
+  // Calculate the size of the existing mapping
+  int global_minor_heap_size = caml_global_minor_heap_limit - caml_global_minor_heap_start;
+  // Now using the number of participating domains, we calculate the new size
+  int new_global_minor_heap_size = participating_domains*Bsize_wsize(global_minor_heap_wsz_per_domain) + caml_global_minor_heap_start;
+
+  if( global_minor_heap_size != new_global_minor_heap_size ) {
+    caml_mem_decommit((char*)caml_global_minor_heap_start, global_minor_heap_size);
+    caml_mem_commit((char*)caml_global_minor_heap_start, new_global_minor_heap_size);
+
+    caml_global_minor_heap_limit = caml_global_minor_heap_start + new_global_minor_heap_size;
+  }
+
+  atomic_store_explicit(&caml_global_minor_heap_ptr,
+            caml_global_minor_heap_start,
+            memory_order_release);
+}
+
+int caml_replenish_minor_heap()
+{
+  caml_domain_state* domain_state = Caml_state;
+  uintnat cached_global_minor_heap_ptr;
+  uintnat new_alloc_ptr;
+
+  uintnat minor_buffer_wsize = global_minor_heap_wsz_per_domain >> 3;
+  uintnat minor_buffer_bsize = Bsize_wsize(minor_buffer_wsize);
+  uintnat requested_buffer_size;
+
+  CAML_EV_BEGIN(EV_MINOR_REPLENISH_BUFFER);
+
+  // Here we try to replenish our minor heap from the global minor heap
+  // This needs to be done in a loop because it could fail.
+  while (1) {
+    uintnat remaining_global_minor;
+
+    cached_global_minor_heap_ptr = atomic_load_explicit(&caml_global_minor_heap_ptr, memory_order_acquire);
+
+    remaining_global_minor = caml_global_minor_heap_limit - caml_global_minor_heap_ptr;
+
+    requested_buffer_size = remaining_global_minor < minor_buffer_bsize ? remaining_global_minor : minor_buffer_bsize;
+
+    CAMLassert(caml_global_minor_heap_start <= cached_global_minor_heap_ptr);
+    CAMLassert(cached_global_minor_heap_ptr <= caml_global_minor_heap_limit);
+
+    new_alloc_ptr = cached_global_minor_heap_ptr + requested_buffer_size;
+
+    if (new_alloc_ptr > caml_global_minor_heap_limit) {
+      CAML_EV_END(EV_MINOR_REPLENISH_BUFFER);
+      return 0;
+    }
+
+    /* CAS away and bump the allocation pointer: if it fails a domain likely
+       snatched the requested segment. Restart the loop, else success. */
+    if(atomic_compare_exchange_strong(&caml_global_minor_heap_ptr,
+				      &cached_global_minor_heap_ptr,
+				      new_alloc_ptr)) {
+      break;
+    };
+  }
+
+  // before we trample over our current buffer, record how much we've allocated
+  domain_state->stat_minor_words += Wsize_bsize (domain_state->young_end - domain_state->young_ptr);
+
+  // global_minor_heap_ptr is now our new minor heap for this domain
+
+  // I can't think of a situation where requested_buffer_size is not a word multiple
+  domain_state->minor_heap_wsz = Wsize_bsize(requested_buffer_size);
+
+  caml_update_young_limit(cached_global_minor_heap_ptr);
+
+  domain_state->young_start = (char*)cached_global_minor_heap_ptr;
+  domain_state->young_end = (char*)(cached_global_minor_heap_ptr + minor_buffer_bsize);
+
+  domain_state->young_ptr = domain_state->young_end;
+
 #ifdef DEBUG
   {
     uintnat* p = (uintnat*)domain_state->young_start;
-    for (; p < (uintnat*)domain_state->young_end; p++)
+    for (; p < (uintnat*)(domain_state->young_end); p++)
       *p = Debug_uninit_align;
   }
 #endif
+
+  CAMLassert(domain_state->young_start < (char*)caml_global_minor_heap_limit && domain_state->young_start >= (char*)caml_global_minor_heap_start);
+  CAMLassert(domain_state->young_end <= (char*)caml_global_minor_heap_limit && domain_state->young_end > (char*)caml_global_minor_heap_start);
+
+  CAML_EV_END(EV_MINOR_REPLENISH_BUFFER);
+  return 1;
 }
 
 void caml_empty_minor_heap_promote (struct domain* domain, int participating_count, struct domain** participating, int not_alone)
@@ -534,14 +619,13 @@ void caml_empty_minor_heap_promote (struct domain* domain, int participating_cou
   struct caml_custom_elt *elt;
   unsigned rewrite_successes = 0;
   unsigned rewrite_failures = 0;
-  char* young_ptr = domain_state->young_ptr;
-  char* young_end = domain_state->young_end;
-  uintnat minor_allocated_bytes = young_end - young_ptr;
-  uintnat prev_alloc_words;
+  uintnat minor_allocated_bytes = Caml_state->young_end - Caml_state->young_ptr;
   struct oldify_state st = {0};
   value **r;
   intnat c, curr_idx;
+  intnat finished_minor_gc;
   int remembered_roots = 0;
+  uintnat prev_alloc_words;
 
   st.promote_domain = domain;
 
@@ -683,18 +767,35 @@ void caml_empty_minor_heap_promote (struct domain* domain, int participating_cou
   atomic_store_rel((atomic_uintnat*)&domain_state->young_ptr, (uintnat)domain_state->young_end);
 
   if( not_alone ) {
-    atomic_fetch_add_explicit(&domains_finished_minor_gc, 1, memory_order_release);
+      while (1) {
+        finished_minor_gc = atomic_load_explicit(&domains_finished_minor_gc, memory_order_acquire);
+        if ((finished_minor_gc + 1) == participating_count) {
+          /* last domain to be done with minor collection, reset global allocation pointer */
+          caml_adjust_global_minor_heap(participating_count);
+        }
+
+        /* CAS away finished_minor_gc, only one domain should be the last one. */
+        if (atomic_compare_exchange_strong(&domains_finished_minor_gc,
+					 &finished_minor_gc,
+					 finished_minor_gc + 1)) {
+        	break;
+        }
+    }
+  }
+  else {
+    caml_adjust_global_minor_heap(1);
   }
 
   domain_state->stat_minor_words += Wsize_bsize (minor_allocated_bytes);
+
   domain_state->stat_minor_collections++;
   domain_state->stat_promoted_words += domain_state->allocated_words - prev_alloc_words;
 
   CAML_EV_END(EV_MINOR);
   caml_gc_log ("Minor collection of domain %d completed: %2.0f%% of %u KB live, rewrite: successes=%u failures=%u",
                domain->state->id,
-               100.0 * (double)st.live_bytes / (double)minor_allocated_bytes,
-               (unsigned)(minor_allocated_bytes + 512)/1024, rewrite_successes, rewrite_failures);
+               100.0 * (double)st.live_bytes / (double)(domain_state->stat_minor_words),
+               (unsigned)((domain_state->stat_minor_words) + 512)/1024, rewrite_successes, rewrite_failures);
 }
 
 void caml_do_opportunistic_major_slice(struct domain* domain, void* unused)
@@ -760,6 +861,9 @@ static void caml_stw_empty_minor_heap_no_major_slice (struct domain* domain, voi
   caml_gc_log("running stw empty_minor_heap_domain_clear");
   caml_empty_minor_heap_domain_clear(domain, 0);
   CAML_EV_END(EV_MINOR_CLEAR);
+
+  caml_replenish_minor_heap();
+
   caml_gc_log("finished stw empty_minor_heap");
 }
 
@@ -845,7 +949,7 @@ static void realloc_generic_table
   CAMLassert (tbl->limit >= tbl->threshold);
 
   if (tbl->base == NULL){
-    alloc_generic_table (tbl, Caml_state->minor_heap_wsz / 8, 256,
+    alloc_generic_table (tbl, global_minor_heap_wsz_per_domain / 8, 256,
                          element_size);
   }else if (tbl->limit == tbl->threshold){
     caml_gc_message (0x08, msg_threshold, 0);
