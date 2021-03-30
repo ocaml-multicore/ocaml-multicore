@@ -302,11 +302,6 @@ create_stack_cache_failure:
   caml_remove_generational_global_root(&domain_state->unique_token_root);
   caml_remove_generational_global_root(&domain_state->dls_root);
 create_unique_token_failure:
-<<<<<<< HEAD
-reallocate_minor_heap_failure:
-=======
-create_dls_root_failure:
->>>>>>> 98ea276391... Add domain-local allocation buffers
   caml_teardown_major_gc();
 init_major_gc_failure:
   caml_teardown_shared_heap(d->state.state->shared_heap);
