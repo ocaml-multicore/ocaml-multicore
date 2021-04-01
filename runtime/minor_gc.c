@@ -134,7 +134,7 @@ void caml_set_minor_heap_size (asize_t wsize)
 
   global_minor_heap_wsz_per_domain = wsize;
 
-  if (domain_state->young_ptr != domain_state->young_end) caml_minor_collection ();
+  caml_minor_collection ();
 
   reset_minor_tables(r);
 }
