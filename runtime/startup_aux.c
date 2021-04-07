@@ -52,6 +52,7 @@ static void init_startup_params()
   params.init_percent_free = Percent_free_def;
   params.init_max_percent_free = Max_percent_free_def;
   params.init_minor_heap_wsz = Minor_heap_def;
+  params.init_minor_heap_divisor = Minor_heap_divisor_def;
   params.init_heap_chunk_sz = Heap_chunk_def;
   params.init_heap_wsz = Init_heap_def;
   params.init_custom_major_ratio = Custom_major_ratio_def;
@@ -99,6 +100,7 @@ void caml_parse_ocamlrunparam(void)
       //case 'a': scanmult (opt, &p); caml_set_allocation_policy (p); break;
       case 'b': scanmult (opt, &params.backtrace_enabled); break;
       case 'c': scanmult (opt, &params.cleanup_on_exit); break;
+      case 'd': scanmult (opt, &params.init_minor_heap_divisor); break;
       case 'e': scanmult (opt, &params.eventlog_enabled); break;
       case 'f': scanmult (opt, &params.init_fiber_wsz); break;
       case 'h': scanmult (opt, &params.init_heap_wsz); break;

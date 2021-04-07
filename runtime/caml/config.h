@@ -236,6 +236,10 @@ typedef uint64_t uintnat;
 /* Default size of the minor zone. (words)  */
 #define Minor_heap_def 262144
 
+/* Minor heap segment on replenish are of size
+   Minor_heap_def / Minor_heap_divisor_def
+*/
+#define Minor_heap_divisor_def 8
 
 /* Minimum size increment when growing the heap (words).
    Must be a multiple of [Page_size / sizeof (value)]. */

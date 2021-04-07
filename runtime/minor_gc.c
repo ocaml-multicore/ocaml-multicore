@@ -546,7 +546,7 @@ int caml_replenish_minor_heap()
   uintnat cached_global_minor_heap_ptr;
   uintnat new_alloc_ptr;
 
-  uintnat minor_buffer_wsize = global_minor_heap_wsz_per_domain >> 3;
+  uintnat minor_buffer_wsize = global_minor_heap_wsz_per_domain / caml_params->init_minor_heap_divisor;
   uintnat minor_buffer_bsize = Bsize_wsize(minor_buffer_wsize);
   uintnat requested_buffer_size;
 
