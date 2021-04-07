@@ -127,12 +127,12 @@ extern int caml_debug_is_major(value val) {
 }
 #endif
 
-void caml_set_minor_heap_size (asize_t wsize)
+void caml_set_minor_heap_size (asize_t bsize)
 {
   caml_domain_state* domain_state = Caml_state;
   struct caml_minor_tables *r = domain_state->minor_tables;
 
-  global_minor_heap_wsz_per_domain = wsize;
+  global_minor_heap_wsz_per_domain = Wsize_bsize(bsize);
 
   caml_minor_collection ();
 
