@@ -548,7 +548,6 @@ int caml_replenish_minor_heap()
 
   uintnat minor_buffer_wsize = global_minor_heap_wsz_per_domain / caml_params->init_minor_heap_divisor;
   uintnat minor_buffer_bsize = Bsize_wsize(minor_buffer_wsize);
-  uintnat requested_buffer_size;
 
   CAML_EV_BEGIN(EV_MINOR_REPLENISH_BUFFER);
 
@@ -559,19 +558,17 @@ int caml_replenish_minor_heap()
 
     cached_global_minor_heap_ptr = atomic_load_explicit(&caml_global_minor_heap_ptr, memory_order_acquire);
 
-    remaining_global_minor = caml_global_minor_heap_limit - caml_global_minor_heap_ptr;
-
-    requested_buffer_size = remaining_global_minor < minor_buffer_bsize ? remaining_global_minor : minor_buffer_bsize;
-
     CAMLassert(caml_global_minor_heap_start <= cached_global_minor_heap_ptr);
     CAMLassert(cached_global_minor_heap_ptr <= caml_global_minor_heap_limit);
 
-    new_alloc_ptr = cached_global_minor_heap_ptr + requested_buffer_size;
+    remaining_global_minor = caml_global_minor_heap_limit - caml_global_minor_heap_ptr;
 
-    if (new_alloc_ptr > caml_global_minor_heap_limit) {
+    if (remaining_global_minor < minor_buffer_bsize) {
       CAML_EV_END(EV_MINOR_REPLENISH_BUFFER);
       return 0;
     }
+
+    new_alloc_ptr = cached_global_minor_heap_ptr + minor_buffer_bsize;
 
     /* CAS away and bump the allocation pointer: if it fails a domain likely
        snatched the requested segment. Restart the loop, else success. */
@@ -588,12 +585,12 @@ int caml_replenish_minor_heap()
   // global_minor_heap_ptr is now our new minor heap for this domain
 
   // I can't think of a situation where requested_buffer_size is not a word multiple
-  domain_state->minor_heap_wsz = Wsize_bsize(requested_buffer_size);
+  domain_state->minor_heap_wsz = minor_buffer_wsize;
 
   caml_update_young_limit(cached_global_minor_heap_ptr);
 
   domain_state->young_start = (char*)cached_global_minor_heap_ptr;
-  domain_state->young_end = (char*)(cached_global_minor_heap_ptr + requested_buffer_size);
+  domain_state->young_end = (char*)(cached_global_minor_heap_ptr + minor_buffer_bsize);
 
   domain_state->young_ptr = domain_state->young_end;
 
