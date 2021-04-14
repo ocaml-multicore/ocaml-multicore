@@ -250,7 +250,7 @@ static void create_domain() {
 
     young_limit = atomic_load_acq((atomic_uintnat*)&domain_state->young_limit);
     if( young_limit != INTERRUPT_MAGIC ) {
-      atomic_compare_exchange_strong((atomic_uintnat*)&domain_state->young_limit, &young_limit, caml_global_minor_heap_start);
+      caml_update_young_limit(caml_global_minor_heap_start);
     }
 
     domain_state->young_ptr = (char *) caml_global_minor_heap_start;
