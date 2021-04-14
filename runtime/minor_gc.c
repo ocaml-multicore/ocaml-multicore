@@ -593,7 +593,7 @@ int caml_replenish_minor_heap()
   caml_update_young_limit(cached_global_minor_heap_ptr);
 
   domain_state->young_start = (char*)cached_global_minor_heap_ptr;
-  domain_state->young_end = (char*)(cached_global_minor_heap_ptr + minor_buffer_bsize);
+  domain_state->young_end = (char*)(cached_global_minor_heap_ptr + requested_buffer_size);
 
   domain_state->young_ptr = domain_state->young_end;
 
