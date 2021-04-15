@@ -759,9 +759,12 @@ void caml_empty_minor_heap_promote (struct domain* domain, int participating_cou
 
   /* we reset these pointers before allowing any mutators to be
      released to avoid races where another domain signals an interrupt
-     and we clobber it */
-  atomic_store_rel((atomic_uintnat*)&domain_state->young_limit, (uintnat)domain_state->young_start);
-  atomic_store_rel((atomic_uintnat*)&domain_state->young_ptr, (uintnat)domain_state->young_end);
+     and we clobber it. Set to caml_global_minor_heap_start to
+     make the current state trigger a GC poll on next allocation
+     in the event of replenish failing.
+  */
+  caml_update_young_limit(caml_global_minor_heap_start);
+  atomic_store_rel((atomic_uintnat *)&domain_state->young_ptr, (uintnat)caml_global_minor_heap_start);
 
   if( not_alone ) {
       while (1) {
