@@ -58,6 +58,8 @@ void caml_interrupt_self(void);
 
 int caml_update_young_limit(uintnat new_limit);
 
+void caml_reset_young_fields(void);
+
 #if defined(COLLECT_STATS) && defined(NATIVE_CODE)
 struct detailed_stats {
   uint64 allocations;

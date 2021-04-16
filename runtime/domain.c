@@ -209,7 +209,6 @@ static void create_domain() {
     caml_plat_unlock(&s->lock);
   }
   if (d) {
-    uintnat young_limit;
     caml_domain_state* domain_state;
 
     d->state.internals = d;
@@ -245,15 +244,7 @@ static void create_domain() {
 
     /* setting young_limit and young_ptr to minor_heaps_base
        to trigger minor_heaps reallocation on GC poll */
-    domain_state->young_start = (char*)caml_global_minor_heap_start;
-    domain_state->young_end = (char*)caml_global_minor_heap_start;
-
-    young_limit = atomic_load_acq((atomic_uintnat*)&domain_state->young_limit);
-    if( young_limit != INTERRUPT_MAGIC ) {
-      caml_update_young_limit(caml_global_minor_heap_start);
-    }
-
-    domain_state->young_ptr = (char *) caml_global_minor_heap_start;
+    caml_reset_young_fields();
 
     domain_state->dls_root = Val_unit;
     caml_register_generational_global_root(&domain_state->dls_root);
@@ -335,6 +326,13 @@ int caml_update_young_limit(uintnat new_limit) {
   }
 
   return 0;
+}
+
+void caml_reset_young_fields(void) {
+  caml_update_young_limit(caml_global_minor_heap_start);
+  atomic_store_rel((atomic_uintnat *)&Caml_state->young_ptr, (uintnat)caml_global_minor_heap_start);
+  Caml_state->young_start = (char*)caml_global_minor_heap_start;
+  Caml_state->young_end = (char*)caml_global_minor_heap_start;
 }
 
 void caml_init_domains(uintnat init_minor_heap_wsz) {

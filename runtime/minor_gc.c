@@ -763,8 +763,7 @@ void caml_empty_minor_heap_promote (struct domain* domain, int participating_cou
      make the current state trigger a GC poll on next allocation
      in the event of replenish failing.
   */
-  caml_update_young_limit(caml_global_minor_heap_start);
-  atomic_store_rel((atomic_uintnat *)&domain_state->young_ptr, (uintnat)caml_global_minor_heap_start);
+  caml_reset_young_fields();
 
   if( not_alone ) {
       while (1) {
