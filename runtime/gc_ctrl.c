@@ -172,15 +172,6 @@ CAMLprim value caml_gc_set(value v)
                      ARCH_INTNAT_PRINTF_FORMAT "u%%\n", caml_percent_free);
   }
 
-  /* Minor heap size comes last because it will trigger a minor collection
-     (thus invalidating [v]) and it can raise [Out_of_memory]. */
-  newminwsz = caml_norm_minor_heap_size (Long_field (v, 0));
-  if (newminwsz != global_minor_heap_wsz_per_domain){
-    caml_gc_message (0x20, "New minor heap size: %"
-                     ARCH_SIZET_PRINTF_FORMAT "uk words\n", newminwsz / 1024);
-    caml_set_minor_heap_size (newminwsz);
-  }
-
   /* These fields were added in 4.08.0. */
   if (Wosize_val (v) >= 11){
     new_custom_maj = norm_custom_maj (Long_val (Field (v, 8)));
