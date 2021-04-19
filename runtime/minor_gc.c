@@ -948,7 +948,7 @@ static void realloc_generic_table
   CAMLassert (tbl->limit >= tbl->threshold);
 
   if (tbl->base == NULL){
-    alloc_generic_table (tbl, global_minor_heap_wsz_per_domain / 8, 256,
+    alloc_generic_table (tbl, global_minor_heap_wsz_per_domain / caml_params->init_minor_heap_divisor, 256,
                          element_size);
   }else if (tbl->limit == tbl->threshold){
     caml_gc_message (0x08, msg_threshold, 0);
