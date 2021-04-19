@@ -627,6 +627,7 @@ void caml_empty_minor_heap_promote (struct domain* domain, int participating_cou
   intnat finished_minor_gc;
   int remembered_roots = 0;
   uintnat prev_alloc_words;
+  uintnat stat_minor_bytes;
 
   st.promote_domain = domain;
 
@@ -795,10 +796,11 @@ void caml_empty_minor_heap_promote (struct domain* domain, int participating_cou
   domain_state->stat_promoted_words += domain_state->allocated_words - prev_alloc_words;
 
   CAML_EV_END(EV_MINOR);
+  stat_minor_bytes = Bsize_wsize(domain_state->stat_minor_words);
   caml_gc_log ("Minor collection of domain %d completed: %2.0f%% of %u KB live, rewrite: successes=%u failures=%u",
                domain->state->id,
-               100.0 * (double)st.live_bytes / (double)(domain_state->stat_minor_words),
-               (unsigned)((domain_state->stat_minor_words) + 512)/1024, rewrite_successes, rewrite_failures);
+               100.0 * (double)st.live_bytes / (double)stat_minor_bytes,
+               (unsigned)(stat_minor_bytes + 512)/1024, rewrite_successes, rewrite_failures);
 }
 
 void caml_do_opportunistic_major_slice(struct domain* domain, void* unused)
