@@ -242,7 +242,7 @@ static void create_domain() {
       goto init_major_gc_failure;
     }
 
-    /* setting young_limit and young_ptr to minor_heaps_base
+    /* setting young_limit and young_ptr to caml_global_minor_heap_start
        to trigger minor_heaps reallocation on GC poll */
     caml_reset_young_fields();
 
