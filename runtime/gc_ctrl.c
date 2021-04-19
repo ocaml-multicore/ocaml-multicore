@@ -203,7 +203,7 @@ CAMLprim value caml_gc_set(value v)
   if (newminwsz != Caml_state->minor_heap_wsz){
     caml_gc_message (0x20, "New minor heap size: %"
                      ARCH_SIZET_PRINTF_FORMAT "uk words\n", newminwsz / 1024);
-    caml_set_minor_heap_size (newminwsz);
+    caml_set_minor_heap_size (Bsize_wsize(newminwsz));
   }
   CAML_EV_END(EV_EXPLICIT_GC_SET);
 

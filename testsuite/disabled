@@ -70,7 +70,3 @@ tool-debugger
 
 # since promotion is based on minor heap size now, this test can no longer be correct
 tests/promotion/bigrecmod.ml
-
-# TODO: dlabs breaks the size assumption on minor_heap
-tests/regression/pr9326/'gc_set.ml' with 2 (bytecode)
-tests/regression/pr9326/'gc_set.ml' with 1 (native)
