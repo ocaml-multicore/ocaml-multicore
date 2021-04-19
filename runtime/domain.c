@@ -928,24 +928,13 @@ static void caml_poll_gc_work()
 
     int need_minor_gc = Caml_state->requested_minor_gc;
 
-    // Check if our minor heap is full. If it is then we need to try to grab a
-    // new one from the global minor heap.
+    // Try to replenish the minor_heap.
+    // If it fails, it means there's no space available, so we need
+    // to start a minor cycle.
     if( domain_minor_heap_full && !need_minor_gc ) {
-      uintnat global_ptr =
-        atomic_load_explicit(&caml_global_minor_heap_ptr, memory_order_acquire);
-
-      // Check if there's space left in the global minor heap. If not we need to
-      // do a minor collection.
-      if( global_ptr >= caml_global_minor_heap_limit ) {
-        need_minor_gc = 1;
-      }
-      else
-      {
-        // There is space, let's try to get a new minor heap
-        if(!caml_replenish_minor_heap()) {
-            // Failed to replenish our minor heap
-            need_minor_gc = 1;
-        }
+      if(!caml_replenish_minor_heap()) {
+	// Failed to replenish our minor heap
+	need_minor_gc = 1;
       }
     }
 
