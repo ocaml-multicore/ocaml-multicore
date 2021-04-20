@@ -922,7 +922,7 @@ void caml_request_minor_gc (void)
 static void caml_poll_gc_work()
 {
   CAMLalloc_point_here;
-  { // No GC in this block
+  {
     int domain_minor_heap_full = ((uintnat)Caml_state->young_ptr - Bhsize_wosize(Max_young_wosize) <
         (uintnat)Caml_state->young_start);
 
