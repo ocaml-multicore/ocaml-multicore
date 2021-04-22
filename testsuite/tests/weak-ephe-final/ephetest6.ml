@@ -7,14 +7,14 @@ let test1 =
   for i = 0 to 15 do
     E.set_key e1 i i
   done;
-  let d = Domain.spawn (fun () ->
+  let d = Array.init 4 (fun _ -> Domain.spawn (fun () ->
     let e2 = E.create 16 in
     E.blit_key e1 0 e2 0 16;
     match E.get_key e2 1 with
     | Some 1 -> ()
-    | _ -> assert false)
+    | _ -> assert false))
   in
-  Domain.join d;
+  Array.iter Domain.join d;
   print_endline "test1: ok"
 
 let _ = Gc.full_major ()
