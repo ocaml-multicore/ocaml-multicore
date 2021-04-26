@@ -52,17 +52,8 @@ endif
 
 ifeq "$(UNIX_OR_WIN32)" "win32"
   ocamlsrcdir := $(shell echo "$(abspath $(shell pwd)/..)" | cygpath -w -f -)
-  CSC := csc
-  ifeq "$(HOST:i686-%=i686)" "i686"
-    CSCFLAGS := /platform:x86
-  else
-    CSCFLAGS :=
-  endif
-  CSCFLAGS += /nologo /nowarn:1668
 else
   ocamlsrcdir := $(abspath $(shell pwd)/..)
-  CSC :=
-  CSCFLAGS :=
 endif
 mkexe := $(MKEXE)
 

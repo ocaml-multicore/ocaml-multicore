@@ -48,3 +48,7 @@ BOOTSTRAPPING_FLEXDLL=@bootstrapping_flexdll@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 datarootdir = @datarootdir@
 DOCDIR=@docdir@
+
+# Configuration for the C# compiler
+CSC=@csc@
+CSCFLAGS=@csc_flags@
