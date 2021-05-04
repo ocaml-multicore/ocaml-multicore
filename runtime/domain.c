@@ -342,9 +342,14 @@ void caml_init_domains(uintnat init_minor_heap_wsz) {
   void* heaps_base;
   void* tls_base;
 
+  global_minor_heap_wsz_per_domain = init_minor_heap_wsz;
+
   /* sanity check configuration */
   if (caml_mem_round_up_pages(Minor_heap_max) != Minor_heap_max)
     caml_fatal_error("Minor_heap_max misconfigured for this platform");
+
+  if (global_minor_heap_wsz_per_domain > Minor_heap_max)
+    caml_fatal_error("Configured minor heap size (%ld) is bigger than the allowed maximum (%ld)", global_minor_heap_wsz_per_domain, (uintnat) Minor_heap_max);
 
   /* reserve memory space for minor heaps and tls_areas */
   size = (uintnat)Bsize_wsize(Minor_heap_max) * Max_domains;
@@ -353,11 +358,10 @@ void caml_init_domains(uintnat init_minor_heap_wsz) {
   tls_areas_size = tls_size * Max_domains;
 
   heaps_base = caml_mem_map(size, size, 1 /* reserve_only */);
-
   tls_base = caml_mem_map(tls_areas_size, tls_areas_size, 1 /* reserve_only */);
+
   if (!heaps_base || !tls_base) caml_raise_out_of_memory();
 
-  global_minor_heap_wsz_per_domain = init_minor_heap_wsz;
 
   // We should commit some space for at least one domain though
   if( !caml_mem_commit(heaps_base, Bsize_wsize(global_minor_heap_wsz_per_domain)) ) {
