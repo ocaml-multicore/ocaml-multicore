@@ -112,7 +112,6 @@ static struct dom_internal all_domains[Max_domains];
 CAMLexport atomic_uintnat caml_num_domains_running;
 
 CAMLexport uintnat caml_global_minor_heap_start;
-CAMLexport uintnat caml_global_minor_heap_end;
 CAMLexport uintnat caml_global_minor_heap_limit;
 CAMLexport atomic_uintnat caml_global_minor_heap_ptr;
 
@@ -365,7 +364,6 @@ void caml_init_domains(uintnat init_minor_heap_wsz) {
   }
 
   caml_global_minor_heap_start = (uintnat) heaps_base;
-  caml_global_minor_heap_end = (uintnat) heaps_base + size;
   // Our initial limit is just for one domain
   caml_global_minor_heap_limit = (uintnat) heaps_base + Bsize_wsize(global_minor_heap_wsz_per_domain);
   caml_global_minor_heap_ptr = (uintnat) heaps_base;
