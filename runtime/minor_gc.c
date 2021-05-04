@@ -532,6 +532,8 @@ void caml_adjust_global_minor_heap(int participating_domains) {
   // Now using the number of participating domains, we calculate the new size
   uintnat new_global_minor_heap_size = participating_domains*Bsize_wsize(global_minor_heap_wsz_per_domain);
 
+  CAMLassert(new_global_minor_heap_size < ((uintnat)Bsize_wsize(Minor_heap_max) * Max_domains));
+
   if( global_minor_heap_size != new_global_minor_heap_size ) {
     caml_mem_decommit((char*)caml_global_minor_heap_start, global_minor_heap_size);
     caml_mem_commit((char*)caml_global_minor_heap_start, new_global_minor_heap_size);
