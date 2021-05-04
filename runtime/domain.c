@@ -349,7 +349,8 @@ void caml_init_domains(uintnat init_minor_heap_wsz) {
     caml_fatal_error("Minor_heap_max misconfigured for this platform");
 
   if (global_minor_heap_wsz_per_domain > Minor_heap_max)
-    caml_fatal_error("Configured minor heap size (%ld) is bigger than the allowed maximum (%ld)", global_minor_heap_wsz_per_domain, (uintnat) Minor_heap_max);
+    caml_fatal_error("Configured minor heap size (%ld) is bigger than the allowed maximum (%ld)",
+		     global_minor_heap_wsz_per_domain, (uintnat) Minor_heap_max);
 
   /* reserve memory space for minor heaps and tls_areas */
   size = (uintnat)Bsize_wsize(Minor_heap_max) * Max_domains;
