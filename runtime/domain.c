@@ -347,7 +347,8 @@ void caml_init_domains(uintnat init_minor_heap_wsz) {
     caml_fatal_error("Minor_heap_max misconfigured for this platform");
 
   /* reserve memory space for minor heaps and tls_areas */
-  size = (uintnat)Wsize_bsize(Minor_heap_max) * Max_domains;
+  size = (uintnat)Bsize_wsize(Minor_heap_max) * Max_domains;
+
   tls_size = caml_mem_round_up_pages(sizeof(caml_domain_state));
   tls_areas_size = tls_size * Max_domains;
 
