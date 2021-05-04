@@ -528,9 +528,9 @@ void caml_empty_minor_heap_domain_clear (struct domain* domain, void* unused)
 
 void caml_adjust_global_minor_heap(int participating_domains) {
   // Calculate the size of the existing mapping
-  int global_minor_heap_size = caml_global_minor_heap_limit - caml_global_minor_heap_start;
+  uintnat global_minor_heap_size = caml_global_minor_heap_limit - caml_global_minor_heap_start;
   // Now using the number of participating domains, we calculate the new size
-  int new_global_minor_heap_size = participating_domains*Bsize_wsize(global_minor_heap_wsz_per_domain);
+  uintnat new_global_minor_heap_size = participating_domains*Bsize_wsize(global_minor_heap_wsz_per_domain);
 
   if( global_minor_heap_size != new_global_minor_heap_size ) {
     caml_mem_decommit((char*)caml_global_minor_heap_start, global_minor_heap_size);
