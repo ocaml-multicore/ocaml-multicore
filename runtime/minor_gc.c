@@ -136,6 +136,9 @@ void caml_set_minor_heap_size (asize_t bsize)
   if ((wsize / caml_params->init_minor_heap_divisor) < Max_young_wosize)
     caml_failwith("caml_set_minor_heap_size: requested size is too small");
 
+  if (wsize > Minor_heap_max)
+    caml_failwith("caml_set_minor_heap_size: requested size is above the allowed maximum");
+
   global_minor_heap_wsz_per_domain = wsize;
 
   caml_minor_collection ();
