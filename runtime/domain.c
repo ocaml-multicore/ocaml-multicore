@@ -1073,6 +1073,7 @@ void caml_print_stats () {
     (uintnat)s.major_words);
   fprintf(stderr, "Minor collections:\t%"ARCH_INTNAT_PRINTF_FORMAT"u\n",
     (uintnat)s.minor_collections);
+  fprintf(stderr, "Participated minor collections:\t%"ARCH_INTNAT_PRINTF_FORMAT"u\n", (uintnat)s.participated_minor_collections);
   fprintf(stderr, "Major collections:\t%"ARCH_INTNAT_PRINTF_FORMAT"u\n",
     Caml_state->stat_major_collections);
 }
