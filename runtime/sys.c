@@ -151,6 +151,8 @@ CAMLprim value caml_sys_exit(value retcode_v)
                       (intnat) majwords);
       caml_gc_message(0x400, "minor_collections: %"ARCH_INTNAT_PRINTF_FORMAT"d\n",
                       (intnat) s.minor_collections);
+      caml_gc_message(0x400, "participated_minor_collections: %"ARCH_INTNAT_PRINTF_FORMAT"d\n",
+                      (intnat) s.participated_minor_collections);
       caml_gc_message(0x400, "major_collections: %"ARCH_INTNAT_PRINTF_FORMAT"d\n",
                       domain_state->stat_major_collections);
       caml_gc_message(0x400,

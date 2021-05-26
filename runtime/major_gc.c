@@ -892,6 +892,7 @@ void caml_sample_gc_stats(struct gc_stats* buf)
       buf->promoted_words += s->promoted_words;
       buf->major_words += s->major_words;
       buf->minor_collections += s->minor_collections;
+      buf->participated_minor_collections += s->participated_minor_collections;
       buf->forced_major_collections += s->forced_major_collections;
     }
     else {
@@ -899,6 +900,7 @@ void caml_sample_gc_stats(struct gc_stats* buf)
       buf->promoted_words += Caml_state->stat_promoted_words;
       buf->major_words += Caml_state->stat_major_words;
       buf->minor_collections += Caml_state->stat_minor_collections;
+      buf->participated_minor_collections += Caml_state->stat_participated_minor_collections;
       buf->forced_major_collections += s->forced_major_collections;
       //FIXME handle the case for major heap stats [h]
     }
@@ -925,6 +927,7 @@ inline void caml_sample_gc_collect(caml_domain_state* domain)
   stats->promoted_words = domain->stat_promoted_words;
   stats->major_words = domain->stat_major_words;
   stats->minor_collections = domain->stat_minor_collections;
+  stats->participated_minor_collections = domain->stat_participated_minor_collections;
   stats->forced_major_collections = domain->stat_forced_major_collections;
   caml_sample_heap_stats(domain->shared_heap, &stats->major_heap);
 }

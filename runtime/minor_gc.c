@@ -691,7 +691,7 @@ void caml_empty_minor_heap_promote (struct domain* domain, int participating_cou
   }
 
   domain_state->stat_minor_words += Wsize_bsize (minor_allocated_bytes);
-  domain_state->stat_minor_collections++;
+  domain_state->stat_participated_minor_collections++;
   domain_state->stat_promoted_words += domain_state->allocated_words - prev_alloc_words;
 
   CAML_EV_END(EV_MINOR);
@@ -717,6 +717,7 @@ void caml_do_opportunistic_major_slice(struct domain* domain, void* unused)
    if needed.
 */
 void caml_empty_minor_heap_setup(struct domain* domain) {
+  domain->state->stat_minor_collections++;
   atomic_store_explicit(&domains_finished_minor_gc, 0, memory_order_release);
   atomic_store_explicit(&domain_finished_root, 0, memory_order_release);
 }
