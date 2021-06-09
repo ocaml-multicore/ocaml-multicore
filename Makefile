@@ -109,7 +109,16 @@ include compilerlibs/Makefile.compilerlibs
 
 # The configuration file
 
-utils/config.ml: utils/config.mlp Makefile.config utils/Makefile
+# Avoid building due to GIT_HASH when it hasn't changed
+GIT_HASH: $(shell (git rev-parse --short HEAD || echo "<hash unavailable>") > GIT_HASH.new; \
+        cmp -s GIT_HASH GIT_HASH.new || echo GIT_HASH.new)
+	cp $^ $@
+
+.PHONY: clean
+clean::
+	rm -f GIT_HASH GIT_HASH.new
+
+utils/config.ml: utils/config.mlp GIT_HASH Makefile.config utils/Makefile
 	$(MAKE) -C utils config.ml
 
 .PHONY: reconfigure

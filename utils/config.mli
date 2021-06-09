@@ -23,6 +23,9 @@
 val version: string
 (** The current version number of the system *)
 
+val git_hash: string
+(** The git hash of the commit that the system was built with *)
+
 val standard_library: string
 (** The directory containing the standard libraries *)
 
