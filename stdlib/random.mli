@@ -103,5 +103,8 @@ end
 val get_state : unit -> State.t
 (** Return the current state of the generator used by the basic functions. *)
 
+val get_default_state : unit -> State.t
+(** Return the default state of the generator. *)
+
 val set_state : State.t -> unit
 (** Set the state of the generator used by the basic functions. *)

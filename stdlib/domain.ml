@@ -18,6 +18,67 @@ module Sync = struct
   external poll : unit -> unit = "%poll"
 end
 
+module DLS = struct
+
+  type 'a key = int ref * (unit -> 'a)
+
+  type entry = {key_id: int ref; mutable slot: Obj.t}
+
+  type dls_state =
+    { mutable random_default_state : Obj.t;
+      mutable entry_list           : entry list }
+
+  external get_dls_state : unit -> dls_state
+    = "caml_domain_dls_get" [@@noalloc]
+
+  external set_dls_state : dls_state -> unit
+    = "caml_domain_dls_set" [@@noalloc]
+
+  (* Initialise the DLS state *)
+  let init_dls_state () = set_dls_state
+    { random_default_state = Obj.repr (Random.get_default_state ());
+      entry_list = [] }
+
+  let _ = init_dls_state ()
+
+  let new_key f = (ref 0, f)
+
+  let set k x =
+    let cs = Obj.repr x in
+    let st = get_dls_state () in
+    let rec add_or_update_entry k v l =
+      match l with
+      | [] -> Some {key_id = k; slot = v}
+      | hd::tl ->
+        if (hd.key_id == k) then begin
+          hd.slot <- v;
+          None
+        end
+        else add_or_update_entry k v tl
+    in
+    let (key, _) = k in
+    match add_or_update_entry key cs st.entry_list with
+    | None -> ()
+    | Some e -> st.entry_list <- e::st.entry_list
+
+  let get k =
+    let st = get_dls_state () in
+    let rec search (key_id, init) l =
+      match l with
+      | [] ->
+        begin
+          let slot = Obj.repr (init ()) in
+          st.entry_list <- ({key_id; slot}::st.entry_list);
+          slot
+        end
+      | hd::tl ->
+        if hd.key_id == key_id then hd.slot
+        else search (key_id, init) tl
+    in
+    Obj.obj @@ search k st.entry_list
+
+end
+
 type id = Raw.t
 
 type 'a state =
@@ -44,6 +105,7 @@ let spawn f =
   let termination_mutex = Mutex.create () in
   let state = Atomic.make Running in
   let body () =
+    DLS.init_dls_state ();
     let result = match f () with
       | x -> Ok x
       | exception ex -> Error ex in
@@ -92,52 +154,4 @@ let get_id { domain; _ } = domain
 
 let self () = Raw.self ()
 
-module DLS = struct
 
-  type 'a key = int ref * (unit -> 'a)
-
-  type entry = {key_id: int ref; mutable slot: Obj.t}
-
-  external get_dls_list : unit -> entry list
-    = "caml_domain_dls_get" [@@noalloc]
-
-  external set_dls_list : entry list  -> unit
-    = "caml_domain_dls_set" [@@noalloc]
-
-  let new_key f = (ref 0, f)
-
-  let set k x =
-    let cs = Obj.repr x in
-    let vals = get_dls_list () in
-    let rec add_or_update_entry k v l =
-      match l with
-      | [] -> Some {key_id = k; slot = v}
-      | hd::tl ->
-        if (hd.key_id == k) then begin
-          hd.slot <- v;
-          None
-        end
-        else add_or_update_entry k v tl
-    in
-    let (key, _) = k in
-    match add_or_update_entry key cs vals with
-    | None -> ()
-    | Some e -> set_dls_list (e::vals)
-
-  let get k =
-    let rec search key_id init dls_list l =
-      match l with
-      | [] ->
-        begin
-          let slot = Obj.repr (init ()) in
-          set_dls_list ({key_id; slot}::dls_list);
-          slot
-        end
-      | hd::tl ->
-        if hd.key_id == key_id then hd.slot else search key_id init dls_list tl
-    in
-    let dls_list = get_dls_list () in
-    let (key_id, init) = k in
-    Obj.obj @@ search key_id init dls_list dls_list
-
-end

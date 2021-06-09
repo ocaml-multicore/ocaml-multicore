@@ -147,7 +147,7 @@ end
 
 (* This is the state you get with [init 27182818] and then applying
    the "land 0x3FFFFFFF" filter to them.  See #5575, #5793, #5977. *)
-let default = {
+let get_default_state () = {
   State.st = [|
       0x3ae2522b; 0x1d8d4634; 0x15b4fad0; 0x18b14ace; 0x12f8a3c4; 0x3b086c47;
       0x16d467d6; 0x101d91c7; 0x321df177; 0x0176c193; 0x1ff72bf1; 0x1e889109;
@@ -162,6 +162,8 @@ let default = {
     |];
   State.idx = 0;
 }
+
+let default = get_default_state ()
 
 let bits () = State.bits default
 let int bound = State.int default bound
