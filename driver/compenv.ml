@@ -30,7 +30,7 @@ let print_version_and_library compiler =
   print_string "Standard library directory: ";
   print_string Config.standard_library; print_newline();
   print_string "Built with git hash: ";
-  print_string Config.git_hash; print_newline();
+  print_string Git_hash.git_hash; print_newline();
   raise (Exit_with_status 0)
 
 let print_version_string () =

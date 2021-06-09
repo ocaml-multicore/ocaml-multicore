@@ -63,6 +63,11 @@ utils/domainstate.cmo : \
 utils/domainstate.cmx : \
     utils/domainstate.cmi
 utils/domainstate.cmi :
+utils/git_hash.cmo : \
+    utils/git_hash.cmi
+utils/git_hash.cmx : \
+    utils/git_hash.cmi
+utils/git_hash.cmi :
 utils/identifiable.cmo : \
     utils/misc.cmi \
     utils/identifiable.cmi
@@ -5743,6 +5748,7 @@ driver/compenv.cmo : \
     utils/profile.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
+    utils/git_hash.cmi \
     utils/config.cmi \
     utils/clflags.cmi \
     utils/ccomp.cmi \
@@ -5752,6 +5758,7 @@ driver/compenv.cmx : \
     utils/profile.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
+    utils/git_hash.cmx \
     utils/config.cmx \
     utils/clflags.cmx \
     utils/ccomp.cmx \

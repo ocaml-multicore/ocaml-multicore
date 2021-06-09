@@ -41,7 +41,7 @@ SUBST_QUOTE=$(call SUBST_QUOTE2,$1,$($1))
 FLEXLINK_LDFLAGS=$(if $(OC_LDFLAGS), -link "$(OC_LDFLAGS)")
 FLEXLINK_DLL_LDFLAGS=$(if $(OC_DLL_LDFLAGS), -link "$(OC_DLL_LDFLAGS)")
 
-config.ml: config.mlp $(ROOTDIR)/GIT_HASH $(ROOTDIR)/Makefile.config Makefile
+config.ml: config.mlp $(ROOTDIR)/Makefile.config Makefile
 	sed $(call SUBST,AFL_INSTRUMENT) \
 	    $(call SUBST,ARCH) \
 	    $(call SUBST_STRING,ARCMD) \
@@ -90,7 +90,10 @@ config.ml: config.mlp $(ROOTDIR)/GIT_HASH $(ROOTDIR)/Makefile.config Makefile
 	    $(call SUBST,CC_HAS_DEBUG_PREFIX_MAP) \
 	    $(call SUBST,AS_HAS_DEBUG_PREFIX_MAP) \
 	    $(call SUBST,FORCE_INSTRUMENTED_RUNTIME) \
-	    -e "s!%%GIT_HASH%%!`sed -e 1q $(ROOTDIR)/GIT_HASH | tr -d '\r'`!" \
+	    $< > $@
+
+git_hash.ml: git_hash.mlp $(ROOTDIR)/GIT_HASH Makefile
+	sed -e "s!%%GIT_HASH%%!`sed -e 1q $(ROOTDIR)/GIT_HASH | tr -d '\r'`!" \
 	    $< > $@
 
 # Test for the substitution functions above

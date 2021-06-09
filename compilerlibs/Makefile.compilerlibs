@@ -24,7 +24,7 @@
 # linked in the archive, but they are marked as dependencies to ensure
 # that they are consistent with the interface digests in the archives.
 
-UTILS=utils/config.cmo utils/build_path_prefix_map.cmo utils/misc.cmo \
+UTILS=utils/config.cmo utils/git_hash.cmo utils/build_path_prefix_map.cmo utils/misc.cmo \
 	utils/identifiable.cmo utils/numbers.cmo utils/arg_helper.cmo \
 	utils/clflags.cmo utils/profile.cmo utils/local_store.cmo \
 	utils/load_path.cmo \

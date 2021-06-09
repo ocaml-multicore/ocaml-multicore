@@ -1,0 +1,4 @@
+#2 "utils/git_hash.mlp"
+
+let git_hash = "%%GIT_HASH%%"
+

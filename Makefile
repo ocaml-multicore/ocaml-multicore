@@ -118,8 +118,11 @@ GIT_HASH: $(shell (git rev-parse --short HEAD || echo "<hash unavailable>") > GI
 clean::
 	rm -f GIT_HASH GIT_HASH.new
 
-utils/config.ml: utils/config.mlp GIT_HASH Makefile.config utils/Makefile
+utils/config.ml: utils/config.mlp Makefile.config utils/Makefile
 	$(MAKE) -C utils config.ml
+
+utils/git_hash.ml: utils/git_hash.mlp GIT_HASH Makefile.config utils/Makefile
+	$(MAKE) -C utils git_hash.ml
 
 .PHONY: reconfigure
 reconfigure:
@@ -136,10 +139,10 @@ configure: configure.ac aclocal.m4 VERSION tools/autogen
 
 .PHONY: partialclean
 partialclean::
-	rm -f utils/config.ml utils/domainstate.ml utils/domainstate.mli
+	rm -f utils/config.ml utils/git_hash.ml utils/domainstate.ml utils/domainstate.mli
 
 .PHONY: beforedepend
-beforedepend:: utils/config.ml utils/domainstate.ml utils/domainstate.mli
+beforedepend:: utils/config.ml utils/git_hash.ml utils/domainstate.ml utils/domainstate.mli
 
 programs := expunge ocaml ocamlc ocamlc.opt ocamlnat ocamlopt ocamlopt.opt
 

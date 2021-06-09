@@ -264,6 +264,7 @@ _build
 /tools/eventlog_metadata
 
 /utils/config.ml
+/utils/git_hash.ml
 /utils/domainstate.ml
 /utils/domainstate.mli
 

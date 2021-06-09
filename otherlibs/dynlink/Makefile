@@ -75,6 +75,7 @@ COMPILERLIBS_INTFS=\
 COMPILERLIBS_SOURCES=\
   utils/binutils.ml \
   utils/config.ml \
+  utils/git_hash.ml \
   utils/build_path_prefix_map.ml \
   utils/misc.ml \
   utils/identifiable.ml \
