@@ -183,11 +183,15 @@ stdlib.cma: $(OBJS)
 stdlib.cmxa: $(OBJS:.cmo=.cmx)
 	$(CAMLOPT) -a -o $@ $^
 
-sys.ml: $(ROOTDIR)/VERSION sys.mlp
-	sed -e "s|%%VERSION%%|`sed -e 1q $< | tr -d '\r'`|" sys.mlp > $@
+$(ROOTDIR)/GIT_HASH:
+	git rev-parse --short HEAD > $@
+
+sys.ml: $(ROOTDIR)/VERSION $(ROOTDIR)/GIT_HASH sys.mlp
+	sed -e "s|%%VERSION%%|`sed -e 1q $(ROOTDIR)/VERSION | tr -d '\r'`|;s|%%GIT_HASH%%|`sed -e 1q $(ROOTDIR)/GIT_HASH | tr -d '\r'`|" sys.mlp > $@
 
 .PHONY: clean
 clean::
+	rm -f $(ROOTDIR)/GIT_HASH
 	rm -f sys.ml
 
 clean::

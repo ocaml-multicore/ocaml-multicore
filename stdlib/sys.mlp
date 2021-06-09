@@ -127,8 +127,9 @@ external runtime_warnings_enabled: unit -> bool =
   "caml_ml_runtime_warnings_enabled"
 
 (* The version string is found in file ../VERSION *)
+(* The git hash string is found in file ../GIT_HASH *)
 
-let ocaml_version = "%%VERSION%%"
+let ocaml_version = "%%VERSION%%~%%GIT_HASH%%"
 
 (* Optimization *)
 
