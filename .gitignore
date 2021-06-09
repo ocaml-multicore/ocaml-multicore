@@ -56,7 +56,6 @@ _build
 /ocamlopt
 /ocamlopt.opt
 /ocamlnat
-/GIT_HASH
 
 # specific files and patterns in sub-directories
 
@@ -205,6 +204,8 @@ _build
 /stdlib/labelled-*
 /stdlib/caml
 /stdlib/sys.ml
+/stdlib/GIT_HASH
+/stdlib/GIT_HASH.new
 
 /testsuite/**/*.result
 /testsuite/**/*.opt_result
