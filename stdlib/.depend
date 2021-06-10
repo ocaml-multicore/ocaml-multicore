@@ -570,6 +570,7 @@ stdlib__queue.cmi : \
 stdlib__random.cmo : \
     stdlib__string.cmi \
     stdlib.cmi \
+    stdlib__obj.cmi \
     stdlib__nativeint.cmi \
     stdlib__int64.cmi \
     stdlib__int32.cmi \
@@ -581,6 +582,7 @@ stdlib__random.cmo : \
 stdlib__random.cmx : \
     stdlib__string.cmx \
     stdlib.cmx \
+    stdlib__obj.cmx \
     stdlib__nativeint.cmx \
     stdlib__int64.cmx \
     stdlib__int32.cmx \

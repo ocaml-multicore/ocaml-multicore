@@ -199,3 +199,29 @@ module Ephemeron = struct
   external blit_data : t -> t -> unit = "caml_ephe_blit_data"
 
 end
+
+module DLS = struct
+
+  type entry = {key_id: int ref; mutable slot: t}
+
+  type dls_state =
+    { mutable random_default_state : t;
+      mutable entry_list           : entry list }
+
+  external get_dls_state : unit -> t
+    = "caml_domain_dls_get" [@@noalloc]
+
+  external set_dls_state : dls_state -> unit
+    = "caml_domain_dls_set" [@@noalloc]
+
+  (* Create initial DLS state. The random state is initialised for the initial
+   * domain by the [Random] module. For additional domains, it is initialised
+   * in [Domain.spawn]. *)
+  let create_dls_state () =
+    let st = get_dls_state () in
+    if is_int st then begin
+      let st = { random_default_state = repr (); entry_list = [] } in
+      set_dls_state st;
+      magic st
+    end else magic st
+end

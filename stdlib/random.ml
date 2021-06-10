@@ -163,24 +163,36 @@ let get_default_state () = {
   State.idx = 0;
 }
 
-let default = get_default_state ()
+external get_dls_state : unit -> Obj.DLS.dls_state
+  = "caml_domain_dls_get" [@@noalloc]
 
-let bits () = State.bits default
-let int bound = State.int default bound
-let int32 bound = State.int32 default bound
-let nativeint bound = State.nativeint default bound
-let int64 bound = State.int64 default bound
-let float scale = State.float default scale
-let bool () = State.bool default
+(* Initialise the default state for the initial domain *)
+let _ =
+  let open Obj.DLS in
+  let st = create_dls_state () in
+  st.random_default_state <- Obj.repr (get_default_state ())
 
-let full_init seed = State.full_init default seed
-let init seed = State.full_init default [| seed |]
+let current_state () : State.t =
+  let open Obj.DLS in
+  let st = get_dls_state () in
+  Obj.magic st.random_default_state
+
+let bits () = State.bits (current_state ())
+let int bound = State.int (current_state ()) bound
+let int32 bound = State.int32 (current_state ()) bound
+let nativeint bound = State.nativeint (current_state ()) bound
+let int64 bound = State.int64 (current_state ()) bound
+let float scale = State.float (current_state ()) scale
+let bool () = State.bool (current_state ())
+
+let full_init seed = State.full_init (current_state ()) seed
+let init seed = State.full_init (current_state ()) [| seed |]
 let self_init () = full_init (random_seed())
 
 (* Manipulating the current state. *)
 
-let get_state () = State.copy default
-let set_state s = State.assign default s
+let get_state () = State.copy (current_state ())
+let set_state s = State.assign (current_state ()) s
 
 (********************
 

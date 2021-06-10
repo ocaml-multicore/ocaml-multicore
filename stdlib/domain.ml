@@ -22,24 +22,15 @@ module DLS = struct
 
   type 'a key = int ref * (unit -> 'a)
 
-  type entry = {key_id: int ref; mutable slot: Obj.t}
-
-  type dls_state =
-    { mutable random_default_state : Obj.t;
-      mutable entry_list           : entry list }
+  open Obj.DLS
 
   external get_dls_state : unit -> dls_state
     = "caml_domain_dls_get" [@@noalloc]
 
-  external set_dls_state : dls_state -> unit
-    = "caml_domain_dls_set" [@@noalloc]
-
   (* Initialise the DLS state *)
-  let init_dls_state () = set_dls_state
-    { random_default_state = Obj.repr (Random.get_default_state ());
-      entry_list = [] }
-
-  let _ = init_dls_state ()
+  let init_dls_state () =
+    let st = create_dls_state () in
+    st.random_default_state <- Obj.repr (Random.get_default_state ())
 
   let new_key f = (ref 0, f)
 

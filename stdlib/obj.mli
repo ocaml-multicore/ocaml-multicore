@@ -197,3 +197,15 @@ module Ephemeron: sig
   (** Maximum length of an ephemeron, ie the maximum number of keys an
       ephemeron could contain *)
 end
+
+module DLS : sig
+  type entry = {key_id: int ref; mutable slot: t}
+
+  type dls_state =
+    { mutable random_default_state : t;
+      mutable entry_list           : entry list }
+
+  val create_dls_state : unit -> dls_state
+  (** Creates a new [dls_state] for the current domain and returns it. If the
+      current domain already has a [dls_state], then this state is returned. *)
+end
