@@ -1099,9 +1099,39 @@ CAMLexport void (*caml_enter_blocking_section_hook)(void) =
 CAMLexport void (*caml_leave_blocking_section_hook)(void) =
    caml_leave_blocking_section_default;
 
+static int check_for_pending_signals(void)
+{
+  int i;
+  for (i = 0; i < NSIG; i++) {
+    if (caml_pending_signals[i]) return 1;
+  }
+  return 0;
+}
+
 CAMLexport void caml_leave_blocking_section() {
-  caml_leave_blocking_section_hook();
+  int saved_errno;
+  /* Save the value of errno (PR#5982). */
+  saved_errno = errno;
+  caml_leave_blocking_section_hook ();
+
+  /* Some other thread may have switched
+     [signals_are_pending] to 0 even though there are still
+     pending signals (masked in the other thread). To handle this
+     case, we force re-examination of all signals by setting it back
+     to 1.
+     Another case where this is necessary (even in a single threaded
+     setting) is when the blocking section unmasks a pending signal:
+     If the signal is pending and masked but has already been
+     examined by [caml_process_pending_signals_exn], then
+     [signals_are_pending] is 0 but the signal needs to be
+     handled at this point. */
+  if (check_for_pending_signals()) {
+    caml_signals_are_pending = 1;
+  }
+
   caml_process_pending_signals();
+
+  errno = saved_errno;
 }
 
 CAMLexport void caml_enter_blocking_section() {

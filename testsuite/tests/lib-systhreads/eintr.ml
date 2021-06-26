@@ -19,7 +19,8 @@ let _ = Thread.create (fun () ->
       incr signals_sent
     end else begin
       Thread.yield ()
-    end
+    end;
+    Domain.Sync.poll ()
   done) ()
 let request_signal () = Atomic.incr signals_requested
 
@@ -61,7 +62,8 @@ let () =
     poke_stdout (); Atomic.set r false));
   request_signal ();
   while Atomic.get r do
-    poke_stdout ()
+    poke_stdout ();
+
   done;
   Sys.set_signal Sys.sigint Signal_default;
   print_endline "chan: ok"
@@ -79,7 +81,8 @@ let () =
   begin match
     while true do
       poke_stdout ();
-      Atomic.set during (mklist ())
+      Atomic.set during (mklist ());
+
     done
   with
   | () -> assert false

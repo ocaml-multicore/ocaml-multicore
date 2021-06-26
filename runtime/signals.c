@@ -48,16 +48,28 @@ void caml_process_pending_signals(void)
   int i;
   /* this function preserves errno (PR#5982) */
   int saved_errno = errno;
+  #ifdef POSIX_SIGNALS
+  sigset_t set;
+  #endif
 
   if (caml_signals_are_pending) {
     caml_signals_are_pending = 0;
+
+#ifdef POSIX_SIGNALS
+    pthread_sigmask(/* dummy */ SIG_BLOCK, NULL, &set);
+#endif
     for (i = 0; i < NSIG; i++) {
-      if (caml_pending_signals[i]) {
-        caml_pending_signals[i] = 0;
-        caml_execute_signal(i);
-      }
+      if (!caml_pending_signals[i])
+        continue;
+#ifdef POSIX_SIGNALS
+      if(sigismember(&set, i))
+        continue;
+#endif
+      caml_pending_signals[i] = 0;
+      caml_execute_signal(i);
     }
   }
+
   errno = saved_errno;
 }
 

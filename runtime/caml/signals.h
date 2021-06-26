@@ -27,6 +27,11 @@ extern "C" {
 #endif
 
 #ifdef CAML_INTERNALS
+
+#ifndef NSIG
+#define NSIG 64
+#endif
+
 CAMLextern intnat volatile caml_signals_are_pending;
 CAMLextern intnat volatile caml_pending_signals[];
 CAMLextern int volatile caml_something_to_do;
