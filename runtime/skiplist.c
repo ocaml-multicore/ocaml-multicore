@@ -24,6 +24,7 @@
 #include "caml/memory.h"
 #include "caml/misc.h"
 #include "caml/skiplist.h"
+#include "caml/platform.h"
 
 /* Size of struct skipcell, in bytes, without the forward array */
 #if (__STDC_VERSION__ >= 199901L)
@@ -154,6 +155,76 @@ int caml_skiplist_insert(struct skiplist * sk,
   return 0;
 }
 
+int caml_skiplist_insert_ts(struct skiplist* sk,
+                            uintnat key, uintnat data)
+{
+
+struct skipcell ** update[NUM_LEVELS];
+struct skipcell ** e, * f;
+static caml_plat_mutex update_lock[NUM_LEVELS];
+int i, new_level, highest_locked = -1;
+static int init = 0;
+
+
+if(caml_domain_alone()){
+  return caml_skiplist_insert(sk, key, data);
+}
+
+if(init == 0){
+    for (i = 0; i < NUM_LEVELS; i++){
+      caml_plat_mutex_init(&update_lock[i]);
+    }
+    init = 1;
+  }
+
+/* Init "cursor" to list head */
+e = sk->forward;
+/* Find place to insert new node */
+for (i = sk->level; i >= 0; i--) {
+  while (1) {
+    f = e[i];
+    if (f == NULL || f->key >= key) break;
+    e = f->forward;
+  }
+  caml_plat_lock(&update_lock[i]);
+  update[i] = &e[i];
+}
+highest_locked = sk->level;
+f = e[0];
+
+  /* If already present, update data */
+  if (f != NULL && f->key == key) {
+    f->data = data;
+    for (i = highest_locked; i >= 0; i --)
+      caml_plat_unlock(&update_lock[i]);
+    return 1;
+  }
+
+  /* Insert additional element, updating list level if necessary */
+  new_level = random_level();
+
+  if (new_level > sk->level) {
+    for (i = sk->level + 1; i <= new_level; i++)
+      update[i] = &sk->forward[i];
+    sk->level = new_level;
+  }
+
+  f = caml_stat_alloc(SIZEOF_SKIPCELL +
+                      (new_level + 1) * sizeof(struct skipcell *));
+  f->key = key;
+  f->data = data;
+  for (i = 0; i <= new_level; i++) {
+    f->forward[i] = *update[i];
+    *update[i] = f;
+  }
+
+  for (i = highest_locked; i >= 0; i --)
+      caml_plat_unlock(&update_lock[i]);
+
+  return 0;
+
+}
+
 /* Deletion in a skip list */
 
 int caml_skiplist_remove(struct skiplist * sk, uintnat key)
@@ -187,6 +258,63 @@ int caml_skiplist_remove(struct skiplist * sk, uintnat key)
   while (sk->level > 0 &&
          sk->forward[sk->level] == NULL)
     sk->level--;
+  return 1;
+}
+
+int caml_skiplist_remove_ts(struct skiplist * sk, uintnat key)
+{
+  struct skipcell ** update[NUM_LEVELS];
+  static caml_plat_mutex update_lock[NUM_LEVELS];
+  static int init = 0;
+  struct skipcell ** e, * f;
+  int i, highest_locked = -1;
+
+  if(caml_domain_alone()){
+    caml_skiplist_remove(sk, key);
+  }
+
+  if(init == 0){
+    for (i = 0; i < NUM_LEVELS; i++){
+      caml_plat_mutex_init(&update_lock[i]);
+    }
+    init = 1;
+  }
+
+  /* Init "cursor" to list head */
+  e = sk->forward;
+  /* Find element in list */
+  for (i = sk->level; i >= 0; i--) {
+    while (1) {
+      f = e[i];
+      if (f == NULL || f->key >= key) break;
+      e = f->forward;
+    }
+    caml_plat_lock(&update_lock[i]);
+    update[i] = &e[i];
+  }
+  f = e[0];
+  highest_locked = sk->level;
+  /* If not found, nothing to do */
+  if (f == NULL || f->key != key){
+    for (i = highest_locked; i >= 0; i --)
+      caml_plat_unlock(&update_lock[i]);
+    return 0;
+  }
+  /* Rebuild list without node */
+
+  for (i = 0; i <= sk->level; i++) {
+    if (*update[i] == f)
+      *update[i] = f->forward[i];
+  }
+  /* Reclaim list element */
+  caml_stat_free(f);
+  /* Down-correct list level */
+  while (sk->level > 0 &&
+         sk->forward[sk->level] == NULL)
+    sk->level--;
+
+  for (i = highest_locked; i >= 0; i --)
+      caml_plat_unlock(&update_lock[i]);
   return 1;
 }
 

@@ -54,17 +54,17 @@ int caml_register_code_fragment(char * start, char * end,
   }
   cf->digest_status = digest_kind;
   cf->fragnum = code_fragments_counter++;
-  caml_skiplist_insert(&code_fragments_by_pc,
+  caml_skiplist_insert_ts(&code_fragments_by_pc,
                        (uintnat) start, (uintnat) cf);
-  caml_skiplist_insert(&code_fragments_by_num,
+  caml_skiplist_insert_ts(&code_fragments_by_num,
                        (uintnat) cf->fragnum, (uintnat) cf);
   return cf->fragnum;
 }
 
 void caml_remove_code_fragment(struct code_fragment * cf)
 {
-  caml_skiplist_remove(&code_fragments_by_pc, (uintnat) cf->code_start);
-  caml_skiplist_remove(&code_fragments_by_num, cf->fragnum);
+  caml_skiplist_remove_ts(&code_fragments_by_pc, (uintnat) cf->code_start);
+  caml_skiplist_remove_ts(&code_fragments_by_num, cf->fragnum);
   caml_stat_free(cf);
 }
 

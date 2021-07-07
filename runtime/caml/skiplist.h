@@ -74,10 +74,15 @@ extern int caml_skiplist_find_below(struct skiplist * sk, uintnat k,
 extern int caml_skiplist_insert(struct skiplist * sk,
                                 uintnat key, uintnat data);
 
+extern int caml_skiplist_insert_ts(struct skiplist* sk,
+                            uintnat key, uintnat data);
+
 /* Deletion in a skip list.
    If [key] was there, remove it and return 1.
    If [key] was not there, leave the skip list unchanged and return 0. */
 extern int caml_skiplist_remove(struct skiplist * sk, uintnat key);
+
+extern int caml_skiplist_remove_ts(struct skiplist * sk, uintnat key);
 
 /* Empty an already initialized skip list. */
 extern void caml_skiplist_empty(struct skiplist * sk);
