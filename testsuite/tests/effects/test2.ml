@@ -3,7 +3,7 @@
 
 open Printf
 
-effect E : int -> int
+type _ eff += E : int -> int eff
 
 let f () =
   printf "perform effect (E 0)\n%!";
@@ -12,12 +12,17 @@ let f () =
   v + 1
 
 let v =
-  match f () with
-  | v -> printf "done %d\n%!" v; v + 1
-  | effect (E v) k ->
-      printf "caught effect (E %d). continuting..\n%!" v;
-      let v = continue k (v + 1) in
-      printf "continue returns %d\n%!" v;
-      v + 1
+  let h : type a. a eff -> (a, 'b) continuation -> 'b = function
+    | E v -> (fun k ->
+        printf "caught effect (E %d). continuting..\n%!" v;
+        let v = continue k (v + 1) in
+        printf "continue returns %d\n%!" v;
+        v + 1)
+    | e -> (fun k -> reperform e k)
+  in
+  match_with f
+  { retc = (fun v -> printf "done %d\n%!" v; v + 1);
+    exnc = (fun e -> raise e);
+    effc = h }
 
 let () = printf "result=%d\n%!" v

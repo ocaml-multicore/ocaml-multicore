@@ -43,34 +43,36 @@ exception Division_by_zero = Division_by_zero
 exception Sys_blocked_io = Sys_blocked_io
 exception Undefined_recursive_module = Undefined_recursive_module
 
-(*
 (* Effects *)
 
 type _ eff = ..
 
-type ('a,'b) _continuation
-type cont_tail
+type ('a,'b) raw_continuation
+type continuation_tail
 type ('a,'b) continuation =
-  {cont: ('a,'b) _continuation;
-   cont_tail: continuation_tail}
+  {continuation: ('a,'b) raw_continuation;
+   continuation_tail: continuation_tail}
 
 type ('a, 'b) stack
-external take_cont_noexc : ('a, 'b) _continuation -> ('a, 'b) stack = "caml_continuation_use_noexc" [@@noalloc]
+external take_cont_noexc : ('a, 'b) raw_continuation -> ('a, 'b) stack = "caml_continuation_use_noexc" [@@noalloc]
 external resume : ('a, 'b) stack -> ('c -> 'a) -> 'c -> 'b = "%resume"
 
 external runstack : ('a, 'b) stack -> ('c -> 'a) -> 'c -> 'b = "%runstack"
 external alloc_stack :
   ('a -> 'b) ->
   (exn -> 'b) ->
-  ('c eff -> ('c, 'b) continuation -> 'b) ->
+  ('c eff -> ('c, 'b) raw_continuation -> continuation_tail -> 'b) ->
   ('a, 'b) stack = "caml_alloc_stack"
 
 let continue k v =
-  resume (take_cont_noexc k.cont) (fun x -> x) v
+  resume (take_cont_noexc k.continuation) (fun x -> x) v
 let discontinue k e =
-  resume (take_cont_noexc k.cont) (fun e -> raise e) e
+  resume (take_cont_noexc k.continuation) (fun e -> raise e) e
 
 external perform : 'a eff -> 'a = "%perform"
+external _reperform : 'a eff -> ('a, 'b) raw_continuation -> continuation_tail -> 'b = "%reperform"
+
+let reperform eff k = _reperform eff k.continuation k.continuation_tail
 
 type ('a,'b) handler =
   { retc: 'a -> 'b;
@@ -78,13 +80,11 @@ type ('a,'b) handler =
     effc: 'c.'c eff -> ('c,'b) continuation -> 'b }
 
 let match_with comp handler =
-  let eff_handler e k ktail =
-    match handler.effc e k with
-    | v -> v
-    |
-  let s = alloc_stack handler.retc handler.exnc handler.effc in
+  let effc eff continuation continuation_tail =
+    handler.effc eff {continuation; continuation_tail}
+  in
+  let s = alloc_stack handler.retc handler.exnc effc in
   runstack s comp ()
-*)
 
 (* Composition operators *)
 

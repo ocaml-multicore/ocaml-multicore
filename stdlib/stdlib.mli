@@ -116,7 +116,6 @@ exception Undefined_recursive_module of (string * int * int)
    is evaluated. The arguments are the location of the definition in
    the source code (file name, line number, column number). *)
 
-(*
 (** {1 Effects} *)
 
 type _ eff = ..
@@ -140,6 +139,8 @@ val continue: ('a, 'b) continuation -> 'a -> 'b
     resumed. *)
 val discontinue: ('a, 'b) continuation -> exn -> 'b
 
+val reperform : 'a eff -> ('a,'b) continuation -> 'b
+
 type ('a,'b) handler =
   { retc: 'a -> 'b;
     exnc: exn -> 'b;
@@ -147,7 +148,6 @@ type ('a,'b) handler =
 
 val match_with: (unit -> 'a) -> ('a,'b) handler -> 'b
 
-*)
 
 (** {1 Comparisons} *)
 
