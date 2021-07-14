@@ -41,6 +41,9 @@ value caml_gc_major(value);
 
 #define caml_young_end Caml_state->young_end
 #define caml_young_ptr Caml_state->young_ptr
+#define caml_young_start Caml_state->young_start
+#define caml_young_limit Caml_state->young_limit
+#define caml_minor_heap_wsz Caml_state->minor_heap_wsz
 
 #ifdef DEBUG
 void caml_heap_check (void);
