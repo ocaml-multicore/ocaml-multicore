@@ -54,6 +54,20 @@
 #define lseek _lseeki64
 #endif
 
+static void channel_lock (struct channel *chan) {
+  caml_plat_lock(&chan->mutex);
+  return ;
+}
+
+static void channel_unlock (struct channel *chan) {
+  caml_plat_unlock(&chan->mutex);
+  return ;
+}
+
+/* Hooks for locking channels */
+CAMLexport void (*caml_channel_mutex_lock) (struct channel *) = channel_lock;
+CAMLexport void (*caml_channel_mutex_unlock) (struct channel *) = channel_unlock;
+
 /* List of opened channels and its mutex */
 CAMLexport caml_plat_mutex
   caml_all_opened_channels_mutex = CAML_PLAT_MUTEX_INITIALIZER;
