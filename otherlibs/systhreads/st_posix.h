@@ -79,7 +79,11 @@ CAMLnoreturn_end;
 
 static void st_thread_exit(void)
 {
+#ifdef _WIN32
+  ExitThread(0);
+#else
   pthread_exit(NULL);
+#endif
 }
 
 static void st_thread_join(st_thread_id thr)
@@ -309,11 +313,13 @@ static void * caml_thread_tick(void * arg)
   caml_domain_state *domain;
   uintnat *domain_id = (uintnat *) arg;
   struct timeval timeout;
+#ifndef _WIN32
   sigset_t mask;
 
   /* Block all signals so that we don't try to execute an OCaml signal handler*/
   sigfillset(&mask);
   pthread_sigmask(SIG_BLOCK, &mask, NULL);
+#endif
 
   caml_init_domain_self(*domain_id);
   domain = Caml_state;
@@ -351,6 +357,7 @@ static int st_atfork(void (*fn)(void))
 
 /* Signal handling */
 
+#ifndef _WIN32
 static void st_decode_sigset(value vset, sigset_t * set)
 {
   sigemptyset(set);
@@ -383,9 +390,11 @@ static value st_encode_sigset(sigset_t * set)
 }
 
 static int sigmask_cmd[3] = { SIG_SETMASK, SIG_BLOCK, SIG_UNBLOCK };
+#endif
 
 value caml_thread_sigmask(value cmd, value sigs) /* ML */
 {
+#ifndef _WIN32
   int how;
   sigset_t set, oldset;
   int retcode;
@@ -399,6 +408,10 @@ value caml_thread_sigmask(value cmd, value sigs) /* ML */
   /* Run any handlers for just-unmasked pending signals */
   caml_raise_if_exception(caml_process_pending_signals_exn());
   return st_encode_sigset(&oldset);
+#else
+  caml_invalid_argument("Thread.sigmask not implemented");
+  return Val_int(0);            /* not reached */
+#endif
 }
 
 value caml_wait_signal(value sigs) /* ML */
