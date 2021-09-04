@@ -38,7 +38,7 @@ char_os ** cstringvect(value arg, char * cmdname)
     res[i] = caml_stat_strdup_to_os(String_val(x));
   }
   res[size] = NULL;
-  CAMLreturnT (char**, res);
+  CAMLreturnT (char_os **, res);
 }
 
 void cstringvect_free(char_os ** v)
