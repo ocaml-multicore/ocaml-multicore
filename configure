@@ -15973,6 +15973,7 @@ else
   *-*-mingw32|*-pc-windows) :
     systhread_support=true
       otherlibraries="$otherlibraries systhreads"
+      pthread_link="-lpthread"
       { $as_echo "$as_me:${as_lineno-$LINENO}: the Win32 threads library is supported" >&5
 $as_echo "$as_me: the Win32 threads library is supported" >&6;} ;; #(
   *) :

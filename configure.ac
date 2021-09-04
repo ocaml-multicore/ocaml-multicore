@@ -1683,6 +1683,7 @@ AS_IF([test x"$enable_systhreads" = "xno"],
     [*-*-mingw32|*-pc-windows],
       [systhread_support=true
       otherlibraries="$otherlibraries systhreads"
+      pthread_link="-lpthread"
       AC_MSG_NOTICE([the Win32 threads library is supported])],
     [AX_PTHREAD(
       [systhread_support=true
