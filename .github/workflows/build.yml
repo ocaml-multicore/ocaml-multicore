@@ -43,6 +43,12 @@ jobs:
             os: windows-latest
             config_arg: --host=x86_64-w64-mingw32
     steps:
+      - name: Configure checkout for CRLF compatibility
+        # Most upsetting, but until 10111 is merged...
+        run: |
+          git config --system core.autocrlf false
+          git config --system core.eol lf
+        if: ${{ matrix.os == 'windows-latest' }}
       - name: Checkout
         uses: actions/checkout@v2
         with:
