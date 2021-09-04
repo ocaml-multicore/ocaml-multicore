@@ -641,7 +641,8 @@ void verify_push(void* st_v, value v, value* p)
 
   if( Is_young(v) ) {
     caml_domain_state* domain_state;
-    caml_gc_log("minor in heap: %p, hd_val: %lx, p: %p", (value*)v, Hd_val(v), p);
+    caml_gc_log("minor in heap: %p, hd_val: %" ARCH_INTNAT_PRINTF_FORMAT "x, "
+                "p: %p", (value*)v, Hd_val(v), p);
     domain_state = caml_owner_of_young_block(v);
     caml_gc_log("owner: %d, young_start: %p, young_end: %p, young_ptr: %p, young_limit: %p", domain_state->id, domain_state->young_start, domain_state->young_end, domain_state->young_ptr, (void *)domain_state->young_limit);
   }
@@ -776,12 +777,18 @@ static void verify_swept (struct caml_heap_state* local) {
       verify_pool(p, i, &pool_stats);
     }
   }
-  caml_gc_log("Pooled memory: %lu alloced, %lu free, %lu fragmentation",
+  caml_gc_log("Pooled memory: %" ARCH_INTNAT_PRINTF_FORMAT
+                "u alloced, %" ARCH_INTNAT_PRINTF_FORMAT
+                "u free, %" ARCH_INTNAT_PRINTF_FORMAT
+                "u fragmentation",
               pool_stats.alloced, pool_stats.free, pool_stats.overhead);
 
   verify_large(local->swept_large, &large_stats);
   Assert(local->unswept_large == 0);
-  caml_gc_log("Large memory: %lu alloced, %lu free, %lu fragmentation",
+  caml_gc_log("Large memory: %" ARCH_INTNAT_PRINTF_FORMAT
+                "u alloced, %" ARCH_INTNAT_PRINTF_FORMAT
+                "u free, %" ARCH_INTNAT_PRINTF_FORMAT
+                "u fragmentation",
               large_stats.alloced, large_stats.free, large_stats.overhead);
 
   /* Check stats are being computed correctly */
