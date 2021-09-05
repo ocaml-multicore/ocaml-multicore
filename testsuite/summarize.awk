@@ -65,13 +65,13 @@ function record_fail() {
     check();
     if (!(key in RESULTS) || RESULTS[key] == "s"){
         if (!(key in RESULTS)) ++nresults;
-    		testcase = sprintf ("%s/%s", curdir, curfile);
-			gsub(/[ \t]+$/, "", testcase);
-			if (is_disabled[testcase]) {
-				RESULTS[key] = "d";
-			} else {
-				RESULTS[key] = "f";
-			}
+        testcase = sprintf ("%s/%s", curdir, curfile);
+      gsub(/[ \t]+$/, "", testcase);
+      if (is_disabled[testcase]) {
+        RESULTS[key] = "d";
+      } else {
+        RESULTS[key] = "f";
+      }
     }
     delete SKIPPED[curdir];
     clear();
@@ -131,6 +131,15 @@ function record_unexp() {
     in_test = 1;
 }
 
+/^Wall clock:/ {
+  match($0, /: .* took /);
+  curfile = substr($0, RSTART+2, RLENGTH-8);
+  match($0, / took .*s/);
+  duration = substr($0, RSTART+6, RLENGTH-7);
+  if (duration + 0.0 > 10.0)
+    slow[slowcount++] = sprintf("%s: %s", curfile, duration);
+}
+
 /=> passed/ {
     record_pass();
 }
@@ -183,8 +192,8 @@ END {
             }else if (r == "e"){
                 ++ unexped;
                 unexp[unexpidx++] = key;
-							}else if (r == "d"){
-									++ ndisabled;
+              }else if (r == "d"){
+                  ++ ndisabled;
             }else if (r == "s"){
                 ++ skipped;
                 curdir = DIRS[key];
@@ -230,6 +239,10 @@ END {
         printf("  %3d tests considered", nresults);
         if (nresults != passed + skipped + ignored + failed + ndisabled + unexped){
             printf (" (totals don't add up??)");
+        }
+        if (slowcount != 0){
+            printf("\n\nTests taking longer than 10s:\n");
+            for (i=0; i < slowcount; i++) printf("    %s\n", slow[i]);
         }
         printf ("\n");
         if (reran != 0){
