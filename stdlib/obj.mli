@@ -194,3 +194,37 @@ module Ephemeron: sig
   (** Maximum length of an ephemeron, ie the maximum number of keys an
       ephemeron could contain *)
 end
+
+module Effect_handlers : sig
+  module Deep : sig
+    type _ eff = ..
+    type ('a,'b) continuation
+
+    (** [perform e] performs an effect [e].
+
+        @raises Unhandled if there is no active handler. *)
+    external perform : 'a eff -> 'a = "%perform"
+
+    (** [continue k x] resumes the continuation [k] by passing [x] to [k].
+
+        @raise Invalid_argument if the continuation has already been
+        resumed. *)
+    val continue: ('a, 'b) continuation -> 'a -> 'b
+
+    (** [discontinue k e] resumes the continuation [k] by raising the
+        exception [e] in [k].
+
+        @raise Invalid_argument if the continuation has already been
+        resumed. *)
+    val discontinue: ('a, 'b) continuation -> exn -> 'b
+
+    val reperform : 'a eff -> ('a,'b) continuation -> 'b
+
+    type ('a,'b) handler =
+      { retc: 'a -> 'b;
+        exnc: exn -> 'b;
+        effc: 'c.'c eff -> ('c,'b) continuation -> 'b }
+
+    val match_with: (unit -> 'a) -> ('a,'b) handler -> 'b
+  end
+end

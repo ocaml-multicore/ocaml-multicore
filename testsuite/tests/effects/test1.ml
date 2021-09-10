@@ -1,6 +1,8 @@
 (* TEST
  *)
 
+open Obj.Effect_handlers.Deep
+
 type _ eff += E : unit eff
 
 let h : type a. a eff -> (a,'b) continuation -> 'b = function
