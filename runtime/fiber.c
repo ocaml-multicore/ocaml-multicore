@@ -515,6 +515,17 @@ CAMLprim value caml_continuation_use (value cont)
   return v;
 }
 
+CAMLprim value caml_update_handler (value stack, value hval, value hexn,
+                                    value heff)
+{
+  struct stack_info* stk = Ptr_val(stack);
+  while (Stack_parent(stk) != NULL) stk = Stack_parent(stk);
+  Stack_handle_value(stk) = hval;
+  Stack_handle_exception(stk) = hexn;
+  Stack_handle_effect(stk) = heff;
+  return stack;
+}
+
 void caml_continuation_replace(value cont, struct stack_info* stk)
 {
   value n = Val_ptr(NULL);

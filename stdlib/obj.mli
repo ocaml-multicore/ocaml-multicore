@@ -196,14 +196,17 @@ module Ephemeron: sig
 end
 
 module Effect_handlers : sig
+
+  type _ eff = ..
+
+  (** [perform e] performs an effect [e].
+
+      @raises Unhandled if there is no active handler. *)
+  external perform : 'a eff -> 'a = "%perform"
+
   module Deep : sig
-    type _ eff = ..
+
     type ('a,'b) continuation
-
-    (** [perform e] performs an effect [e].
-
-        @raises Unhandled if there is no active handler. *)
-    external perform : 'a eff -> 'a = "%perform"
 
     (** [continue k x] resumes the continuation [k] by passing [x] to [k].
 
@@ -226,5 +229,23 @@ module Effect_handlers : sig
         effc: 'c.'c eff -> ('c,'b) continuation -> 'b }
 
     val match_with: (unit -> 'a) -> ('a,'b) handler -> 'b
+  end
+
+  module Shallow : sig
+
+    type ('a,'b) continuation
+
+    val fiber : ('a -> 'b) -> ('a, 'b) continuation
+
+    type ('a,'b) handler =
+      { retc: 'a -> 'b;
+        exnc: exn -> 'b;
+        effc: 'c.'c eff -> ('c,'a) continuation -> 'b }
+
+    val continue_with : ('a,'b) continuation -> 'a -> ('b,'c) handler -> 'c
+
+    val discontinue_with : ('a,'b) continuation -> exn -> ('b,'c) handler -> 'c
+
+    val reperform : 'a eff -> ('a,'b) continuation -> 'c
   end
 end
