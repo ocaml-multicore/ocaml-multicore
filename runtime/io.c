@@ -54,6 +54,11 @@
 #define lseek _lseeki64
 #endif
 
+/* For compatibility purpose, we need to set caml_channel_mutex_lock/unlock.
+   This will tell external code that it needs to handle concurrent
+   channel accesses properly.
+*/
+
 static void channel_lock (struct channel *chan) {
   caml_plat_lock(&chan->mutex);
   return ;
