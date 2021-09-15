@@ -221,14 +221,22 @@ module Effect_handlers : sig
         resumed. *)
     val discontinue: ('a, 'b) continuation -> exn -> 'b
 
-    val reperform : 'a eff -> ('a,'b) continuation -> 'b
-
     type ('a,'b) handler =
       { retc: 'a -> 'b;
         exnc: exn -> 'b;
-        effc: 'c.'c eff -> ('c,'b) continuation -> 'b }
+        effc: 'c.'c eff -> (('c,'b) continuation -> 'b) option }
 
     val match_with: (unit -> 'a) -> ('a,'b) handler -> 'b
+
+    type 'a effect_handler =
+      { effc: 'b. 'b eff -> (('b, 'a) continuation -> 'a) option }
+
+    val try_with: (unit -> 'a) -> 'a effect_handler -> 'a
+
+    external clone_continuation : ('a,'b) continuation -> ('a,'b) continuation =
+      "caml_clone_continuation"
+    external drop_continuation : ('a,'b) continuation -> unit =
+      "caml_drop_continuation"
   end
 
   module Shallow : sig
@@ -240,12 +248,15 @@ module Effect_handlers : sig
     type ('a,'b) handler =
       { retc: 'a -> 'b;
         exnc: exn -> 'b;
-        effc: 'c.'c eff -> ('c,'a) continuation -> 'b }
+        effc: 'c.'c eff -> (('c,'a) continuation -> 'b) option }
 
     val continue_with : ('a,'b) continuation -> 'a -> ('b,'c) handler -> 'c
 
     val discontinue_with : ('a,'b) continuation -> exn -> ('b,'c) handler -> 'c
 
-    val reperform : 'a eff -> ('a,'b) continuation -> 'c
+    external clone_continuation : ('a,'b) continuation -> ('a,'b) continuation =
+      "caml_clone_continuation"
+    external drop_continuation : ('a,'b) continuation -> unit =
+      "caml_drop_continuation"
   end
 end

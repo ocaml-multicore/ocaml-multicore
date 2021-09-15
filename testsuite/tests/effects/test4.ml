@@ -1,24 +1,21 @@
 (* TEST
  *)
 
+open Obj.Effect_handlers
+open Obj.Effect_handlers.Deep
+
 type _ eff += Foo : int -> int eff
 
 let r =
-  let h' : type a. a eff -> (a, 'b) continuation -> 'b = function
-    | Foo i -> (fun k -> failwith "NO")
-    | e -> (fun k -> reperform e k)
-  in
-  let h : type a. a eff -> (a, 'b) continuation -> 'b = function
-    | Foo i -> (fun k ->
-        match_with (fun () -> continue k (i+1))
-        { retc = (fun v -> v);
-          exnc = (fun e -> raise e);
-          effc = h' })
-    | e -> (fun k -> reperform e k)
-  in
-  match_with (fun () -> perform (Foo 3))
-  { retc = (fun v -> v);
-    exnc = (fun e -> raise e);
-    effc = h }
+  try_with (fun () -> perform (Foo 3))
+  { effc = fun (type a) (e : a eff) ->
+      match e with
+      | Foo i -> Some (fun (k : (a,_) continuation) ->
+          try_with (fun () -> continue k (i+1))
+          { effc = fun (type a) (e : a eff) ->
+              match e with
+              | Foo i -> Some (fun k -> failwith "NO")
+              | e -> None })
+      | e -> None }
 
 let () = Printf.printf "%d\n" r

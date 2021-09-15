@@ -2,6 +2,8 @@
  *)
 
 open Printf
+open Obj.Effect_handlers
+open Obj.Effect_handlers.Deep
 
 type _ eff += E : int -> int eff
 
@@ -11,15 +13,15 @@ let f () =
   printf "perform returns %d\n%!" v;
   v + 1
 
+let h : type a. a eff -> ((a, 'b) continuation -> 'b) option = function
+  | E v -> Some (fun k ->
+      printf "caught effect (E %d). continuting..\n%!" v;
+      let v = continue k (v + 1) in
+      printf "continue returns %d\n%!" v;
+      v + 1)
+  | e -> None
+
 let v =
-  let h : type a. a eff -> (a, 'b) continuation -> 'b = function
-    | E v -> (fun k ->
-        printf "caught effect (E %d). continuting..\n%!" v;
-        let v = continue k (v + 1) in
-        printf "continue returns %d\n%!" v;
-        v + 1)
-    | e -> (fun k -> reperform e k)
-  in
   match_with f
   { retc = (fun v -> printf "done %d\n%!" v; v + 1);
     exnc = (fun e -> raise e);

@@ -200,66 +200,89 @@ end
 module Effect_handlers = struct
 
     type _ eff = ..
-
-    type ('a,'b) raw_continuation
-    type continuation_tail
-    type ('a,'b) _continuation =
-      {continuation: ('a,'b) raw_continuation;
-       continuation_tail: continuation_tail}
+    external perform : 'a eff -> 'a = "%perform"
 
     type ('a, 'b) stack
-    external take_cont_noexc : ('a, 'b) raw_continuation -> ('a, 'b) stack =
-      "caml_continuation_use_noexc" [@@noalloc]
+
     external resume : ('a, 'b) stack -> ('c -> 'a) -> 'c -> 'b = "%resume"
-
     external runstack : ('a, 'b) stack -> ('c -> 'a) -> 'c -> 'b = "%runstack"
-    external alloc_stack :
-      ('a -> 'b) ->
-      (exn -> 'b) ->
-      ('c eff -> ('c, 'b) raw_continuation -> continuation_tail -> 'b) ->
-      ('a, 'b) stack = "caml_alloc_stack"
 
-    external perform : 'a eff -> 'a = "%perform"
+
 
   module Deep = struct
 
-    type ('a,'b) continuation = ('a,'b) _continuation
+    type ('a,'b) continuation
+    type last_fiber
 
-    let continue k v =
-      resume (take_cont_noexc k.continuation) (fun x -> x) v
+    external take_cont_noexc : ('a, 'b) continuation -> ('a, 'b) stack =
+      "caml_continuation_use_noexc" [@@noalloc]
+    external alloc_stack :
+      ('a -> 'b) ->
+      (exn -> 'b) ->
+      ('c eff -> ('c, 'b) continuation -> last_fiber -> 'b) ->
+      ('a, 'b) stack = "caml_alloc_stack"
 
-    let discontinue k e =
-      resume (take_cont_noexc k.continuation) (fun e -> raise e) e
+    let continue k v = resume (take_cont_noexc k) (fun x -> x) v
+
+    let discontinue k e = resume (take_cont_noexc k) (fun e -> raise e) e
 
     type ('a,'b) handler =
       { retc: 'a -> 'b;
         exnc: exn -> 'b;
-        effc: 'c.'c eff -> ('c,'b) continuation -> 'b }
+        effc: 'c.'c eff -> (('c,'b) continuation -> 'b) option }
+
+    external reperform :
+      'a eff -> ('a, 'b) continuation -> last_fiber -> 'b = "%reperform"
 
     let match_with comp handler =
-      let effc eff continuation continuation_tail =
-        handler.effc eff {continuation; continuation_tail}
+      let effc eff k last_fiber =
+        match handler.effc eff with
+        | Some f -> f k
+        | None -> reperform eff k last_fiber
       in
       let s = alloc_stack handler.retc handler.exnc effc in
       runstack s comp ()
 
-    external _reperform : 'a eff -> ('a, 'b) raw_continuation -> continuation_tail -> 'b = "%reperform"
+    type 'a effect_handler =
+      { effc: 'b. 'b eff -> (('b,'a) continuation -> 'a) option }
 
-    let reperform eff k = _reperform eff k.continuation k.continuation_tail
+    let try_with comp handler =
+      let effc' eff k last_fiber =
+        match handler.effc eff with
+        | Some f -> f k
+        | None -> reperform eff k last_fiber
+      in
+      let s = alloc_stack (fun x -> x) (fun e -> raise e) effc' in
+      runstack s comp ()
+
+    external clone_continuation : ('a,'b) continuation -> ('a,'b) continuation =
+      "caml_clone_continuation"
+    external drop_continuation : ('a,'b) continuation -> unit =
+      "caml_drop_continuation"
   end
 
   module Shallow = struct
 
-    type ('a,'b) continuation = ('a,'b) _continuation
+    type ('a,'b) continuation
+    type last_fiber
+
+    external take_cont_noexc : ('a, 'b) continuation -> ('a, 'b) stack =
+      "caml_continuation_use_noexc" [@@noalloc]
+    external alloc_stack :
+      ('a -> 'b) ->
+      (exn -> 'b) ->
+      ('c eff -> ('c, 'b) continuation -> last_fiber -> 'b) ->
+      ('a, 'b) stack = "caml_alloc_stack"
+
 
     let fiber : type a b. (a -> b) -> (a, b) continuation = fun f ->
       let module M = struct type _ eff += Initial_setup__ : a eff end in
       let exception E of (a,b) continuation in
       let f' () = f (perform M.Initial_setup__) in
       let error _ = failwith "impossible" in
-      let effc eff continuation continuation_tail =
+      let effc eff k _last_fiber =
         match eff with
-        | M.Initial_setup__ -> raise (E {continuation; continuation_tail})
+        | M.Initial_setup__ -> raise (E k)
         | _ -> error ()
       in
       let s = alloc_stack error error effc in
@@ -268,33 +291,41 @@ module Effect_handlers = struct
     type ('a,'b) handler =
       { retc: 'a -> 'b;
         exnc: exn -> 'b;
-        effc: 'c.'c eff -> ('c,'a) continuation -> 'b }
+        effc: 'c.'c eff -> (('c,'a) continuation -> 'b) option }
 
     external update_handler :
       ('a,'b) stack ->
       ('b -> 'c) ->
       (exn -> 'c) ->
-      ('d eff -> ('d,'b) raw_continuation -> continuation_tail -> 'c) ->
+      ('d eff -> ('d,'b) continuation -> last_fiber -> 'c) ->
       ('a,'c) stack = "caml_update_handler" [@@noalloc]
 
-    let continue_with (k : ('a,'b) continuation) (v : 'a)
-          (handler : ('b,'c) handler) : 'c =
-      let effc eff continuation continuation_tail =
-        handler.effc eff {continuation; continuation_tail}
+    external reperform :
+      'a eff -> ('a, 'b) continuation -> last_fiber -> 'c = "%reperform"
+
+    let continue_with k v handler =
+      let effc eff k last_fiber =
+        match handler.effc eff with
+        | Some f -> f k
+        | None -> reperform eff k last_fiber
       in
-      let stack = take_cont_noexc k.continuation in
+      let stack = take_cont_noexc k in
       let stack' = update_handler stack handler.retc handler.exnc effc in
       resume stack' (fun x -> x) v
 
-    let discontinue_with k e handler =
-      let effc eff continuation continuation_tail =
-        handler.effc eff {continuation; continuation_tail}
+    let discontinue_with k x handler =
+      let effc eff k last_fiber =
+        match handler.effc eff with
+        | Some f -> f k
+        | None -> reperform eff k last_fiber
       in
-      let stack = take_cont_noexc k.continuation in
+      let stack = take_cont_noexc k in
       let stack' = update_handler stack handler.retc handler.exnc effc in
-      resume stack' (fun e -> raise e) e
+      resume stack' (fun e -> raise e) x
 
-    external _reperform : 'a eff -> ('a, 'b) raw_continuation -> continuation_tail -> 'c = "%reperform"
-    let reperform eff k = _reperform eff k.continuation k.continuation_tail
+    external clone_continuation : ('a,'b) continuation -> ('a,'b) continuation =
+      "caml_clone_continuation"
+    external drop_continuation : ('a,'b) continuation -> unit =
+      "caml_drop_continuation"
   end
 end
