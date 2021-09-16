@@ -233,8 +233,6 @@ module Effect_handlers : sig
 
     val try_with: (unit -> 'a) -> 'a effect_handler -> 'a
 
-    external clone_continuation : ('a,'b) continuation -> ('a,'b) continuation =
-      "caml_clone_continuation"
     external drop_continuation : ('a,'b) continuation -> unit =
       "caml_drop_continuation"
   end
@@ -254,8 +252,6 @@ module Effect_handlers : sig
 
     val discontinue_with : ('a,'b) continuation -> exn -> ('b,'c) handler -> 'c
 
-    external clone_continuation : ('a,'b) continuation -> ('a,'b) continuation =
-      "caml_clone_continuation"
     external drop_continuation : ('a,'b) continuation -> unit =
       "caml_drop_continuation"
   end

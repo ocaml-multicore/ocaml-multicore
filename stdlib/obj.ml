@@ -255,8 +255,6 @@ module Effect_handlers = struct
       let s = alloc_stack (fun x -> x) (fun e -> raise e) effc' in
       runstack s comp ()
 
-    external clone_continuation : ('a,'b) continuation -> ('a,'b) continuation =
-      "caml_clone_continuation"
     external drop_continuation : ('a,'b) continuation -> unit =
       "caml_drop_continuation"
   end
@@ -323,8 +321,6 @@ module Effect_handlers = struct
       let stack' = update_handler stack handler.retc handler.exnc effc in
       resume stack' (fun e -> raise e) x
 
-    external clone_continuation : ('a,'b) continuation -> ('a,'b) continuation =
-      "caml_clone_continuation"
     external drop_continuation : ('a,'b) continuation -> unit =
       "caml_drop_continuation"
   end
