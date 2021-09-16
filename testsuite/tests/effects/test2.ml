@@ -22,7 +22,7 @@ let h : type a. a eff -> ((a, 'b) continuation -> 'b) option = function
   | e -> None
 
 let v =
-  match_with f
+  match_with f ()
   { retc = (fun v -> printf "done %d\n%!" v; v + 1);
     exnc = (fun e -> raise e);
     effc = h }

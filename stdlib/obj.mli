@@ -226,12 +226,12 @@ module Effect_handlers : sig
         exnc: exn -> 'b;
         effc: 'c.'c eff -> (('c,'b) continuation -> 'b) option }
 
-    val match_with: (unit -> 'a) -> ('a,'b) handler -> 'b
+    val match_with: ('a -> 'b) -> 'a -> ('b,'c) handler -> 'c
 
     type 'a effect_handler =
       { effc: 'b. 'b eff -> (('b, 'a) continuation -> 'a) option }
 
-    val try_with: (unit -> 'a) -> 'a effect_handler -> 'a
+    val try_with: ('a -> 'b) -> 'a -> 'b effect_handler -> 'b
 
     external drop_continuation : ('a,'b) continuation -> unit =
       "caml_drop_continuation"

@@ -11,7 +11,7 @@ let () =
   Printf.printf "%d\n%!" @@
   match_with (fun () ->
     Printf.printf "in handler. raising X\n%!";
-    raise X)
+    raise X) ()
     { retc = (fun v -> v);
       exnc = (function
         | X -> 10

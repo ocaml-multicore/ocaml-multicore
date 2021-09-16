@@ -234,26 +234,26 @@ module Effect_handlers = struct
     external reperform :
       'a eff -> ('a, 'b) continuation -> last_fiber -> 'b = "%reperform"
 
-    let match_with comp handler =
+    let match_with comp arg handler =
       let effc eff k last_fiber =
         match handler.effc eff with
         | Some f -> f k
         | None -> reperform eff k last_fiber
       in
       let s = alloc_stack handler.retc handler.exnc effc in
-      runstack s comp ()
+      runstack s comp arg
 
     type 'a effect_handler =
       { effc: 'b. 'b eff -> (('b,'a) continuation -> 'a) option }
 
-    let try_with comp handler =
+    let try_with comp arg handler =
       let effc' eff k last_fiber =
         match handler.effc eff with
         | Some f -> f k
         | None -> reperform eff k last_fiber
       in
       let s = alloc_stack (fun x -> x) (fun e -> raise e) effc' in
-      runstack s comp ()
+      runstack s comp arg
 
     external drop_continuation : ('a,'b) continuation -> unit =
       "caml_drop_continuation"
