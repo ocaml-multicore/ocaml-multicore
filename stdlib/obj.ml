@@ -254,9 +254,6 @@ module Effect_handlers = struct
       in
       let s = alloc_stack (fun x -> x) (fun e -> raise e) effc' in
       runstack s comp arg
-
-    external drop_continuation : ('a,'b) continuation -> unit =
-      "caml_drop_continuation"
   end
 
   module Shallow = struct
@@ -316,8 +313,5 @@ module Effect_handlers = struct
       in
       let stack = update_handler k handler.retc handler.exnc effc in
       resume stack (fun e -> raise e) x
-
-    external drop_continuation : ('a,'b) continuation -> unit =
-      "caml_drop_continuation"
   end
 end
