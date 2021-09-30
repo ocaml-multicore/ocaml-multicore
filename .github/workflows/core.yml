@@ -1,9 +1,8 @@
 name: core
 
 on:
-  push:
   schedule:
-    - cron: '1 0 * * *'
+    - cron: '0 0 * * *'
 
 jobs:
 
