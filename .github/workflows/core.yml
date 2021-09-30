@@ -1,0 +1,32 @@
+name: core
+
+on:
+  push:
+  schedule:
+    - cron: '1 0 * * *'
+
+jobs:
+
+  build:
+    name: 'linux'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          repository: 'ocaml-multicore/core'
+          ref: 'monorepo-0.14'
+
+      - name: OCaml
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: 'ocaml-variants.4.12.0+domains' 
+          opam-depext: false
+          opam-repositories: |
+            default: https://github.com/ocaml/opam-repository.git
+
+      - run: opam monorepo lock
+
+      - run: opam monorepo pull
+
+      - run: opam exec -- dune runtest
