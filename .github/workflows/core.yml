@@ -24,8 +24,6 @@ jobs:
           opam-repositories: |
             default: https://github.com/ocaml/opam-repository.git
 
-      - run: opam monorepo lock
-
       - run: opam monorepo pull
 
       - run: opam exec -- dune runtest
