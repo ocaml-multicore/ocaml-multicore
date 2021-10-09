@@ -37,14 +37,6 @@
 #include <time.h>
 #endif
 
-CAMLprim value caml_eventlog_pause(value val) {
-  return Val_unit;
-}
-
-CAMLprim value caml_eventlog_resume(value val) {
-  return Val_unit;
-}
-
 #ifdef CAML_INSTR
 
 #endif /*CAML_INSTR*/
