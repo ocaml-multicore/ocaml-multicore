@@ -54,7 +54,8 @@ extern value caml_eventring_resume();
     process id (or equivalent) of the startup OCaml process. This function will
     return a cursor which can we be used with caml_eventring_read_poll to read
     events from the eventrings. */
-extern struct caml_eventring_cursor* caml_eventring_create_cursor(const char *eventring_path, int pid);
+extern struct caml_eventring_cursor* 
+  caml_eventring_create_cursor(const char *eventring_path, int pid);
 
 /* frees a cursor obtained from caml_eventring_creator_cursor */
 extern void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor);
@@ -63,11 +64,11 @@ extern void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor);
     provided in [callbacks] for each new event up to at most [max_events] times. 
     Returns the number of events consumed.
     
-    0 or negative [max_events] indicates no limit to the number of callbacks. */
-CAMLextern int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
+    0 for [max_events] indicates no limit to the number of callbacks. */
+CAMLextern uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
                          struct caml_eventring_callbacks *callbacks,
                          void *callback_data,
-                         int max_events);
+                         uint max_events);
 
 /* OCaml API for reading from the eventring */
 extern value caml_eventring_create_wrapped_cursor(value path_pid);

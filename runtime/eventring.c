@@ -214,8 +214,10 @@ static void create_and_start_ring_buffers(
     current_metadata->first_ring_offset = sizeof(struct metadata_header);
 
     for( int domain_num = 0; domain_num < Max_domains ; domain_num++ ) {
-      struct ring_buffer* ring_buffer = (struct ring_buffer*)((char*)current_metadata + current_metadata->first_ring_offset 
-                                          + domain_num * current_metadata->ring_with_header_size_bytes);
+      struct ring_buffer* ring_buffer 
+        = (struct ring_buffer*)((char*)current_metadata 
+          + current_metadata->first_ring_offset 
+                + domain_num * current_metadata->ring_with_header_size_bytes);
                                   
       ring_buffer->ring_head = 0;
       ring_buffer->ring_tail = 0;
@@ -274,7 +276,8 @@ static void write_to_ring(ev_category category, ev_message_type type,
 
   struct ring_buffer *domain_ring_buffer =
       get_ring_buffer_by_domain_id(Caml_state->id);
-  uint64_t *ring_ptr = (uint64_t*)((char *)domain_ring_buffer + domain_ring_buffer->data_offset);
+  uint64_t *ring_ptr = 
+    (uint64_t*)((char *)domain_ring_buffer + domain_ring_buffer->data_offset);
 
   uint64_t ring_head = atomic_load_explicit(&domain_ring_buffer->ring_head,
                                             memory_order_acquire);
@@ -501,10 +504,10 @@ void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor) {
     provided in [callbacks] for each new event up to at most [max_events] times.
     Returns the number of events consumed.
 
-    0 or negative [max_events] indicates no limit to the number of callbacks. */
-int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
+    0 for [max_events] indicates no limit to the number of callbacks. */
+uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
                              struct caml_eventring_callbacks *callbacks,
-                             void *callback_data, int max_events) {
+                             void *callback_data, uint max_events) {
   int events_consumed = 0;
   uint64_t ring_head, ring_tail;
   char *raw_header_ptr;
@@ -514,13 +517,16 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
     return 0;
   }
 
-  raw_header_ptr = (char *)cursor->metadata + cursor->metadata->first_ring_offset;
+  raw_header_ptr = (char *)cursor->metadata 
+                    + cursor->metadata->first_ring_offset;
 
   for (int domain_num = 0; domain_num < cursor->metadata->max_domains;
        domain_num++) {
 
-    struct ring_buffer *ring_buffer_header = (struct ring_buffer*)raw_header_ptr;
-    uint64_t* ring_ptr = (uint64_t*)((char*)ring_buffer_header + ring_buffer_header->data_offset);
+    struct ring_buffer *ring_buffer_header = 
+            (struct ring_buffer*)raw_header_ptr;
+    uint64_t* ring_ptr = 
+      (uint64_t*)((char*)ring_buffer_header + ring_buffer_header->data_offset);
 
     do {
       ring_head = atomic_load_explicit(&ring_buffer_header->ring_head,
@@ -608,7 +614,7 @@ int caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
       }
     } while (ring_tail < atomic_load_explicit(&ring_buffer_header->ring_tail,
                                               memory_order_acquire) &&
-             (max_events <= 0 || events_consumed < max_events));
+             (max_events == 0 || events_consumed < max_events));
 
     raw_header_ptr += cursor->metadata->ring_with_header_size_bytes;
   }
@@ -726,7 +732,8 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
       while (cursor->current_positions[domain_num] < ring_tail) {
         uint64_t buf[MAX_MSG_LENGTH];
         uint64_t ring_mask = current_metadata->ring_size_elements - 1;
-        uint64_t header = ring_ptr[cursor->current_positions[domain_num] & ring_mask];
+        uint64_t header = 
+              ring_ptr[cursor->current_positions[domain_num] & ring_mask];
 
         uint64_t msg_length = RING_ITEM_LENGTH(header);
 
