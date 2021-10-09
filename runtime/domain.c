@@ -27,7 +27,7 @@
 #include "caml/callback.h"
 #include "caml/domain.h"
 #include "caml/domain_state.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 #include "caml/fail.h"
 #include "caml/fiber.h"
 #include "caml/finalise.h"
@@ -543,8 +543,6 @@ void caml_init_domains(uintnat minor_heap_wsz) {
   if (!domain_self) caml_fatal_error("Failed to create main domain");
 
   caml_init_signal_handling();
-
-  CAML_EVENTLOG_INIT();
   caml_domain_set_name(T("Domain"));
 }
 
@@ -596,10 +594,7 @@ static void* backup_thread_func(void* v)
 
   domain_self = di;
   SET_Caml_state((void*)(di->tls_area));
-
   caml_domain_set_name(T("BackupThread"));
-
-  CAML_EVENTLOG_IS_BACKUP_THREAD();
 
   /* TODO: how does the backup thread interact with the eventlog infra?
    * caml_ev_tag_self_as_backup_thread(); */
@@ -765,7 +760,7 @@ CAMLprim value caml_domain_spawn(value callback, value mutex)
   int err;
   sigset_t mask, old_mask;
 
-  CAML_EV_BEGIN(EV_DOMAIN_SPAWN);
+  caml_ev_begin(EV_DOMAIN_SPAWN);
   p.parent = &domain_self->interruptor;
   p.status = Dom_starting;
 
@@ -821,7 +816,7 @@ CAMLprim value caml_domain_spawn(value callback, value mutex)
      the backup thread is not active, we ensure
      it is started here. */
   install_backup_thread(domain_self);
-  CAML_EV_END(EV_DOMAIN_SPAWN);
+  caml_ev_end(EV_DOMAIN_SPAWN);
   CAMLreturn (Val_long(p.unique_id));
 }
 
@@ -897,8 +892,8 @@ static void decrement_stw_domains_still_processing()
 static void caml_poll_gc_work();
 static void stw_handler(caml_domain_state* domain)
 {
-  CAML_EV_BEGIN(EV_STW_HANDLER);
-  CAML_EV_BEGIN(EV_STW_API_BARRIER);
+  caml_ev_begin(EV_STW_HANDLER);
+  caml_ev_begin(EV_STW_API_BARRIER);
   {
     SPIN_WAIT {
       if (atomic_load_acq(&stw_request.domains_still_running) == 0)
@@ -908,7 +903,7 @@ static void stw_handler(caml_domain_state* domain)
         stw_request.enter_spin_callback(domain, stw_request.enter_spin_data);
     }
   }
-  CAML_EV_END(EV_STW_API_BARRIER);
+  caml_ev_end(EV_STW_API_BARRIER);
 
   #ifdef DEBUG
   Caml_state->inside_stw_handler = 1;
@@ -924,7 +919,7 @@ static void stw_handler(caml_domain_state* domain)
 
   decrement_stw_domains_still_processing();
 
-  CAML_EV_END(EV_STW_HANDLER);
+  caml_ev_end(EV_STW_HANDLER);
 
   /* poll the GC to check for deferred work
      we do this here because blocking or waiting threads only execute
@@ -969,7 +964,7 @@ int caml_try_run_on_all_domains_with_spin_work(
   /* we have the lock and can claim the stw_leader */
   atomic_store_rel(&stw_leader, (uintnat)domain_self);
 
-  CAML_EV_BEGIN(EV_STW_LEADER);
+  caml_ev_begin(EV_STW_LEADER);
   caml_gc_log("causing STW");
 
   /* setup all fields for this stw_request, must have those needed
@@ -1033,7 +1028,7 @@ int caml_try_run_on_all_domains_with_spin_work(
 
   decrement_stw_domains_still_processing();
 
-  CAML_EV_END(EV_STW_LEADER);
+  caml_ev_end(EV_STW_LEADER);
 
   return 1;
 }
@@ -1066,10 +1061,10 @@ static void caml_poll_gc_work()
        (uintnat)Caml_state->young_start) ||
       Caml_state->requested_minor_gc) {
     /* out of minor heap or collection forced */
-    CAML_EV_BEGIN(EV_MINOR);
+    caml_ev_begin(EV_MINOR);
     Caml_state->requested_minor_gc = 0;
     caml_empty_minor_heaps_once();
-    CAML_EV_END(EV_MINOR);
+    caml_ev_end(EV_MINOR);
 
     /* FIXME: a domain will only ever call finalizers if its minor
       heap triggers the minor collection
@@ -1077,16 +1072,16 @@ static void caml_poll_gc_work()
       is waiting in a blocking section and serviced by the backup
       thread.
       */
-    CAML_EV_BEGIN(EV_MINOR_FINALIZED);
+    caml_ev_begin(EV_MINOR_FINALIZED);
     caml_final_do_calls();
-    CAML_EV_END(EV_MINOR_FINALIZED);
+    caml_ev_end(EV_MINOR_FINALIZED);
   }
 
   if (Caml_state->requested_major_slice) {
-    CAML_EV_BEGIN(EV_MAJOR);
+    caml_ev_begin(EV_MAJOR);
     Caml_state->requested_major_slice = 0;
     caml_major_collection_slice(AUTO_TRIGGERED_MAJOR_SLICE);
-    CAML_EV_END(EV_MAJOR);
+    caml_ev_end(EV_MAJOR);
   }
 
   if (atomic_load_acq(
@@ -1100,22 +1095,22 @@ static void handle_gc_interrupt() {
   atomic_uintnat* young_limit = domain_self->interruptor.interrupt_word;
   CAMLalloc_point_here;
 
-  CAML_EV_BEGIN(EV_INTERRUPT_GC);
+  caml_ev_begin(EV_INTERRUPT_GC);
   if (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
     /* interrupt */
-    CAML_EV_BEGIN(EV_INTERRUPT_REMOTE);
+    caml_ev_begin(EV_INTERRUPT_REMOTE);
     while (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
       uintnat i = INTERRUPT_MAGIC;
       atomic_compare_exchange_strong(
           young_limit, &i, (uintnat)Caml_state->young_start);
     }
     caml_handle_incoming_interrupts();
-    CAML_EV_END(EV_INTERRUPT_REMOTE);
+    caml_ev_end(EV_INTERRUPT_REMOTE);
   }
 
   caml_poll_gc_work();
 
-  CAML_EV_END(EV_INTERRUPT_GC);
+  caml_ev_end(EV_INTERRUPT_GC);
 }
 
 
@@ -1295,7 +1290,7 @@ static void domain_terminate()
   caml_free_intern_state();
   caml_free_extern_state();
   caml_teardown_major_gc();
-  CAML_EVENTLOG_TEARDOWN();
+  // FIXME: CAML_EVENTRING_DESTROY();
   caml_teardown_shared_heap(domain_state->shared_heap);
   domain_state->shared_heap = 0;
   caml_free_minor_tables(domain_state->minor_tables);

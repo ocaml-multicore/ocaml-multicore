@@ -17,13 +17,32 @@
 #ifndef CAML_EVENTLOG_H
 #define CAML_EVENTLOG_H
 
+#define CAML_HAS_EVENTRING
+
 typedef enum {
-    EV_ENTRY,
+    EV_INTERNAL,
+    EV_LIFECYCLE,
+    EV_BEGIN,
     EV_EXIT,
     EV_COUNTER,
     EV_ALLOC,
     EV_FLUSH
-} ev_type;
+} ev_message_type;
+
+typedef enum {
+    EV_GC
+} ev_event_type;
+
+typedef enum {
+    EV_RING_START,
+    EV_RING_STOP,
+    EV_RING_PAUSE,
+    EV_RING_RESUME,
+    EV_FORK_PARENT,
+    EV_FORK_CHILD,
+    EV_DOMAIN_SPAWN,
+    EV_DOMAIN_TERMINATE
+} ev_lifecycle;
 
 typedef enum {
     EV_COMPACT_MAIN,
@@ -57,7 +76,6 @@ typedef enum {
     EV_MINOR_UPDATE_WEAK,
     EV_MINOR_FINALIZED,
     EV_EXPLICIT_GC_MAJOR_SLICE,
-    EV_DOMAIN_SPAWN,
     EV_DOMAIN_SEND_INTERRUPT,
     EV_DOMAIN_IDLE_WAIT,
     EV_FINALISE_UPDATE_FIRST,
@@ -85,7 +103,7 @@ typedef enum {
     EV_MINOR_REMEMBERED_SET_PROMOTE,
     EV_MINOR_LOCAL_ROOTS_PROMOTE,
     EV_DOMAIN_CONDITION_WAIT
-} ev_gc_phase;
+} ev_runtime_phase;
 
 typedef enum {
     EV_C_ALLOC_JUMP,
@@ -101,28 +119,20 @@ typedef enum {
     EV_C_MAJOR_WORK_MARK,
     EV_C_MAJOR_WORK_SWEEP,
     EV_C_MINOR_PROMOTED,
+    EV_C_MINOR_ALLOCATED,
     EV_C_REQUEST_MAJOR_ALLOC_SHR,
     EV_C_REQUEST_MAJOR_ADJUST_GC_SPEED,
     EV_C_REQUEST_MINOR_REALLOC_REF_TABLE,
     EV_C_REQUEST_MINOR_REALLOC_EPHE_REF_TABLE,
     EV_C_REQUEST_MINOR_REALLOC_CUSTOM_TABLE
-} ev_gc_counter;
+} ev_runtime_counter;
 
 #ifdef CAML_INSTR
-
-#define CAML_EVENTLOG_DO(f) if (Caml_state->eventlog_enabled &&\
+#define CAML_INSTR_DO(f) if (Caml_state->eventlog_enabled &&\
                                  !Caml_state->eventlog_paused) f
-
-#define CAML_EVENTLOG_INIT() caml_eventlog_init()
-#define CAML_EVENTLOG_DISABLE() caml_eventlog_disable()
-#define CAML_EVENTLOG_IS_BACKUP_THREAD() caml_eventlog_is_backup_thread()
-#define CAML_EV_BEGIN(p) caml_ev_begin(p)
-#define CAML_EV_END(p) caml_ev_end(p)
-#define CAML_EV_COUNTER(c, v) caml_ev_counter(c, v)
-#define CAML_EV_ALLOC(s) caml_ev_alloc(s)
-#define CAML_EV_ALLOC_FLUSH() caml_ev_alloc_flush()
-#define CAML_EV_FLUSH() caml_ev_flush()
-#define CAML_EVENTLOG_TEARDOWN() caml_eventlog_teardown()
+#else
+#define CAML_INSTR_DO(f) /**/
+#endif
 
 /* General note about the public API for the eventlog framework
    The caml_ev_* functions are no-op when called with the eventlog framework
@@ -133,32 +143,17 @@ typedef enum {
    All these functions should be called while holding the runtime lock.
 */
 
+/*
 void caml_eventlog_init(void);
 void caml_eventlog_disable(void);
 void caml_eventlog_teardown(void);
 void caml_eventlog_is_backup_thread(void);
 void caml_ev_begin(ev_gc_phase phase);
 void caml_ev_end(ev_gc_phase phase);
-void caml_ev_counter(ev_gc_counter counter, uint64_t val);
+void caml_ev_counter(ev_runtime_phase counter, uint64_t val);
 void caml_ev_alloc(uint64_t size);
 void caml_ev_alloc_flush(void);
 void caml_ev_flush(void);
-
-#else
-
-#define CAML_EVENTLOG_DO(f) /**/
-
-#define CAML_EVENTLOG_INIT() /**/
-#define CAML_EVENTLOG_DISABLE() /**/
-#define CAML_EVENTLOG_IS_BACKUP_THREAD() /**/
-#define CAML_EV_BEGIN(p) /**/
-#define CAML_EV_END(p) /**/
-#define CAML_EV_COUNTER(c, v) /**/
-#define CAML_EV_ALLOC(S) /**/
-#define CAML_EV_ALLOC_FLUSH() /**/
-#define CAML_EV_FLUSH() /**/
-#define CAML_EVENTLOG_TEARDOWN() /**/
-
-#endif /*CAML_INSTR*/
+*/
 
 #endif /*CAML_EVENTLOG_H*/

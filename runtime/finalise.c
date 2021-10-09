@@ -18,7 +18,7 @@
 #include <string.h>
 
 #include "caml/callback.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 #include "caml/fail.h"
 #include "caml/finalise.h"
 #include "caml/memory.h"
@@ -116,9 +116,9 @@ int caml_final_update_first (caml_domain_state* d)
 {
   struct caml_final_info *f = d->final_info;
   if (!f->updated_first) {
-    CAML_EV_BEGIN(EV_FINALISE_UPDATE_FIRST);
+    caml_ev_begin(EV_FINALISE_UPDATE_FIRST);
     generic_final_update (d, &f->first, /* darken_value */ 1);
-    CAML_EV_END(EV_FINALISE_UPDATE_FIRST);
+    caml_ev_end(EV_FINALISE_UPDATE_FIRST);
     f->updated_first = 1;
     return 1;
   }
@@ -129,9 +129,9 @@ int caml_final_update_last (caml_domain_state* d)
 {
   struct caml_final_info *f = d->final_info;
   if (!f->updated_last) {
-    CAML_EV_BEGIN(EV_FINALISE_UPDATE_LAST);
+    caml_ev_begin(EV_FINALISE_UPDATE_LAST);
     generic_final_update (d, &f->last, /* darken_value */ 0);
-    CAML_EV_END(EV_FINALISE_UPDATE_LAST);
+    caml_ev_end(EV_FINALISE_UPDATE_LAST);
     f->updated_last = 1;
     return 1;
   }

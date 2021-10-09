@@ -589,6 +589,7 @@ module Digest         = Digest
 module Domain         = Domain
 module EffectHandlers = EffectHandlers
 module Either         = Either
+module Eventring    = Eventring
 module Ephemeron      = Ephemeron
 module Filename       = Filename
 module Float          = Float

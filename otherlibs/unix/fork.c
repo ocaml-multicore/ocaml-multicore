@@ -17,7 +17,7 @@
 
 #include <caml/mlvalues.h>
 #include <caml/debugger.h>
-#include <caml/eventlog.h>
+#include <caml/eventring.h>
 #include "unixsupport.h"
 #include <caml/domain.h>
 #include <caml/fail.h>
@@ -36,10 +36,13 @@ CAMLprim value unix_fork(value unit)
   if (ret == 0) caml_atfork_hook();
   if (ret == -1) uerror("fork", Nothing);
 
-  CAML_EVENTLOG_DO({
-      if (ret == 0)
-        caml_eventlog_disable();
-  });
+  if (ret == 0) {
+    caml_eventring_destroy();
+    caml_eventring_init();
+    caml_ev_lifecycle(EV_FORK_CHILD, 0);
+  } else {
+    caml_ev_lifecycle(EV_FORK_PARENT, ret);
+  }
 
   if (caml_debugger_in_use)
     if ((caml_debugger_fork_mode && ret == 0) ||

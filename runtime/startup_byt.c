@@ -37,7 +37,7 @@
 #include "caml/debugger.h"
 #include "caml/domain_state.h"
 #include "caml/dynlink.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 #include "caml/exec.h"
 #include "caml/fail.h"
 #include "caml/fiber.h"
@@ -290,7 +290,7 @@ CAMLexport void caml_main(char_os **argv)
 
   /* Determine options */
   caml_parse_ocamlrunparam();
-  CAML_EVENTLOG_INIT();
+  caml_eventring_init();
 #ifdef DEBUG
   caml_gc_message (-1, "### OCaml runtime: debug mode ###\n");
 #endif
@@ -423,7 +423,7 @@ CAMLexport value caml_startup_code_exn(
 
   /* Determine options */
   caml_parse_ocamlrunparam();
-  CAML_EVENTLOG_INIT();
+  caml_eventring_init();
 #ifdef DEBUG
   caml_gc_message (-1, "### OCaml runtime: debug mode ###\n");
 #endif

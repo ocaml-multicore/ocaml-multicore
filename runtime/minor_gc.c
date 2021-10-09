@@ -21,7 +21,7 @@
 #include "caml/config.h"
 #include "caml/custom.h"
 #include "caml/domain.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 #include "caml/fail.h"
 #include "caml/fiber.h"
 #include "caml/finalise.h"
@@ -472,15 +472,15 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
   prev_alloc_words = domain->allocated_words;
 
   caml_gc_log ("Minor collection of domain %d starting", domain->id);
-  CAML_EV_BEGIN(EV_MINOR);
+  caml_ev_begin(EV_MINOR);
 
   if( participating[0] == Caml_state ) {
-    CAML_EV_BEGIN(EV_MINOR_GLOBAL_ROOTS);
+    caml_ev_begin(EV_MINOR_GLOBAL_ROOTS);
     caml_scan_global_young_roots(oldify_one, &st);
-    CAML_EV_END(EV_MINOR_GLOBAL_ROOTS);
+    caml_ev_end(EV_MINOR_GLOBAL_ROOTS);
   }
 
- CAML_EV_BEGIN(EV_MINOR_REMEMBERED_SET);
+ caml_ev_begin(EV_MINOR_REMEMBERED_SET);
 
   if( participating_count > 1 ) {
     int participating_idx = -1;
@@ -566,6 +566,7 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
   #endif
 
   /* unconditionally promote custom blocks so accounting is correct */
+  caml_ev_begin(EV_MINOR_FINALIZERS_OLDIFY);
   for (elt = self_minor_tables->custom.base;
        elt < self_minor_tables->custom.ptr; elt++) {
     value *v = &elt->block;
@@ -579,22 +580,21 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
     }
   }
 
-  CAML_EV_BEGIN(EV_MINOR_FINALIZERS_OLDIFY);
+  caml_ev_begin(EV_MINOR_FINALIZERS_OLDIFY);
   /* promote the finalizers unconditionally as we want to avoid barriers */
   caml_final_do_young_roots (&oldify_one, &st, domain, 0);
-  CAML_EV_END(EV_MINOR_FINALIZERS_OLDIFY);
+  caml_ev_end(EV_MINOR_FINALIZERS_OLDIFY);
 
-  CAML_EV_BEGIN(EV_MINOR_REMEMBERED_SET_PROMOTE);
+  caml_ev_begin(EV_MINOR_REMEMBERED_SET_PROMOTE);
   oldify_mopup (&st, 1); /* ephemerons promoted here */
-  CAML_EV_END(EV_MINOR_REMEMBERED_SET_PROMOTE);
-  CAML_EV_END(EV_MINOR_REMEMBERED_SET);
+  caml_ev_end(EV_MINOR_REMEMBERED_SET_PROMOTE);
+  caml_ev_end(EV_MINOR_REMEMBERED_SET);
   caml_gc_log("promoted %d roots, %lu bytes", remembered_roots, st.live_bytes);
 
-  CAML_EV_BEGIN(EV_MINOR_FINALIZERS_ADMIN);
+  caml_ev_begin(EV_MINOR_FINALIZERS_ADMIN);
   caml_gc_log("running finalizer data structure book-keeping");
-  /* do the finalizer data structure book-keeping */
   caml_final_update_last_minor(domain);
-  CAML_EV_END(EV_MINOR_FINALIZERS_ADMIN);
+  caml_ev_end(EV_MINOR_FINALIZERS_ADMIN);
 
 #ifdef DEBUG
   caml_global_barrier();
@@ -615,17 +615,17 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
   }
 #endif
 
-  CAML_EV_BEGIN(EV_MINOR_LOCAL_ROOTS);
+  caml_ev_begin(EV_MINOR_LOCAL_ROOTS);
   caml_do_local_roots(&oldify_one, &st, domain->local_roots,
                       domain->current_stack, domain->gc_regs);
 
   if (caml_scan_roots_hook != NULL)
     (*caml_scan_roots_hook)(&oldify_one, &st, domain);
 
-  CAML_EV_BEGIN(EV_MINOR_LOCAL_ROOTS_PROMOTE);
+  caml_ev_begin(EV_MINOR_LOCAL_ROOTS_PROMOTE);
   oldify_mopup (&st, 0);
-  CAML_EV_END(EV_MINOR_LOCAL_ROOTS_PROMOTE);
-  CAML_EV_END(EV_MINOR_LOCAL_ROOTS);
+  caml_ev_end(EV_MINOR_LOCAL_ROOTS_PROMOTE);
+  caml_ev_end(EV_MINOR_LOCAL_ROOTS);
 
   /* we reset these pointers before allowing any mutators to be
      released to avoid races where another domain signals an interrupt
@@ -644,8 +644,10 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
   domain->stat_minor_words += Wsize_bsize (minor_allocated_bytes);
   domain->stat_minor_collections++;
   domain->stat_promoted_words += domain->allocated_words - prev_alloc_words;
+  caml_ev_counter(EV_C_MINOR_PROMOTED, Bsize_wsize(domain->allocated_words - prev_alloc_words));
+  caml_ev_counter(EV_C_MINOR_ALLOCATED, minor_allocated_bytes);
 
-  CAML_EV_END(EV_MINOR);
+  caml_ev_end(EV_MINOR);
   caml_gc_log ("Minor collection of domain %d completed: %2.0f%% of %u KB live",
                domain->id,
                100.0 * (double)st.live_bytes / (double)minor_allocated_bytes,
@@ -659,9 +661,9 @@ void caml_do_opportunistic_major_slice
     spam when we poll */
   if (caml_opportunistic_major_work_available()) {
     int log_events = caml_params->verb_gc & 0x40;
-    if (log_events) CAML_EV_BEGIN(EV_MAJOR_MARK_OPPORTUNISTIC);
+    if (log_events) caml_ev_begin(EV_MAJOR_MARK_OPPORTUNISTIC);
     caml_opportunistic_major_collection_slice(0x200);
-    if (log_events) CAML_EV_END(EV_MAJOR_MARK_OPPORTUNISTIC);
+    if (log_events) caml_ev_end(EV_MAJOR_MARK_OPPORTUNISTIC);
   }
 }
 
@@ -693,7 +695,7 @@ static void caml_stw_empty_minor_heap_no_major_slice(caml_domain_state* domain,
   caml_sample_gc_collect(domain);
 
   if( participating_count > 1 ) {
-    CAML_EV_BEGIN(EV_MINOR_LEAVE_BARRIER);
+    caml_ev_begin(EV_MINOR_LEAVE_BARRIER);
     {
       SPIN_WAIT {
         if( atomic_load_explicit
@@ -706,13 +708,13 @@ static void caml_stw_empty_minor_heap_no_major_slice(caml_domain_state* domain,
         caml_do_opportunistic_major_slice(domain, 0);
       }
     }
-    CAML_EV_END(EV_MINOR_LEAVE_BARRIER);
+    caml_ev_end(EV_MINOR_LEAVE_BARRIER);
   }
 
-  CAML_EV_BEGIN(EV_MINOR_CLEAR);
+  caml_ev_begin(EV_MINOR_CLEAR);
   caml_gc_log("running stw empty_minor_heap_domain_clear");
   caml_empty_minor_heap_domain_clear(domain, 0);
-  CAML_EV_END(EV_MINOR_CLEAR);
+  caml_ev_end(EV_MINOR_CLEAR);
   caml_gc_log("finished stw empty_minor_heap");
 }
 

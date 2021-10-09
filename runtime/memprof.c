@@ -44,7 +44,7 @@ CAMLprim value caml_memprof_stop(value unit)
 #include "caml/misc.h"
 #include "caml/compact.h"
 #include "caml/printexc.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 
 #define RAND_BLOCK_SIZE 64
 
@@ -921,7 +921,7 @@ void caml_memprof_track_young(uintnat wosize, int from_caml,
        We now restore the minor heap in the state needed by
        [Alloc_small_aux]. */
     if (Caml_state->young_ptr - whsize < Caml_state->young_trigger) {
-      CAML_EV_COUNTER(EV_C_FORCE_MINOR_MEMPROF, 1);
+      caml_ev_counter(EV_C_FORCE_MINOR_MEMPROF, 1);
       caml_gc_dispatch();
     }
 

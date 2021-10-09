@@ -23,7 +23,7 @@
 #include "caml/custom.h"
 #include "caml/codefrag.h"
 #include "caml/debugger.h"
-#include "caml/eventlog.h"
+#include "caml/eventring.h"
 #include "caml/fiber.h"
 #include "caml/fail.h"
 #include "caml/gc.h"
@@ -98,6 +98,7 @@ value caml_startup_common(char_os **argv, int pooling)
 
   /* Determine options */
   caml_parse_ocamlrunparam();
+  caml_eventring_init();
 #ifdef DEBUG
   caml_gc_message (-1, "### OCaml runtime: debug mode ###\n");
 #endif
