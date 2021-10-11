@@ -784,7 +784,7 @@ static st_retcode caml_threadstatus_wait (value wrapper)
   st_retcode retcode;
 
   Begin_roots1(wrapper)         /* prevent deallocation of ts */
-    caml_enter_blocking_section();
+    caml_enter_blocking_section_no_pending();
     retcode = st_event_wait(ts);
     caml_leave_blocking_section();
   End_roots();
