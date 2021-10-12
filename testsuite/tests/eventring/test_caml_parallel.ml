@@ -32,8 +32,8 @@ let runtime_begin domain_id ts phase =
     match phase with
     | EV_MAJOR ->
         begin
-            assert(phase_count.major == 0);
-            phase_count.major <- 1
+            assert(phase_count.major >= 0);
+            phase_count.major <- phase_count.major + 1
         end
     | EV_MINOR ->
         begin
@@ -49,8 +49,8 @@ let runtime_end domain_id ts phase =
     match phase with
     | EV_MAJOR ->
         begin
-            assert(phase_count.major == 1);
-            phase_count.major <- 0;
+            assert(phase_count.major >= 1);
+            phase_count.major <- phase_count.major - 1;
             Atomic.incr majors
         end
     | EV_MINOR ->
