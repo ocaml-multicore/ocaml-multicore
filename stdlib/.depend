@@ -227,6 +227,16 @@ stdlib__domain.cmx : \
     stdlib__array.cmx \
     stdlib__domain.cmi
 stdlib__domain.cmi :
+stdlib__effectHandlers.cmo : \
+    stdlib__printexc.cmi \
+    stdlib__obj.cmi \
+    stdlib__effectHandlers.cmi
+stdlib__effectHandlers.cmx : \
+    stdlib__printexc.cmx \
+    stdlib__obj.cmx \
+    stdlib__effectHandlers.cmi
+stdlib__effectHandlers.cmi : \
+    stdlib__printexc.cmi
 stdlib__either.cmo : \
     stdlib__either.cmi
 stdlib__either.cmx : \
@@ -551,8 +561,7 @@ stdlib__printexc.cmx : \
     stdlib__atomic.cmx \
     stdlib__array.cmx \
     stdlib__printexc.cmi
-stdlib__printexc.cmi : \
-    stdlib__obj.cmi
+stdlib__printexc.cmi :
 stdlib__printf.cmo : \
     camlinternalFormatBasics.cmi \
     camlinternalFormat.cmi \
