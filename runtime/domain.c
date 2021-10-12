@@ -1061,10 +1061,8 @@ static void caml_poll_gc_work()
        (uintnat)Caml_state->young_start) ||
       Caml_state->requested_minor_gc) {
     /* out of minor heap or collection forced */
-    caml_ev_begin(EV_MINOR);
     Caml_state->requested_minor_gc = 0;
     caml_empty_minor_heaps_once();
-    caml_ev_end(EV_MINOR);
 
     /* FIXME: a domain will only ever call finalizers if its minor
       heap triggers the minor collection

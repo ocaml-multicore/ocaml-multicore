@@ -33,16 +33,18 @@
 struct caml_eventring_cursor;
 
 struct caml_eventring_callbacks {
-  void (*ev_runtime_begin)(void *callback_data, uint64_t timestamp,
-                           ev_runtime_phase phase);
-  void (*ev_runtime_end)(void *callback_data, uint64_t timestamp,
+  void (*ev_runtime_begin)(int domain_id, void *callback_data, 
+                          uint64_t timestamp, ev_runtime_phase phase);
+  void (*ev_runtime_end)(int domain_id, void *callback_data, uint64_t timestamp,
                          ev_runtime_phase phase);
-  void (*ev_runtime_counter)(void *callback_data, uint64_t timestamp,
-                             ev_runtime_counter counter, uint64_t val);
-  void (*ev_alloc)(void *callback_data, uint64_t timestamp, uint64_t *sz);
-  void (*ev_lifecycle)(void *callback_data, int64_t timestamp,
+  void (*ev_runtime_counter)(int domain_id, void *callback_data, 
+                            uint64_t timestamp, ev_runtime_counter counter,
+                            uint64_t val);
+  void (*ev_alloc)(int domain_id, void *callback_data, uint64_t timestamp,
+                  uint64_t *sz);
+  void (*ev_lifecycle)(int domain_id, void *callback_data, int64_t timestamp,
                        ev_lifecycle lifecycle, int64_t data);
-  void (*ev_lost_events)(void *callback_data, int lost_events);
+  void (*ev_lost_events)(int domain_id, void *callback_data, int lost_events);
 };
 
 /* Starts eventring. Needs to be called before [caml_eventring_create_cursor] */

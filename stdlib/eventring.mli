@@ -89,12 +89,12 @@ type ev_lifecycle =
 type cursor
 
 type callbacks = {
-    ev_runtime_begin: (int64 -> runtime_phase -> unit) option;
-    ev_runtime_end: (int64 -> runtime_phase -> unit) option;
-    ev_runtime_counter: (int64 -> runtime_counter -> int -> unit) option;
-    ev_alloc: (int64 -> int array -> unit) option;
-    ev_lifecycle: (int64 -> ev_lifecycle -> int option -> unit) option;
-    ev_lost_events: (int -> unit) option
+    ev_runtime_begin: (Domain.id -> int64 -> runtime_phase -> unit) option;
+    ev_runtime_end: (Domain.id -> int64 -> runtime_phase -> unit) option;
+    ev_runtime_counter: (Domain.id -> int64 -> runtime_counter -> int -> unit) option;
+    ev_alloc: (Domain.id -> int64 -> int array -> unit) option;
+    ev_lifecycle: (Domain.id -> int64 -> ev_lifecycle -> int option -> unit) option;
+    ev_lost_events: (Domain.id -> int -> unit) option
 }
 
 val start : unit -> unit

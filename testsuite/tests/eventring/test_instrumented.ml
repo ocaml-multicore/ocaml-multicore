@@ -9,11 +9,11 @@ let list_ref = ref []
 let total_sizes = ref 0
 let total_promoted = ref 0
 
-let alloc ts sizes =
+let alloc domain_id ts sizes =
   let size_accum = Array.fold_left (fun x y -> x + y) 0 sizes in
     total_sizes := !total_sizes + size_accum
 
-let counter ts counter value =
+let counter domain_id ts counter value =
   match counter with
   | EV_C_MINOR_PROMOTED -> 
     total_promoted := !total_promoted + value

@@ -1,21 +1,17 @@
 (* TEST *)
 open Eventring
 
-let major = ref 0
-let minor = ref 0
-let compact = ref 0
-let majors = ref 0
-let minors = ref 0
-let compacts = ref 0
+let majors = Atomic.make 0
+let minors = Atomic.make 0
 
 let got_start = ref false
 
 let lost_events_count = ref 0
 
-let lost_events num_events =
+let lost_events (domain_id : Domain.id) num_events =
     lost_events_count := !lost_events_count + num_events
 
-let lifecycle ts lifecycle_event data =
+let lifecycle domain_id ts lifecycle_event data =
     match lifecycle_event with
     | EV_RING_START ->
         begin
@@ -26,38 +22,48 @@ let lifecycle ts lifecycle_event data =
         end
     | _ -> ()
 
-let runtime_begin ts phase =
+type phase_record = { mutable major: int; mutable minor: int }
+
+let domain_tbl : (Domain.id, phase_record) Hashtbl.t = Hashtbl.create 5
+
+let runtime_begin domain_id ts phase =
+    let phase_count = Hashtbl.find_opt domain_tbl domain_id 
+        |> Option.value ~default:{ major = 0; minor = 0 } in
     match phase with
-    | EV_MAJOR_SLICE ->
+    | EV_MAJOR ->
         begin
-            assert(!major == 0);
-            major := 1
+            assert(phase_count.major == 0);
+            phase_count.major <- 1
         end
     | EV_MINOR ->
         begin
-            assert(!minor == 0);
-            minor := 1
+            assert(phase_count.minor == 0);
+            phase_count.minor <- 1
         end
-    | _ -> ()
+    | _ -> ();
+    Hashtbl.add domain_tbl domain_id phase_count
 
-let runtime_end ts phase =
+let runtime_end domain_id ts phase =
+    let phase_count = Hashtbl.find_opt domain_tbl domain_id 
+        |> Option.value ~default:{ major = 0; minor = 0 } in
     match phase with
-    | EV_MAJOR_SLICE ->
+    | EV_MAJOR ->
         begin
-            assert(!major == 1);
-            major := 0;
-            incr majors
+            assert(phase_count.major == 1);
+            phase_count.major <- 0;
+            Atomic.incr majors
         end
     | EV_MINOR ->
         begin
-            assert(!minor == 1);
-            minor := 0;
-            incr minors
+            assert(phase_count.minor == 1);
+            phase_count.minor <- 0;
+            Atomic.incr minors
         end
-    | _ -> ()
+    | _ -> ();
+    Hashtbl.add domain_tbl domain_id phase_count
 
-let num_domains = 5
-let num_full_majors = 10
+let num_domains = 3
+let num_full_majors = 2
 
 let () =
     start ();
@@ -86,5 +92,5 @@ let () =
     assert(!got_start);
     (* this is num_full_majors rather than num_full_majors*num_domains
         because in the worst case it can be that low. *)
-    assert(!majors >= num_full_majors);
+    assert(Atomic.get majors >= num_full_majors);
     assert(!lost_events_count == 0)

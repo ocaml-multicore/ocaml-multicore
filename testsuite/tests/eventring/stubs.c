@@ -21,7 +21,8 @@ void start_eventring() {
     caml_eventring_start();
 }
 
-void ev_begin(void* callback_data, uint64_t timestamp, ev_runtime_phase phase) {
+void ev_begin(int domain_id, void* callback_data,
+                uint64_t timestamp, ev_runtime_phase phase) {
     struct counters* tmp_counters = (struct counters*)callback_data;
     switch( phase ) {
         case EV_MINOR:
@@ -36,7 +37,8 @@ void ev_begin(void* callback_data, uint64_t timestamp, ev_runtime_phase phase) {
     }
 }
 
-void ev_end(void* callback_data, uint64_t timestamp, ev_runtime_phase phase) {
+void ev_end(int domain_id, void* callback_data, uint64_t timestamp,
+                ev_runtime_phase phase) {
     struct counters* tmp_counters = (struct counters*)callback_data;
     switch( phase ) {
         case EV_MINOR:

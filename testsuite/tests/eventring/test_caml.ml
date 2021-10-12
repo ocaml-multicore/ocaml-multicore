@@ -10,7 +10,7 @@ let compacts = ref 0
 
 let got_start = ref false
 
-let lifecycle ts lifecycle_event data =
+let lifecycle domain_id ts lifecycle_event data =
     match lifecycle_event with
     | EV_RING_START ->
         begin
@@ -21,7 +21,7 @@ let lifecycle ts lifecycle_event data =
         end
     | _ -> ()
 
-let runtime_begin ts phase =
+let runtime_begin domain_id ts phase =
     match phase with
     | EV_MAJOR_SLICE ->
         begin
@@ -35,7 +35,7 @@ let runtime_begin ts phase =
         end
     | _ -> ()
 
-let runtime_end ts phase =
+let runtime_end domain_id ts phase =
     match phase with
     | EV_MAJOR_SLICE ->
         begin
@@ -51,7 +51,7 @@ let runtime_end ts phase =
         end
     | _ -> ()
 
-let lost_events num =
+let lost_events domain_id num =
     Printf.printf "Lost %d events\n" num
 
 let epochs = 100
