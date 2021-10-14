@@ -167,76 +167,81 @@ create_and_start_ring_buffers(caml_domain_state *domain_state, void *data,
 
   /* Only do this on one domain */
   if (participanting_domains[0] == domain_state) {
-    int ring_fd, ret;
-    long int pid;
+    /* Don't initialise eventring twice */
+    if( !atomic_load_acq(&eventring_enabled) ) {
+      int ring_fd, ret;
+      long int pid;
 
-    current_ring_buffer_loc = caml_stat_alloc(RING_FILE_NAME_LEN);
+      current_ring_buffer_loc = caml_stat_alloc(RING_FILE_NAME_LEN);
 
-    pid = getpid();
+      pid = getpid();
 
-    if (eventring_path) {
-      snprintf_os(current_ring_buffer_loc, RING_FILE_NAME_LEN,
-                  T("%s/%ld.eventring"), eventring_path, pid);
-    } else {
-      snprintf_os(current_ring_buffer_loc, RING_FILE_NAME_LEN,
-                  T("%ld.eventring"), pid);
+      if (eventring_path) {
+        snprintf_os(current_ring_buffer_loc, RING_FILE_NAME_LEN,
+                    T("%s/%ld.eventring"), eventring_path, pid);
+      } else {
+        snprintf_os(current_ring_buffer_loc, RING_FILE_NAME_LEN,
+                    T("%ld.eventring"), pid);
+      }
+
+      current_ring_total_size =
+          Max_domains * (DEFAULT_RING_BUFFER_SIZE * sizeof(uint64_t) +
+                        sizeof(struct ring_buffer)) +
+          sizeof(struct metadata_header);
+
+      ring_fd =
+          open(current_ring_buffer_loc, O_RDWR | O_CREAT, (S_IRUSR | S_IWUSR));
+      caml_stat_free(current_ring_buffer_loc);
+
+      if (ring_fd < 0) {
+        caml_fatal_error("Couldn't open ring buffer loc: %s",
+                        current_ring_buffer_loc);
+      }
+
+      ret = ftruncate(ring_fd, current_ring_total_size);
+
+      if (ret < 0) {
+        caml_fatal_error("Can't resize ring buffer");
+      }
+
+      current_metadata = mmap(NULL, current_ring_total_size,
+                              PROT_READ | PROT_WRITE, MAP_SHARED, ring_fd, 0);
+
+      current_metadata->version = 1;
+      current_metadata->max_domains = Max_domains;
+      current_metadata->ring_with_header_size_bytes =
+          DEFAULT_RING_BUFFER_SIZE * sizeof(uint64_t) +
+          sizeof(struct ring_buffer);
+      current_metadata->ring_size_elements = DEFAULT_RING_BUFFER_SIZE;
+      current_metadata->first_ring_offset = sizeof(struct metadata_header);
+
+      for (int domain_num = 0; domain_num < Max_domains; domain_num++) {
+        struct ring_buffer *ring_buffer =
+            (struct ring_buffer
+                *)((char *)current_metadata +
+                    current_metadata->first_ring_offset +
+                    domain_num * current_metadata->ring_with_header_size_bytes);
+
+        ring_buffer->ring_head = 0;
+        ring_buffer->ring_tail = 0;
+        ring_buffer->data_offset = sizeof(struct ring_buffer);
+      }
+
+      close(ring_fd);
+
+      atomic_store_rel(&eventring_enabled, 1);
+      atomic_store_rel(&eventring_paused, 0);
+
+      caml_ev_lifecycle(EV_RING_START, pid);
     }
-
-    current_ring_total_size =
-        Max_domains * (DEFAULT_RING_BUFFER_SIZE * sizeof(uint64_t) +
-                       sizeof(struct ring_buffer)) +
-        sizeof(struct metadata_header);
-
-    ring_fd =
-        open(current_ring_buffer_loc, O_RDWR | O_CREAT, (S_IRUSR | S_IWUSR));
-    caml_stat_free(current_ring_buffer_loc);
-
-    if (ring_fd < 0) {
-      caml_fatal_error("Couldn't open ring buffer loc: %s",
-                       current_ring_buffer_loc);
-    }
-
-    ret = ftruncate(ring_fd, current_ring_total_size);
-
-    if (ret < 0) {
-      caml_fatal_error("Can't resize ring buffer");
-    }
-
-    current_metadata = mmap(NULL, current_ring_total_size,
-                            PROT_READ | PROT_WRITE, MAP_SHARED, ring_fd, 0);
-
-    current_metadata->version = 1;
-    current_metadata->max_domains = Max_domains;
-    current_metadata->ring_with_header_size_bytes =
-        DEFAULT_RING_BUFFER_SIZE * sizeof(uint64_t) +
-        sizeof(struct ring_buffer);
-    current_metadata->ring_size_elements = DEFAULT_RING_BUFFER_SIZE;
-    current_metadata->first_ring_offset = sizeof(struct metadata_header);
-
-    for (int domain_num = 0; domain_num < Max_domains; domain_num++) {
-      struct ring_buffer *ring_buffer =
-          (struct ring_buffer
-               *)((char *)current_metadata +
-                  current_metadata->first_ring_offset +
-                  domain_num * current_metadata->ring_with_header_size_bytes);
-
-      ring_buffer->ring_head = 0;
-      ring_buffer->ring_tail = 0;
-      ring_buffer->data_offset = sizeof(struct ring_buffer);
-    }
-
-    close(ring_fd);
-
-    atomic_store_rel(&eventring_enabled, 1);
-    atomic_store_rel(&eventring_paused, 0);
-
-    caml_ev_lifecycle(EV_RING_START, pid);
   }
   caml_global_barrier();
 }
 
 CAMLprim value caml_eventring_start() {
-  caml_try_run_on_all_domains(&create_and_start_ring_buffers, NULL, NULL);
+  if( !atomic_load_acq(&eventring_enabled) ) {
+    caml_try_run_on_all_domains(&create_and_start_ring_buffers, NULL, NULL);
+  }
 
   return Val_unit;
 }
@@ -614,7 +619,7 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
         break;
       case EV_LIFECYCLE:
         if (callbacks->ev_lifecycle) {
-          callbacks->ev_lifecycle(domain_num, callback_data, buf[1], 
+          callbacks->ev_lifecycle(domain_num, callback_data, buf[1],
                                   RING_ITEM_ID(header), buf[2]);
         }
       }
@@ -698,7 +703,7 @@ CAMLprim value caml_eventring_free_wrapped_cursor(value wrapped_cursor) {
 
 static __thread value callbacks_root = Val_unit;
 
-static void ml_runtime_begin(int domain_id, void *callback_data, 
+static void ml_runtime_begin(int domain_id, void *callback_data,
                             uint64_t timestamp, ev_runtime_phase phase) {
   CAMLparam0();
   CAMLlocal3(tmp_callback, ts_val, msg_type);
@@ -714,7 +719,7 @@ static void ml_runtime_begin(int domain_id, void *callback_data,
   CAMLreturn0;
 }
 
-static void ml_runtime_end(int domain_id, void *callback_data, 
+static void ml_runtime_end(int domain_id, void *callback_data,
                           uint64_t timestamp, ev_runtime_phase phase) {
   CAMLparam0();
   CAMLlocal3(tmp_callback, ts_val, msg_type);
@@ -731,7 +736,7 @@ static void ml_runtime_end(int domain_id, void *callback_data,
 }
 
 static void ml_runtime_counter(int domain_id, void *callback_data,
-                              uint64_t timestamp, ev_runtime_counter counter, 
+                              uint64_t timestamp, ev_runtime_counter counter,
                               uint64_t val) {
   CAMLparam0();
   CAMLlocal1(tmp_callback);
@@ -741,8 +746,8 @@ static void ml_runtime_counter(int domain_id, void *callback_data,
   if (Is_some(tmp_callback)) {
     params[0] = Val_long(domain_id);
     params[1] = caml_copy_int64(timestamp);
-    params[2] = Val_long(val);
-    params[3] = Val_long(counter);
+    params[2] = Val_long(counter);
+    params[3] = Val_long(val);
 
     caml_callbackN(Some_val(tmp_callback), 4, params);
   }
