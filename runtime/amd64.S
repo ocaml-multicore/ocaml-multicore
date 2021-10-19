@@ -166,19 +166,20 @@
     /* Switch to C stack */                                \
         movq    %r11, %rsp;                                \
         CFI_REMEMBER_STATE;                                \
-        .cfi_escape DW_CFA_def_cfa_expression, 5,          \
-          DW_OP_breg + DW_REG_rsp, Cstack_sp, DW_OP_deref, \
+        .cfi_escape DW_CFA_def_cfa_expression, 8,          \
+          DW_OP_breg + DW_REG_rsp, Cstack_stack, DW_OP_deref, \
+          DW_OP_plus_uconst, Stack_sp, DW_OP_deref, \
           DW_OP_plus_uconst, 8 /* retaddr */
 
 /* Switch from C to OCaml stack.  Clobbers %r11. */
 #define SWITCH_C_TO_OCAML \
     /* Assert that %rsp == Caml_state->c_stack &&
         Caml_state->c_stack->sp == Caml_state->current_stack->sp */ \
-        IF_DEBUG(cmpq %rsp, Caml_state(c_stack); je 8f; int3; 8:\
-                 movq Caml_state(current_stack), %r11; \
-                 movq Stack_sp(%r11), %r11; \
-                 cmpq %r11, Cstack_sp(%rsp); je 8f; int3; 8:) \
-        movq    Cstack_sp(%rsp), %rsp; \
+        IF_DEBUG(cmpq %rsp, Caml_state(c_stack); je 8f; int3; 8:    \
+                 movq Caml_state(current_stack), %r11;              \
+                 movq Stack_sp(%r11), %r11;                         \
+                 cmpq %r11, Cstack_sp(%rsp); je 8f; int3; 8:)       \
+        movq    Cstack_sp(%rsp), %rsp;                              \
         CFI_RESTORE_STATE
 
 /* Load Caml_state->exn_handler into %rsp and restores prior exn_handler.
