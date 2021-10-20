@@ -44,6 +44,7 @@ let create fn arg =
   thread_new
     (fun () ->
       try
+        ThreadLocal.create_tls ();
         fn arg;
         ignore (Sys.opaque_identity (check_memprof_cb ()))
       with exn ->

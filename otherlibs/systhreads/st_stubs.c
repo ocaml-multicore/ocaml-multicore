@@ -77,7 +77,7 @@ struct caml_thread_struct {
   value * gc_regs_buckets;   /* saved value of Caml_state->gc_regs_buckets */
   value ** gc_regs_slot;     /* saved value of Caml_state->gc_regs_slot */
   void * exn_handler;        /* saved value of Caml_state->exn_handler */
-
+  value dls_root;            /* saved value of Caml_state->dls_root */
   #ifndef NATIVE_CODE
   intnat trap_sp_off;      /* saved value of Caml_state->trap_sp_off */
   intnat trap_barrier_off; /* saved value of Caml_state->trap_barrier_off */
@@ -182,6 +182,8 @@ void caml_thread_save_runtime_state(void)
   Current_thread->backtrace_buffer = Caml_state->backtrace_buffer;
   caml_modify_generational_global_root(
     &Current_thread->backtrace_last_exn, Caml_state->backtrace_last_exn);
+  caml_modify_generational_global_root(
+    &Current_thread->dls_root, Caml_state->dls_root);
   #ifndef NATIVE_CODE
   Current_thread->trap_sp_off = Caml_state->trap_sp_off;
   Current_thread->trap_barrier_off = Caml_state->trap_barrier_off;
@@ -202,6 +204,8 @@ void caml_thread_restore_runtime_state(void)
   Caml_state->backtrace_buffer = Current_thread->backtrace_buffer;
   caml_modify_generational_global_root(
     &Caml_state->backtrace_last_exn, Current_thread->backtrace_last_exn);
+  caml_modify_generational_global_root(
+    &Caml_state->dls_root, Current_thread->dls_root);
   #ifndef NATIVE_CODE
   Caml_state->trap_sp_off = Current_thread->trap_sp_off;
   Caml_state->trap_barrier_off = Current_thread->trap_barrier_off;
@@ -269,7 +273,9 @@ static caml_thread_t caml_thread_new_info(void)
   th->gc_regs_buckets = NULL;
   th->gc_regs_slot = NULL;
   th->exn_handler = NULL;
+  th->dls_root = Val_unit;
   caml_register_generational_global_root(&th->backtrace_last_exn);
+  caml_register_generational_global_root(&th->dls_root);
 
   #ifndef NATIVE_CODE
   th->trap_sp_off = 1;
@@ -312,6 +318,7 @@ static void caml_thread_remove_info(caml_thread_t th)
   th->prev->next = th->next;
   caml_free_stack(th->current_stack);
   caml_remove_generational_global_root(&th->backtrace_last_exn);
+  caml_remove_generational_global_root(&th->dls_root);
   caml_stat_free(th);
   return;
 }
@@ -328,6 +335,7 @@ static void caml_thread_reinitialize(void)
     next = th->next;
     caml_free_stack(th->current_stack);
     caml_remove_generational_global_root(&th->backtrace_last_exn);
+    caml_remove_generational_global_root(&th->dls_root);
     caml_stat_free(th);
     th = next;
   }

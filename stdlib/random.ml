@@ -212,28 +212,28 @@ let mk_default () = {
   State.idx = 0;
 }
 
-let random_key = Domain.DLS.new_key mk_default
+let random_key = ThreadLocal.new_key mk_default
 
-let bits () = State.bits (Domain.DLS.get random_key)
-let int bound = State.int (Domain.DLS.get random_key) bound
-let full_int bound = State.full_int (Domain.DLS.get random_key) bound
-let int32 bound = State.int32 (Domain.DLS.get random_key) bound
-let nativeint bound = State.nativeint (Domain.DLS.get random_key) bound
-let int64 bound = State.int64 (Domain.DLS.get random_key) bound
-let float scale = State.float (Domain.DLS.get random_key) scale
-let bool () = State.bool (Domain.DLS.get random_key)
-let bits32 () = State.bits32 (Domain.DLS.get random_key)
-let bits64 () = State.bits64 (Domain.DLS.get random_key)
-let nativebits () = State.nativebits (Domain.DLS.get random_key)
+let bits () = State.bits (ThreadLocal.get random_key)
+let int bound = State.int (ThreadLocal.get random_key) bound
+let full_int bound = State.full_int (ThreadLocal.get random_key) bound
+let int32 bound = State.int32 (ThreadLocal.get random_key) bound
+let nativeint bound = State.nativeint (ThreadLocal.get random_key) bound
+let int64 bound = State.int64 (ThreadLocal.get random_key) bound
+let float scale = State.float (ThreadLocal.get random_key) scale
+let bool () = State.bool (ThreadLocal.get random_key)
+let bits32 () = State.bits32 (ThreadLocal.get random_key)
+let bits64 () = State.bits64 (ThreadLocal.get random_key)
+let nativebits () = State.nativebits (ThreadLocal.get random_key)
 
-let full_init seed = State.full_init (Domain.DLS.get random_key) seed
-let init seed = State.full_init (Domain.DLS.get random_key) [| seed |]
+let full_init seed = State.full_init (ThreadLocal.get random_key) seed
+let init seed = State.full_init (ThreadLocal.get random_key) [| seed |]
 let self_init () = full_init (random_seed())
 
 (* Manipulating the current state. *)
 
-let get_state () = State.copy (Domain.DLS.get random_key)
-let set_state s = State.assign (Domain.DLS.get random_key) s
+let get_state () = State.copy (ThreadLocal.get random_key)
+let set_state s = State.assign (ThreadLocal.get random_key) s
 
 (********************
 

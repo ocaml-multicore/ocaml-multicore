@@ -38,7 +38,7 @@ STDLIB_MODULE_BASENAMES = \
   stdlib pervasives seq option either result bool char uchar \
   sys list int bytes string unit marshal obj array float int32 int64 nativeint \
   lexing parsing set map stack queue camlinternalLazy lazy stream buffer \
-  atomic mutex condition semaphore domain \
+  atomic mutex condition semaphore threadLocal domain \
   camlinternalFormat printf arg \
   printexc fun gc digest random hashtbl weak \
   format scanf callback camlinternalOO oo camlinternalMod genlex ephemeron \

@@ -960,7 +960,7 @@ val formatter_of_out_channel : out_channel -> formatter
 *)
 
 val synchronized_formatter_of_out_channel :
-  out_channel -> formatter Domain.DLS.key
+  out_channel -> formatter ThreadLocal.key
 (** [synchronized_formatter_of_out_channel oc] returns the key to the
     domain-local state that holds the domain-local formatter for writing to the
     corresponding output channel [oc].
@@ -1036,9 +1036,9 @@ val make_formatter :
 *)
 
 val make_synchronized_formatter :
-  (string -> int -> int -> unit) -> (unit -> unit) -> formatter Domain.DLS.key
-(** [make_synchronized_formatter out flush] returns the key to the domain-local
-    state that holds the domain-local formatter that outputs with function
+  (string -> int -> int -> unit) -> (unit -> unit) -> formatter ThreadLocal.key
+(** [make_synchronized_formatter out flush] returns the key to the thread-local
+    state that holds the thread-local formatter that outputs with function
     [out], and flushes with function [flush].
 
     When the formatter is used with multiple domains, the output from the
