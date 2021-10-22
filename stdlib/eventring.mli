@@ -89,26 +89,30 @@ type ev_lifecycle =
 type cursor
 
 (* abstract the int64 to allow for future changes *)
-(* don't expose and have a creator. module callbacks type t*)
-module Callbacks = struct
-  type t = {}
+module Timestamp : sig
+    type t
 
-  let create ?runtime_begin ?runtime_end () =
-    { runtime_begin; }
-
+    val of_int64 : t -> int64
 end
-type callbacks = {
-    ev_runtime_begin: (Domain.id -> int64 -> runtime_phase -> unit) option;
-    ev_runtime_end: (Domain.id -> int64 -> runtime_phase -> unit) option;
-    ev_runtime_counter: (Domain.id -> int64 -> runtime_counter -> int -> unit) option;
-    ev_alloc: (Domain.id -> int64 -> int array -> unit) option;
-    ev_lifecycle: (Domain.id -> int64 -> ev_lifecycle -> int option -> unit) option;
-    ev_lost_events: (Domain.id -> int -> unit) option
-}
+
+module Callbacks : sig
+  type t
+
+  val create : ?runtime_begin:(Domain.id -> Timestamp.t -> runtime_phase
+                                -> unit) ->
+             ?runtime_end:(Domain.id -> Timestamp.t -> runtime_phase
+                                -> unit) ->
+             ?runtime_counter:(Domain.id -> Timestamp.t -> runtime_counter
+                                -> int -> unit) ->
+             ?alloc:(Domain.id -> Timestamp.t -> int array -> unit) ->
+             ?lifecycle:(Domain.id -> Timestamp.t -> ev_lifecycle
+                            -> int option -> unit) ->
+             ?lost_events:(Domain.id -> int -> unit) -> unit -> t
+end
 
 val start : unit -> unit
 val pause : unit -> unit
 val resume : unit -> unit
 val create_cursor : (string * int) option -> cursor
 val free_cursor : cursor -> unit
-val read_poll : cursor -> callbacks -> int option -> int
+val read_poll : cursor -> Callbacks.t -> int option -> int

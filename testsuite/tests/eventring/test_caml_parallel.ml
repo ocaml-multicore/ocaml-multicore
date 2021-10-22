@@ -27,7 +27,7 @@ type phase_record = { mutable major: int; mutable minor: int }
 let domain_tbl : (Domain.id, phase_record) Hashtbl.t = Hashtbl.create 5
 
 let runtime_begin domain_id ts phase =
-    let phase_count = Hashtbl.find_opt domain_tbl domain_id 
+    let phase_count = Hashtbl.find_opt domain_tbl domain_id
         |> Option.value ~default:{ major = 0; minor = 0 } in
     match phase with
     | EV_MAJOR ->
@@ -44,7 +44,7 @@ let runtime_begin domain_id ts phase =
     Hashtbl.add domain_tbl domain_id phase_count
 
 let runtime_end domain_id ts phase =
-    let phase_count = Hashtbl.find_opt domain_tbl domain_id 
+    let phase_count = Hashtbl.find_opt domain_tbl domain_id
         |> Option.value ~default:{ major = 0; minor = 0 } in
     match phase with
     | EV_MAJOR ->
@@ -80,14 +80,8 @@ let () =
     in
     let domains_list = List.init num_domains (fun _ -> Domain.spawn gc_churn_f) in
     let _ = List.iter Domain.join domains_list in
-    let callbacks = { 
-        ev_runtime_begin = Some(runtime_begin);
-        ev_runtime_end = Some(runtime_end);
-        ev_runtime_counter = None;
-        ev_alloc = None;
-        ev_lifecycle = Some(lifecycle);
-        ev_lost_events = Some(lost_events)
-    } in 
+    let callbacks = Callbacks.create ~runtime_begin ~runtime_end ~lifecycle
+                                        ~lost_events () in
     ignore(read_poll cursor callbacks None);
     assert(!got_start);
     (* this is num_full_majors rather than num_full_majors*num_domains

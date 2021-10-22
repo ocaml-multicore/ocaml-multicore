@@ -1,6 +1,6 @@
 (* Eventring *)
 
-type runtime_counter = 
+type runtime_counter =
     EV_C_ALLOC_JUMP
 |	EV_C_FORCE_MINOR_ALLOC_SMALL
 |	EV_C_FORCE_MINOR_MAKE_VECT
@@ -88,18 +88,34 @@ type ev_lifecycle =
 
 type cursor
 
-type callbacks = {
-    ev_runtime_begin: (Domain.id -> int64 -> runtime_phase -> unit) option;
-    ev_runtime_end: (Domain.id -> int64 -> runtime_phase -> unit) option;
-    ev_runtime_counter: (Domain.id -> int64 -> runtime_counter -> int -> unit) option;
-    ev_alloc: (Domain.id -> int64 -> int array -> unit) option;
-    ev_lifecycle: (Domain.id -> int64 -> ev_lifecycle -> int option -> unit) option;
-    ev_lost_events: (Domain.id -> int -> unit) option
-}
+module Timestamp = struct
+  type t = int64
+
+  let of_int64 t =
+    t
+end
+
+module Callbacks = struct
+    type[@warning "-69"] t = {
+      runtime_begin: (Domain.id -> Timestamp.t -> runtime_phase -> unit) option;
+      runtime_end: (Domain.id -> Timestamp.t -> runtime_phase -> unit) option;
+      runtime_counter: (Domain.id -> Timestamp.t -> runtime_counter
+                        -> int -> unit) option;
+      alloc: (Domain.id -> Timestamp.t -> int array -> unit) option;
+      lifecycle: (Domain.id -> Timestamp.t -> ev_lifecycle
+                  -> int option -> unit) option;
+      lost_events: (Domain.id -> int -> unit) option
+    }
+
+    let create ?runtime_begin ?runtime_end ?runtime_counter ?alloc ?lifecycle
+               ?lost_events () =
+      { runtime_begin; runtime_end; runtime_counter;
+          alloc; lifecycle; lost_events}
+  end
 
 external start : unit -> unit = "caml_eventring_start"
 external pause : unit -> unit = "caml_eventring_pause"
 external resume : unit -> unit = "caml_eventring_resume"
 external create_cursor : (string * int) option -> cursor = "caml_eventring_create_wrapped_cursor"
 external free_cursor : cursor -> unit = "caml_eventring_free_wrapped_cursor"
-external read_poll : cursor -> callbacks -> int option -> int = "caml_eventring_read_poll_wrapped"
+external read_poll : cursor -> Callbacks.t -> int option -> int = "caml_eventring_read_poll_wrapped"

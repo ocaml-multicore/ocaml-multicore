@@ -33,18 +33,18 @@
 struct caml_eventring_cursor;
 
 struct caml_eventring_callbacks {
-  void (*ev_runtime_begin)(int domain_id, void *callback_data, 
+  void (*ev_runtime_begin)(int domain_id, void *callback_data,
                           uint64_t timestamp, ev_runtime_phase phase);
   void (*ev_runtime_end)(int domain_id, void *callback_data, uint64_t timestamp,
                          ev_runtime_phase phase);
-  void (*ev_runtime_counter)(int domain_id, void *callback_data, 
+  void (*ev_runtime_counter)(int domain_id, void *callback_data,
                             uint64_t timestamp, ev_runtime_counter counter,
                             uint64_t val);
   void (*ev_alloc)(int domain_id, void *callback_data, uint64_t timestamp,
                   uint64_t *sz);
   void (*ev_lifecycle)(int domain_id, void *callback_data, int64_t timestamp,
                        ev_lifecycle lifecycle, int64_t data);
-  void (*ev_lost_events)(int domain_id, void *callback_data, int lost_events);
+  void (*ev_lost_events)(int domain_id, void *callback_data, int lost_words);
 };
 
 /* Starts eventring. Needs to be called before [caml_eventring_create_cursor] */
@@ -56,16 +56,16 @@ extern value caml_eventring_resume();
     process id (or equivalent) of the startup OCaml process. This function will
     return a cursor which can we be used with caml_eventring_read_poll to read
     events from the eventrings. */
-extern struct caml_eventring_cursor* 
+extern struct caml_eventring_cursor*
   caml_eventring_create_cursor(const char *eventring_path, int pid);
 
 /* frees a cursor obtained from caml_eventring_creator_cursor */
 extern void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor);
 
 /* polls the eventring pointed to by [cursor] and calls the appropriate callback
-    provided in [callbacks] for each new event up to at most [max_events] times. 
+    provided in [callbacks] for each new event up to at most [max_events] times.
     Returns the number of events consumed.
-    
+
     0 for [max_events] indicates no limit to the number of callbacks. */
 CAMLextern uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
                          struct caml_eventring_callbacks *callbacks,

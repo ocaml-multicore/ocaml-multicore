@@ -435,17 +435,18 @@ void caml_ev_flush() {
 }
 
 struct caml_eventring_cursor {
-  int cursor_open;
-  struct metadata_header *metadata;
-  uint64_t *current_positions;
-  size_t ring_file_size_bytes;
+  int cursor_open; /* has this cursor been opened? */
+  struct metadata_header *metadata; /* pointer to the ring metadata */
+  uint64_t *current_positions; /* positions in the rings for each domain */
+  size_t ring_file_size_bytes; /* the size of the eventring file in bytes */
+  int next_read_domain; /* the last domain we read from */
 };
 
 /* C-API for reading from an eventring */
 
 /* [eventring_path] is a path to a directory containing eventrings. [pid] is the
     process id (or equivalent) of the startup OCaml process. This function will
-    return a cursor which can we be used with caml_eventring_read_poll to read
+    return a cursor which can we be used with [caml_eventring_read_poll] to read
     events from the eventrings. */
 struct caml_eventring_cursor *
 caml_eventring_create_cursor(const char *eventring_path, int pid) {
@@ -506,6 +507,7 @@ caml_eventring_create_cursor(const char *eventring_path, int pid) {
     cursor->current_positions[j] = 0;
   }
   cursor->cursor_open = 1;
+  cursor->next_read_domain = 0;
 
   return cursor;
 }
@@ -529,6 +531,7 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
                               struct caml_eventring_callbacks *callbacks,
                               void *callback_data, uint max_events) {
   int events_consumed = 0;
+  int start_domain = cursor->next_read_domain;
   uint64_t ring_head, ring_tail;
   char *raw_header_ptr;
 
@@ -540,8 +543,11 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
   raw_header_ptr =
       (char *)cursor->metadata + cursor->metadata->first_ring_offset;
 
-  for (int domain_num = 0; domain_num < cursor->metadata->max_domains;
-       domain_num++) {
+  /* this loop looks a bit odd because we're iterating from the last domain
+     that we read from on the last read_poll call and then looping around. */
+  for (int i = 0; i < cursor->metadata->max_domains;
+       i++) {
+    int domain_num = (start_domain + i) % cursor->metadata->max_domains;
 
     struct ring_buffer *ring_buffer_header =
         (struct ring_buffer *)raw_header_ptr;
@@ -558,7 +564,6 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
 
       if (ring_head > cursor->current_positions[domain_num]) {
         if (callbacks->ev_lost_events) {
-          // TODO: Make sure you are clear this is words and not lost messages
           callbacks->ev_lost_events(domain_num,
               callback_data, ring_head - cursor->current_positions[domain_num]);
         }
@@ -578,7 +583,6 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
         // wrong.
       }
 
-      // TODO: Replace this with memcpy_ncpy
       memcpy(buf,
              ring_ptr + (cursor->current_positions[domain_num] & ring_mask),
              msg_length * sizeof(uint64_t));
@@ -590,11 +594,11 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
       if (ring_head > cursor->current_positions[domain_num]) {
         /* It potentially has, retry for the next one after we've notified
              the callbacks about lost messages. */
-        int lost_events = ring_head - cursor->current_positions[domain_num];
+        int lost_words = ring_head - cursor->current_positions[domain_num];
         cursor->current_positions[domain_num] = ring_head;
 
         if (callbacks->ev_lost_events) {
-          callbacks->ev_lost_events(domain_num, callback_data, lost_events);
+          callbacks->ev_lost_events(domain_num, callback_data, lost_words);
         }
         break;
       }
@@ -641,6 +645,8 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
     // TODO: Leave the next domain number to read from in the cursor
     } while (cursor->current_positions[domain_num] < ring_tail &&
              (max_events == 0 || events_consumed < max_events));
+
+    cursor->next_read_domain = (domain_num+1) % cursor->metadata->max_domains;
 
     raw_header_ptr += cursor->metadata->ring_with_header_size_bytes;
   }
@@ -708,12 +714,12 @@ CAMLprim value caml_eventring_free_wrapped_cursor(value wrapped_cursor) {
   CAMLreturn(Val_unit);
 };
 
-static __thread value callbacks_root = Val_unit;
-
 static void ml_runtime_begin(int domain_id, void *callback_data,
                             uint64_t timestamp, ev_runtime_phase phase) {
   CAMLparam0();
-  CAMLlocal3(tmp_callback, ts_val, msg_type);
+  CAMLlocal4(tmp_callback, ts_val, msg_type, callbacks_root);
+
+  callbacks_root = *((value*)callback_data);
 
   tmp_callback = Field(callbacks_root, 0); /* ev_runtime_begin */
   if (Is_some(tmp_callback)) {
@@ -729,7 +735,9 @@ static void ml_runtime_begin(int domain_id, void *callback_data,
 static void ml_runtime_end(int domain_id, void *callback_data,
                           uint64_t timestamp, ev_runtime_phase phase) {
   CAMLparam0();
-  CAMLlocal3(tmp_callback, ts_val, msg_type);
+  CAMLlocal4(tmp_callback, ts_val, msg_type, callbacks_root);
+
+  callbacks_root = *((value*)callback_data);
 
   tmp_callback = Field(callbacks_root, 1); /* ev_runtime_end */
   if (Is_some(tmp_callback)) {
@@ -746,8 +754,10 @@ static void ml_runtime_counter(int domain_id, void *callback_data,
                               uint64_t timestamp, ev_runtime_counter counter,
                               uint64_t val) {
   CAMLparam0();
-  CAMLlocal1(tmp_callback);
+  CAMLlocal2(tmp_callback, callbacks_root);
   CAMLlocalN(params, 4);
+
+  callbacks_root = *((value*)callback_data);
 
   tmp_callback = Field(callbacks_root, 2); /* ev_runtime_counter */
   if (Is_some(tmp_callback)) {
@@ -765,7 +775,9 @@ static void ml_runtime_counter(int domain_id, void *callback_data,
 static void ml_alloc(int domain_id, void *callback_data, uint64_t timestamp,
                     uint64_t *sz) {
   CAMLparam0();
-  CAMLlocal3(tmp_callback, ts_val, misc_val);
+  CAMLlocal4(tmp_callback, ts_val, misc_val, callbacks_root);
+
+  callbacks_root = *((value*)callback_data);
 
   tmp_callback = Field(callbacks_root, 3); /* ev_alloc */
   if (Is_some(tmp_callback)) {
@@ -787,8 +799,10 @@ static void ml_alloc(int domain_id, void *callback_data, uint64_t timestamp,
 static void ml_lifecycle(int domain_id, void *callback_data, int64_t timestamp,
                          ev_lifecycle lifecycle, int64_t data) {
   CAMLparam0();
-  CAMLlocal1(tmp_callback);
+  CAMLlocal2(tmp_callback, callbacks_root);
   CAMLlocalN(params, 4);
+
+  callbacks_root = *((value*)callback_data);
 
   tmp_callback = Field(callbacks_root, 4); /* ev_lifecycle */
   if (Is_some(tmp_callback)) {
@@ -808,14 +822,16 @@ static void ml_lifecycle(int domain_id, void *callback_data, int64_t timestamp,
   CAMLreturn0;
 }
 
-static void ml_lost_events(int domain_id, void *callback_data, int lost_events){
+static void ml_lost_events(int domain_id, void *callback_data, int lost_words){
   CAMLparam0();
-  CAMLlocal1(tmp_callback);
+  CAMLlocal2(tmp_callback, callbacks_root);
+
+  callbacks_root = *((value*)callback_data);
 
   tmp_callback = Field(callbacks_root, 5); /* lost_events */
 
   if (Is_some(tmp_callback)) {
-    caml_callback2(Some_val(tmp_callback), Val_long(domain_id), Val_long(lost_events));
+    caml_callback2(Some_val(tmp_callback), Val_long(domain_id), Val_long(lost_words));
   }
 
   CAMLreturn0;
@@ -840,11 +856,6 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
   int max_events = Is_some(max_events_val) ? Some_val(max_events_val) : 0;
   struct caml_eventring_cursor *cursor = Cursor_val(wrapped_cursor);
 
-  // TODO: remove the thread local and use the callbacks_val CAMLparam instead
-  callbacks_root = callbacks_val;
-
-  caml_register_generational_global_root(&callbacks_root);
-
   if (cursor == NULL) {
     caml_failwith("Invalid or closed cursor");
   }
@@ -854,9 +865,7 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
   }
 
   events_consumed =
-      caml_eventring_read_poll(cursor, &local_callbacks, NULL, max_events);
-
-  caml_remove_generational_global_root(&callbacks_root);
+      caml_eventring_read_poll(cursor, &local_callbacks, &callbacks_val, max_events);
 
   CAMLreturn(Int_val(events_consumed));
 };

@@ -60,14 +60,9 @@ let () =
     let list_ref = ref [] in
     start ();
     let cursor = create_cursor None in
-    let callbacks = { 
-        ev_runtime_begin = Some(runtime_begin);
-        ev_runtime_end = Some(runtime_end);
-        ev_runtime_counter = None;
-        ev_alloc = None;
-        ev_lifecycle = Some(lifecycle);
-        ev_lost_events = Some(lost_events)
-    } in
+    let callbacks = Callbacks.create ~runtime_begin ~runtime_end ~lifecycle
+                                    ~lost_events ()
+    in
     for epoch = 0 to epochs do
         for a = 0 to 100 do
             list_ref := [];
