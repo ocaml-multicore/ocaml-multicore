@@ -340,6 +340,7 @@ static void write_to_ring(ev_category category, ev_message_type type,
   }
 
   // Write header
+  // TODO: Describe this properly with reference to the header structure
   ring_ptr[ring_tail_offset++] = (((uint64_t)length_with_header_ts) << 54) |
                                  ((category == EV_RUNTIME) ? 0 : (1ULL << 53)) |
                                  ((uint64_t)type) << 49 |
@@ -450,12 +451,13 @@ struct caml_eventring_cursor *
 caml_eventring_create_cursor(const char *eventring_path, int pid) {
   int ring_fd, ret;
   struct stat tmp_stat;
+  // TODO: Move from caml_stat_alloc_noexc to malloc
   struct caml_eventring_cursor *cursor =
       caml_stat_alloc_noexc(sizeof(struct caml_eventring_cursor));
   char *eventring_loc;
 
   if (cursor == NULL) {
-    // TODO: Log here?
+    // TODO: Log here? Or just pass a pointer to an eventring_cursor pointer
     return NULL;
   }
 
@@ -479,6 +481,7 @@ caml_eventring_create_cursor(const char *eventring_path, int pid) {
   }
 
   if (ret < 0) {
+    // TODO: Need an error here
     caml_stat_free(cursor);
     caml_stat_free(eventring_loc);
     return 0;
@@ -488,6 +491,7 @@ caml_eventring_create_cursor(const char *eventring_path, int pid) {
   ret = fstat(ring_fd, &tmp_stat);
 
   if (ret < 0) {
+    // TODO: Need error here
     caml_stat_free(cursor);
     caml_stat_free(eventring_loc);
     return 0;
@@ -554,6 +558,7 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
 
       if (ring_head > cursor->current_positions[domain_num]) {
         if (callbacks->ev_lost_events) {
+          // TODO: Make sure you are clear this is words and not lost messages
           callbacks->ev_lost_events(domain_num,
               callback_data, ring_head - cursor->current_positions[domain_num]);
         }
@@ -573,6 +578,7 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
         // wrong.
       }
 
+      // TODO: Replace this with memcpy_ncpy
       memcpy(buf,
              ring_ptr + (cursor->current_positions[domain_num] & ring_mask),
              msg_length * sizeof(uint64_t));
@@ -632,6 +638,7 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
 
     /* There is an unfairness here. Under heavy load situations we might only
     end up reading [max_events] from a single domain's ring. */
+    // TODO: Leave the next domain number to read from in the cursor
     } while (cursor->current_positions[domain_num] < ring_tail &&
              (max_events == 0 || events_consumed < max_events));
 
@@ -833,6 +840,7 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
   int max_events = Is_some(max_events_val) ? Some_val(max_events_val) : 0;
   struct caml_eventring_cursor *cursor = Cursor_val(wrapped_cursor);
 
+  // TODO: remove the thread local and use the callbacks_val CAMLparam instead
   callbacks_root = callbacks_val;
 
   caml_register_generational_global_root(&callbacks_root);

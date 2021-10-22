@@ -1,6 +1,6 @@
 (* Eventring *)
 
-type runtime_counter = 
+type runtime_counter =
     EV_C_ALLOC_JUMP
 |	EV_C_FORCE_MINOR_ALLOC_SMALL
 |	EV_C_FORCE_MINOR_MAKE_VECT
@@ -88,6 +88,15 @@ type ev_lifecycle =
 
 type cursor
 
+(* abstract the int64 to allow for future changes *)
+(* don't expose and have a creator. module callbacks type t*)
+module Callbacks = struct
+  type t = {}
+
+  let create ?runtime_begin ?runtime_end () =
+    { runtime_begin; }
+
+end
 type callbacks = {
     ev_runtime_begin: (Domain.id -> int64 -> runtime_phase -> unit) option;
     ev_runtime_end: (Domain.id -> int64 -> runtime_phase -> unit) option;
