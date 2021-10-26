@@ -54,7 +54,7 @@ let runtime_end domain_id ts phase =
 let lost_events domain_id num =
     Printf.printf "Lost %d events\n" num
 
-let epochs = 100
+let epochs = 20
 
 let () =
     let list_ref = ref [] in
@@ -63,10 +63,10 @@ let () =
     let callbacks = Callbacks.create ~runtime_begin ~runtime_end ~lifecycle
                                     ~lost_events ()
     in
-    for epoch = 0 to epochs do
-        for a = 0 to 100 do
+    for epoch = 1 to epochs do
+        for a = 1 to 100 do
             list_ref := [];
-            for a = 0 to 10 do
+            for a = 1 to 10 do
                 list_ref := (Sys.opaque_identity(ref 42)) :: !list_ref
             done;
             Gc.full_major ()

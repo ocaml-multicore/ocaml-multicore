@@ -21,7 +21,7 @@ void start_eventring() {
     caml_eventring_start();
 }
 
-void ev_begin(int domain_id, void* callback_data,
+int ev_begin(int domain_id, void* callback_data,
                 uint64_t timestamp, ev_runtime_phase phase) {
     struct counters* tmp_counters = (struct counters*)callback_data;
     switch( phase ) {
@@ -37,7 +37,7 @@ void ev_begin(int domain_id, void* callback_data,
     }
 }
 
-void ev_end(int domain_id, void* callback_data, uint64_t timestamp,
+int ev_end(int domain_id, void* callback_data, uint64_t timestamp,
                 ev_runtime_phase phase) {
     struct counters* tmp_counters = (struct counters*)callback_data;
     switch( phase ) {
@@ -64,7 +64,7 @@ value get_event_counts(void) {
     CAMLlocal1(counts_tuple);
     eventring_error res;
     int events_consumed;
-    struct caml_eventring_callbacks callbacks = { 0 };
+
     struct counters tmp_counters = { 0 };
 
     counts_tuple = caml_alloc_small(3, 0);
@@ -77,10 +77,10 @@ value get_event_counts(void) {
         caml_failwith("invalid or non-existent cursor");
     }
 
-    callbacks.ev_runtime_begin = ev_begin;
-    callbacks.ev_runtime_end = ev_end;
+    caml_eventring_set_runtime_begin(cursor, &ev_begin);
+    caml_eventring_set_runtime_end(cursor, &ev_end);
 
-    res = caml_eventring_read_poll(cursor, &callbacks, &tmp_counters, 0,
+    res = caml_eventring_read_poll(cursor, &tmp_counters, 0,
                                    &events_consumed);
 
     if( res != E_SUCCESS ) {

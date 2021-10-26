@@ -65,7 +65,7 @@ static void init_startup_params()
   params.init_custom_minor_max_bsz = Custom_minor_max_bsz_def;
   params.init_max_stack_wsz = Max_stack_def;
   params.init_fiber_wsz = (Stack_threshold * 2) / sizeof(value);
-  params.eventring_size = 18; /* words, in powers of two */
+  params.eventring_size = 16; /* words, in powers of two */
 #ifdef DEBUG
   params.verb_gc = 0x3F;
 #endif
