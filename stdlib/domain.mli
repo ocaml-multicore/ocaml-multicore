@@ -40,6 +40,10 @@ val timer_ticks : unit -> nanoseconds
 (** Returns the number of nanoseconds elapsed since the OCaml
     runtime started. *)
 
+val cpu_relax : unit -> unit
+(** If busy-waiting, calling cpu_relax () between iterations
+    will improve performance on some CPU architectures *)
+
 module Sync : sig
   (** @deprecated Sync will be removed in 5.0.0
       Low-level Domain related primitives. **)
