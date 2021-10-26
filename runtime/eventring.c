@@ -267,8 +267,7 @@ CAMLprim value caml_eventring_resume() {
 
   return Val_unit;
 }
-
-struct ring_buffer *get_ring_buffer_by_domain_id(int domain_id) {
+static struct ring_buffer *get_ring_buffer_by_domain_id(int domain_id) {
   return (
       struct ring_buffer *)((char *)current_metadata +
                             current_metadata->first_ring_offset +
