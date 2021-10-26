@@ -17,6 +17,7 @@ type id = private int
 (** Domains have unique integer identifiers *)
 
 val get_id : 'a t -> id
+(** [get_id d] returns the identifier of the domain [d] *)
 
 val self : unit -> id
 (** [self ()] is the identifier of the currently running domain *)
@@ -33,14 +34,18 @@ val at_exit : (unit -> unit) -> unit
     function raises an exception, the exceptions are ignored. *)
 
 type nanoseconds = int64
+
 val timer_ticks : unit -> nanoseconds
+[@@ocaml.deprecated "timer_ticks() will be removed from the multicore runtime; please use another timing function, such as Unix.gettimeofday()"]
 (** Returns the number of nanoseconds elapsed since the OCaml
     runtime started. *)
 
 module Sync : sig
-  (** Low-level Domain related primitives. **)
+  (** @deprecated Sync will be removed in 5.0.0
+      Low-level Domain related primitives. **)
 
   val cpu_relax : unit -> unit
+  [@@ocaml.deprecated "Use Domain.cpu_relax()"]
   (** If busy-waiting, calling cpu_relax () between iterations
       will improve performance on some CPU architectures *)
 
