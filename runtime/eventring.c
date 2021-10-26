@@ -22,6 +22,7 @@
 #include "caml/memory.h"
 #include "caml/mlvalues.h"
 #include "caml/osdeps.h"
+#include "caml/startup_aux.h"
 
 #include <fcntl.h>
 #include <stdatomic.h>
@@ -45,7 +46,6 @@
 #endif
 
 #define RING_FILE_NAME_LEN 4096
-#define DEFAULT_RING_BUFFER_SIZE (1 << 20)
 #define MAX_MSG_LENGTH (1 << 10)
 
 typedef enum { EV_RUNTIME, EV_USER } ev_category;
@@ -80,6 +80,8 @@ static char *eventring_path;
 static struct metadata_header *current_metadata = NULL;
 static char *current_ring_buffer_loc = NULL;
 static int current_ring_total_size;
+
+static int ring_size_words;
 
 static atomic_uintnat eventring_enabled = 0;
 static atomic_uintnat eventring_paused = 0;
@@ -129,6 +131,8 @@ static void write_to_ring(ev_category category, ev_message_type type,
 
 void caml_eventring_init() {
   eventring_path = caml_secure_getenv(T("OCAML_EVENTRING_PATH"));
+
+  ring_size_words = 1 << caml_params->eventring_size;
 
   if (caml_secure_getenv(T("OCAML_EVENTRING_ENABLED"))) {
     caml_eventring_start();
@@ -185,7 +189,7 @@ create_and_start_ring_buffers(caml_domain_state *domain_state, void *data,
       }
 
       current_ring_total_size =
-          Max_domains * (DEFAULT_RING_BUFFER_SIZE * sizeof(uint64_t) +
+          Max_domains * (ring_size_words * sizeof(uint64_t) +
                         sizeof(struct ring_buffer)) +
           sizeof(struct metadata_header);
 
@@ -210,9 +214,9 @@ create_and_start_ring_buffers(caml_domain_state *domain_state, void *data,
       current_metadata->version = 1;
       current_metadata->max_domains = Max_domains;
       current_metadata->ring_with_header_size_bytes =
-          DEFAULT_RING_BUFFER_SIZE * sizeof(uint64_t) +
+          ring_size_words * sizeof(uint64_t) +
           sizeof(struct ring_buffer);
-      current_metadata->ring_size_elements = DEFAULT_RING_BUFFER_SIZE;
+      current_metadata->ring_size_elements = ring_size_words;
       current_metadata->first_ring_offset = sizeof(struct metadata_header);
 
       for (int domain_num = 0; domain_num < Max_domains; domain_num++) {
@@ -310,7 +314,7 @@ static void write_to_ring(ev_category category, ev_message_type type,
 
   // First we check if a write would take us over the head
   while ((ring_tail + length_with_header_ts + padding_required) - ring_head >=
-         DEFAULT_RING_BUFFER_SIZE) {
+         ring_size_words) {
     // The write would over-write some old bit of data. Need to advance the
     // head.
     uint64_t head_header = ring_ptr[ring_head & ring_mask];
