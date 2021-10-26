@@ -246,7 +246,6 @@ CAMLprim value caml_eventring_start() {
   return Val_unit;
 }
 
-/* TODO: Should this be a STW? */
 CAMLprim value caml_eventring_pause() {
   if (atomic_load_acq(&eventring_enabled) &&
       !atomic_load_acq(&eventring_paused)) {
@@ -257,7 +256,6 @@ CAMLprim value caml_eventring_pause() {
   return Val_unit;
 }
 
-/* TODO: Should this be a STW? */
 CAMLprim value caml_eventring_resume() {
   if (atomic_load_acq(&eventring_enabled) &&
       atomic_load_acq(&eventring_paused)) {
@@ -338,12 +336,21 @@ static void write_to_ring(ev_category category, ev_message_type type,
     ring_tail_offset = 0;
   }
 
-  // Write header
-  // TODO: Describe this properly with reference to the header structure
+/* Below we write the header. To reiterate the event header structure:
+
+  event header fields (for runtime events):
+
+  length (10 bits)
+  runtime or user event (1 bit)
+  event type (4 bits)
+  event id (13 bits)
+*/
+
   ring_ptr[ring_tail_offset++] = (((uint64_t)length_with_header_ts) << 54) |
                                  ((category == EV_RUNTIME) ? 0 : (1ULL << 53)) |
                                  ((uint64_t)type) << 49 |
                                  ((uint64_t)event_id) << 36;
+
   ring_ptr[ring_tail_offset++] = timestamp;
   if (content != NULL) {
     memcpy(&ring_ptr[ring_tail_offset], content + word_offset,
@@ -451,7 +458,7 @@ struct caml_eventring_cursor *
 caml_eventring_create_cursor(const char *eventring_path, int pid) {
   int ring_fd, ret;
   struct stat tmp_stat;
-  // TODO: Move from caml_stat_alloc_noexc to malloc
+
   struct caml_eventring_cursor *cursor =
       caml_stat_alloc_noexc(sizeof(struct caml_eventring_cursor));
   char *eventring_loc;
@@ -641,7 +648,6 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
 
     /* There is an unfairness here. Under heavy load situations we might only
     end up reading [max_events] from a single domain's ring. */
-    // TODO: Leave the next domain number to read from in the cursor
     } while (cursor->current_positions[domain_num] < ring_tail &&
              (max_events == 0 || events_consumed < max_events));
 
