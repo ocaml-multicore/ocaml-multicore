@@ -62,21 +62,30 @@ void ev_end(int domain_id, void* callback_data, uint64_t timestamp,
 value get_event_counts(void) {
     CAMLparam0();
     CAMLlocal1(counts_tuple);
-    counts_tuple = caml_alloc_small(3, 0);
-
-    struct caml_eventring_cursor* cursor = caml_eventring_create_cursor(NULL, -1);
-
-    if( !cursor ) {
-        caml_failwith("invalid or non-existent cursor");
-    }
-
+    eventring_error res;
+    int events_consumed;
     struct caml_eventring_callbacks callbacks = { 0 };
     struct counters tmp_counters = { 0 };
+
+    counts_tuple = caml_alloc_small(3, 0);
+
+    struct caml_eventring_cursor* cursor;
+
+    res = caml_eventring_create_cursor(NULL, -1, &cursor);
+
+    if( res != E_SUCCESS ) {
+        caml_failwith("invalid or non-existent cursor");
+    }
 
     callbacks.ev_runtime_begin = ev_begin;
     callbacks.ev_runtime_end = ev_end;
 
-    int read_events = caml_eventring_read_poll(cursor, &callbacks, &tmp_counters, 0);
+    res = caml_eventring_read_poll(cursor, &callbacks, &tmp_counters, 0,
+                                   &events_consumed);
+
+    if( res != E_SUCCESS ) {
+        caml_failwith("error reading from rings");
+    }
 
     Field(counts_tuple, 0) = Val_long(tmp_counters.minors);
     Field(counts_tuple, 1) = Val_long(tmp_counters.majors);

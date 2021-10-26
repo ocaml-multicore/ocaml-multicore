@@ -454,8 +454,9 @@ struct caml_eventring_cursor {
     process id (or equivalent) of the startup OCaml process. This function will
     return a cursor which can we be used with [caml_eventring_read_poll] to read
     events from the eventrings. */
-struct caml_eventring_cursor *
-caml_eventring_create_cursor(const char *eventring_path, int pid) {
+eventring_error
+caml_eventring_create_cursor(const char *eventring_path, int pid,
+                             struct caml_eventring_cursor** cursor_res) {
   int ring_fd, ret;
   struct stat tmp_stat;
 
@@ -464,15 +465,13 @@ caml_eventring_create_cursor(const char *eventring_path, int pid) {
   char *eventring_loc;
 
   if (cursor == NULL) {
-    // TODO: Log here? Or just pass a pointer to an eventring_cursor pointer
-    return NULL;
+    return E_ALLOC_FAIL;
   }
 
   eventring_loc = caml_stat_alloc_noexc(RING_FILE_NAME_LEN);
 
   if (eventring_loc == NULL) {
-    // TODO: Log here?
-    return NULL;
+    return E_ALLOC_FAIL;
   }
 
   if (pid < 0) {
@@ -488,20 +487,18 @@ caml_eventring_create_cursor(const char *eventring_path, int pid) {
   }
 
   if (ret < 0) {
-    // TODO: Need an error here
     caml_stat_free(cursor);
     caml_stat_free(eventring_loc);
-    return 0;
+    return E_PATH_FAILURE;
   }
 
   ring_fd = open(eventring_loc, O_RDONLY, 0);
   ret = fstat(ring_fd, &tmp_stat);
 
   if (ret < 0) {
-    // TODO: Need error here
     caml_stat_free(cursor);
     caml_stat_free(eventring_loc);
-    return 0;
+    return E_STAT_FAILURE;
   }
 
   cursor->ring_file_size_bytes = tmp_stat.st_size;
@@ -515,7 +512,9 @@ caml_eventring_create_cursor(const char *eventring_path, int pid) {
   cursor->cursor_open = 1;
   cursor->next_read_domain = 0;
 
-  return cursor;
+  *cursor_res = cursor;
+
+  return E_SUCCESS;
 }
 
 /* frees a cursor obtained from caml_eventring_reader_create */
@@ -528,22 +527,19 @@ void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor) {
   }
 }
 
-/* polls the eventring pointed to by [cursor] and calls the appropriate callback
-    provided in [callbacks] for each new event up to at most [max_events] times.
-    Returns the number of events consumed.
-
-    0 for [max_events] indicates no limit to the number of callbacks. */
-uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
-                              struct caml_eventring_callbacks *callbacks,
-                              void *callback_data, uint max_events) {
-  int events_consumed = 0;
+eventring_error
+    caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
+                             struct caml_eventring_callbacks *callbacks,
+                             void *callback_data,
+                             uint max_events,
+                             uint* events_consumed) {
+  int consumed = 0;
   int start_domain = cursor->next_read_domain;
   uint64_t ring_head, ring_tail;
   char *raw_header_ptr;
 
   if (!cursor->cursor_open) {
-    /* TODO: Should probably log something here as well */
-    return 0;
+    return E_CURSOR_NOT_OPEN;
   }
 
   raw_header_ptr =
@@ -585,8 +581,7 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
       msg_length = RING_ITEM_LENGTH(header);
 
       if (msg_length > MAX_MSG_LENGTH) {
-        // TODO: fatal error here, the stream is corrupt or our position is
-        // wrong.
+        return E_CORRUPT_STREAM;
       }
 
       memcpy(buf,
@@ -641,22 +636,24 @@ uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
       }
 
       if (RING_ITEM_TYPE(header) != EV_INTERNAL) {
-        events_consumed++;
+        consumed++;
       }
 
       cursor->current_positions[domain_num] += msg_length;
 
-    /* There is an unfairness here. Under heavy load situations we might only
-    end up reading [max_events] from a single domain's ring. */
     } while (cursor->current_positions[domain_num] < ring_tail &&
-             (max_events == 0 || events_consumed < max_events));
+             (max_events == 0 || consumed < max_events));
 
     cursor->next_read_domain = (domain_num+1) % cursor->metadata->max_domains;
 
     raw_header_ptr += cursor->metadata->ring_with_header_size_bytes;
   }
 
-  return events_consumed;
+  if( events_consumed != NULL ) {
+    *events_consumed = consumed;
+  }
+
+  return E_SUCCESS;
 }
 
 #define Cursor_val(v) (*((struct caml_eventring_cursor **)Data_custom_val(v)))
@@ -683,6 +680,7 @@ CAMLprim value caml_eventring_create_wrapped_cursor(value path_pid_option) {
   struct caml_eventring_cursor *cursor;
   int pid;
   const char *path;
+  eventring_error res;
 
   wrapper = caml_alloc_custom(&cursor_operations,
                               sizeof(struct caml_eventring_cursor *), 0, 1);
@@ -695,9 +693,9 @@ CAMLprim value caml_eventring_create_wrapped_cursor(value path_pid_option) {
     pid = -1;
   }
 
-  cursor = caml_eventring_create_cursor(path, pid);
+  res = caml_eventring_create_cursor(path, pid, &cursor);
 
-  if (cursor == NULL) {
+  if (res != E_SUCCESS) {
     caml_failwith("Could not obtain cursor");
   }
 
@@ -857,9 +855,10 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
   CAMLparam2(wrapped_cursor, callbacks_val);
   CAMLlocal5(tmp_callback, ts_val, msg_type, counter_val, misc_val);
 
-  int events_consumed = 0;
+  uint events_consumed = 0;
   int max_events = Is_some(max_events_val) ? Some_val(max_events_val) : 0;
   struct caml_eventring_cursor *cursor = Cursor_val(wrapped_cursor);
+  eventring_error res;
 
   if (cursor == NULL) {
     caml_failwith("Invalid or closed cursor");
@@ -869,8 +868,24 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
     caml_failwith("Eventring cursor is not open");
   }
 
-  events_consumed =
-      caml_eventring_read_poll(cursor, &local_callbacks, &callbacks_val, max_events);
+  res =
+      caml_eventring_read_poll(cursor,
+                                &local_callbacks,
+                                &callbacks_val,
+                                max_events,
+                                &events_consumed);
+
+  if( res != E_SUCCESS ) {
+    switch(res) {
+      case E_CORRUPT_STREAM:
+        caml_failwith("corrupt stream");
+      case E_CURSOR_NOT_OPEN:
+        caml_failwith("cursor is not open");
+      default:
+        /* this should never happen */
+        caml_failwith("unspecified error");
+    }
+  }
 
   CAMLreturn(Int_val(events_consumed));
 };

@@ -32,6 +32,15 @@
 /* external C-API for reading from the eventring */
 struct caml_eventring_cursor;
 
+typedef enum {
+  E_SUCCESS = 0,
+  E_CURSOR_NOT_OPEN = -1,
+  E_CORRUPT_STREAM = -2,
+  E_ALLOC_FAIL = -3,
+  E_PATH_FAILURE = -4,
+  E_STAT_FAILURE = -5
+} eventring_error;
+
 struct caml_eventring_callbacks {
   void (*ev_runtime_begin)(int domain_id, void *callback_data,
                           uint64_t timestamp, ev_runtime_phase phase);
@@ -56,21 +65,25 @@ extern value caml_eventring_resume();
     process id (or equivalent) of the startup OCaml process. This function will
     return a cursor which can we be used with caml_eventring_read_poll to read
     events from the eventrings. */
-extern struct caml_eventring_cursor*
-  caml_eventring_create_cursor(const char *eventring_path, int pid);
+CAMLextern eventring_error
+  caml_eventring_create_cursor(const char *eventring_path, int pid,
+                               struct caml_eventring_cursor** cursor_res);
 
 /* frees a cursor obtained from caml_eventring_creator_cursor */
-extern void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor);
+CAMLextern void
+  caml_eventring_free_cursor(struct caml_eventring_cursor *cursor);
 
 /* polls the eventring pointed to by [cursor] and calls the appropriate callback
     provided in [callbacks] for each new event up to at most [max_events] times.
-    Returns the number of events consumed.
+    Returns the number of events consumed in [events_consumed].
 
     0 for [max_events] indicates no limit to the number of callbacks. */
-CAMLextern uint caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
-                         struct caml_eventring_callbacks *callbacks,
-                         void *callback_data,
-                         uint max_events);
+CAMLextern eventring_error
+    caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
+                             struct caml_eventring_callbacks *callbacks,
+                             void *callback_data,
+                             uint max_events,
+                             uint* events_consumed);
 
 /* OCaml API for reading from the eventring */
 extern value caml_eventring_create_wrapped_cursor(value path_pid);
