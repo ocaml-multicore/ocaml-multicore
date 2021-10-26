@@ -72,8 +72,10 @@ type nanoseconds = int64
 external timer_ticks : unit -> (int64 [@unboxed]) =
   "caml_ml_domain_ticks" "caml_ml_domain_ticks_unboxed" [@@noalloc]
 
+let cpu_relax () = Raw.cpu_relax ()
+
 module Sync = struct
-  let cpu_relax () = Raw.cpu_relax ()
+  let cpu_relax = cpu_relax
   let poll () = ()
 end
 
