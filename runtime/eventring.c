@@ -975,3 +975,15 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
 
   CAMLreturn(Int_val(events_consumed));
 };
+
+CAMLprim value caml_maybe_print_stats(value val) {
+  CAMLparam0();
+
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value caml_ml_domain_ticks(value val) {
+  CAMLparam0();
+
+  CAMLreturn(Val_unit);
+}
