@@ -959,7 +959,8 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
     caml_failwith("Eventring cursor is not open");
   }
 
-  res = caml_eventring_read_poll(cursor, &callbacks_val, max_events, &events_consumed);
+  res = caml_eventring_read_poll
+                        (cursor, &callbacks_val, max_events, &events_consumed);
 
   if (res != E_SUCCESS) {
     switch (res) {

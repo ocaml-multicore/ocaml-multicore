@@ -1,24 +1,36 @@
-(* Eventring *)
+(**************************************************************************)
+(*                                                                        *)
+(*                                 OCaml                                  *)
+(*                                                                        *)
+(*                          Sadiq Jaffer, Opsian                          *)
+(*                                                                        *)
+(*   Copyright 2021 Opsian Ltd                                            *)
+(*                                                                        *)
+(*   All rights reserved.  This file is distributed under the terms of    *)
+(*   the GNU Lesser General Public License version 2.1, with the          *)
+(*   special exception on linking described in the file LICENSE.          *)
+(*                                                                        *)
+(**************************************************************************)
 
 type runtime_counter =
     EV_C_ALLOC_JUMP
-|	EV_C_FORCE_MINOR_ALLOC_SMALL
-|	EV_C_FORCE_MINOR_MAKE_VECT
-|	EV_C_FORCE_MINOR_SET_MINOR_HEAP_SIZE
-|	EV_C_FORCE_MINOR_WEAK
-|	EV_C_FORCE_MINOR_MEMPROF
-|	EV_C_MAJOR_MARK_SLICE_REMAIN
-|	EV_C_MAJOR_MARK_SLICE_FIELDS
-|	EV_C_MAJOR_MARK_SLICE_POINTERS
-|	EV_C_MAJOR_WORK_EXTRA
-|	EV_C_MAJOR_WORK_MARK
-|	EV_C_MAJOR_WORK_SWEEP
-|	EV_C_MINOR_PROMOTED
-|	EV_C_REQUEST_MAJOR_ALLOC_SHR
-|	EV_C_REQUEST_MAJOR_ADJUST_GC_SPEED
-|	EV_C_REQUEST_MINOR_REALLOC_REF_TABLE
-|	EV_C_REQUEST_MINOR_REALLOC_EPHE_REF_TABLE
-|	EV_C_REQUEST_MINOR_REALLOC_CUSTOM_TABLE
+| EV_C_FORCE_MINOR_ALLOC_SMALL
+| EV_C_FORCE_MINOR_MAKE_VECT
+| EV_C_FORCE_MINOR_SET_MINOR_HEAP_SIZE
+| EV_C_FORCE_MINOR_WEAK
+| EV_C_FORCE_MINOR_MEMPROF
+| EV_C_MAJOR_MARK_SLICE_REMAIN
+| EV_C_MAJOR_MARK_SLICE_FIELDS
+| EV_C_MAJOR_MARK_SLICE_POINTERS
+| EV_C_MAJOR_WORK_EXTRA
+| EV_C_MAJOR_WORK_MARK
+| EV_C_MAJOR_WORK_SWEEP
+| EV_C_MINOR_PROMOTED
+| EV_C_REQUEST_MAJOR_ALLOC_SHR
+| EV_C_REQUEST_MAJOR_ADJUST_GC_SPEED
+| EV_C_REQUEST_MINOR_REALLOC_REF_TABLE
+| EV_C_REQUEST_MINOR_REALLOC_EPHE_REF_TABLE
+| EV_C_REQUEST_MINOR_REALLOC_CUSTOM_TABLE
 
 type runtime_phase =
 EV_COMPACT_MAIN
