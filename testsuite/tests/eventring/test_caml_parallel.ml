@@ -63,19 +63,20 @@ let runtime_end domain_id ts phase =
     Hashtbl.add domain_tbl domain_id phase_count
 
 let num_domains = 3
-let num_full_majors = 2
+let num_minors = 30
 
 let () =
     start ();
     let cursor = create_cursor None in
     let gc_churn_f () =
         let list_ref = ref [] in
-        for j = 0 to num_full_majors do
+        for j = 0 to num_minors do
             list_ref := [];
             for a = 0 to 100 do
                 list_ref := (Sys.opaque_identity(ref 42)) :: !list_ref
             done;
-            Gc.full_major ();
+            (* TODO: Switch to full_major once we fix logging in it *)
+            Gc.minor ();
         done
     in
     let domains_list = List.init num_domains (fun _ -> Domain.spawn gc_churn_f) in
@@ -86,5 +87,5 @@ let () =
     assert(!got_start);
     (* this is num_full_majors rather than num_full_majors*num_domains
         because in the worst case it can be that low. *)
-    assert(Atomic.get majors >= num_full_majors);
+    assert(Atomic.get minors >= num_minors);
     assert(!lost_events_count == 0)

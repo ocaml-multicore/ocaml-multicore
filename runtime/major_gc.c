@@ -1151,7 +1151,7 @@ static void cycle_all_domains_callback(caml_domain_state* domain, void* unused,
 
   /* Someone should flush the allocation stats we gathered during the cycle */
   if( participating[0] == Caml_state ) {
-    CAML_EV_ALLOC_FLUSH(); 
+    CAML_EV_ALLOC_FLUSH();
   }
 
   caml_ev_end(EV_MAJOR_GC_STW);
@@ -1271,6 +1271,11 @@ static intnat major_collection_slice(intnat howmuch,
       !caml_opportunistic_major_work_available()) {
     return budget;
   }
+
+  /* TODO: The logging in this function will need to be sorted out before
+      we can merge eventring_multicore. Right now the spinning in
+      [finish_major_cycle_callback] causes this to emit hundreds of thousands
+      of spans */
 
   if (log_events) caml_ev_begin(EV_MAJOR_SLICE);
 
