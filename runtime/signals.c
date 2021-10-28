@@ -78,16 +78,17 @@ if( atomic_load_explicit(&total_signals_pending, memory_order_seq_cst) == 0 )
   pthread_sigmask(/* dummy */ SIG_BLOCK, NULL, &set);
 #endif
   for (i = 0; i < NSIG; i++) {
-    if ( atomic_load_explicit
-          (&caml_pending_signals[i], memory_order_seq_cst) == 0 )
+    if (atomic_load_explicit(&caml_pending_signals[i], memory_order_seq_cst)
+        == 0 )
       continue;
 #ifdef POSIX_SIGNALS
     if(sigismember(&set, i))
       continue;
 #endif
   again:
-    specific_signal_pending = atomic_load_explicit
-                               (&caml_pending_signals[i], memory_order_seq_cst);
+    specific_signal_pending =
+      atomic_load_explicit(&caml_pending_signals[i], memory_order_seq_cst);
+
     if( specific_signal_pending > 0 ) {
       if( !atomic_compare_exchange_strong(
             &caml_pending_signals[i],
