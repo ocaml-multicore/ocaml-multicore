@@ -41,26 +41,15 @@
 
 static atomic_intnat total_signals_pending = 0;
 CAMLexport atomic_intnat caml_pending_signals[NSIG];
+static atomic_uintnat recorded_signals_counter = 0;
 caml_plat_mutex signal_install_mutex = CAML_PLAT_MUTEX_INITIALIZER;
-
-static int check_for_pending_signals(void)
-{
-  int i;
-
-  /* We don't need to check total_signals_pending because it is greater than
-     zero iff one of caml_pending_signals is greater than zero. */
-  for (i = 0; i < NSIG; i++) {
-    if (atomic_load_explicit(&caml_pending_signals[i], memory_order_seq_cst))
-      return 1;
-  }
-  return 0;
-}
 
 /* Execute all pending signals */
 
 CAMLexport value caml_process_pending_signals_exn(void)
 {
   int i;
+  int is_pending = 0;
   intnat specific_signal_pending;
   value exn;
 #ifdef POSIX_SIGNALS
@@ -74,8 +63,16 @@ if( atomic_load_explicit(&total_signals_pending, memory_order_seq_cst) == 0 )
     syscall in [pthread_sigmask]. It is possible for there to be a
     race between checking [total_signals_pending] and checking the
     actual pending signals so there may not be a signal to handle. */
-if (!check_for_pending_signals())
-  return Val_unit;
+  for (i = 0; i < NSIG; i++) {
+    if (atomic_load_explicit(&caml_pending_signals[i], memory_order_seq_cst))
+    {
+      is_pending = 1;
+    }
+  }
+
+  if( !is_pending ) {
+    return Val_unit;
+  }
 
 #ifdef POSIX_SIGNALS
   pthread_sigmask(/* dummy */ SIG_BLOCK, NULL, &set);
@@ -126,12 +123,14 @@ CAMLexport void caml_process_pending_signals(void) {
 
 CAMLexport void caml_record_signal(int signal_number)
 {
-  atomic_fetch_add_explicit
-    (&caml_pending_signals[signal_number], 1, memory_order_seq_cst);
+  atomic_fetch_add_explicit(&caml_pending_signals[signal_number],
+                            1, memory_order_seq_cst);
 
-  atomic_fetch_add_explicit
-    (&total_signals_pending, 1, memory_order_seq_cst);
+  atomic_fetch_add_explicit(&total_signals_pending,
+                            1, memory_order_seq_cst);
 
+  atomic_fetch_add_explicit(&recorded_signals_counter,
+                            1, memory_order_seq_cst);
   caml_interrupt_self();
 }
 
@@ -156,13 +155,21 @@ CAMLexport void (*caml_leave_blocking_section_hook)(void) =
 
 CAMLexport void caml_enter_blocking_section(void)
 {
+  int pre_counter;
+
   while (1){
     /* Process all pending signals now */
     caml_process_pending_signals();
+    pre_counter = atomic_load_explicit(&recorded_signals_counter,
+                                        memory_order_relaxed);
     caml_enter_blocking_section_hook ();
     /* Check again for pending signals.
        If none, done; otherwise, try again */
-    if (!check_for_pending_signals()) break;
+    if ( pre_counter ==
+        atomic_load_explicit(&recorded_signals_counter,
+                              memory_order_relaxed) ) {
+      break;
+    }
     caml_leave_blocking_section_hook ();
   }
 }
