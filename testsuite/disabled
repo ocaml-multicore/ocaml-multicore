@@ -48,3 +48,6 @@ tool-debugger
 # instrumented runtime test is not very useful
 # (and broken on multicore.) (#9413)
 tests/instrumented-runtime/'main.ml' with 1.1 (native)
+
+# issue with signals and new domains/systhreads (#734)
+tests/callback/'signals_block.ml'
