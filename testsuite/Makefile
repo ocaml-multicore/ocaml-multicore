@@ -133,12 +133,12 @@ endif
 .PHONY: default
 default:
 	@echo "Available targets:"
-	@echo "  all             launch all tests"
-	@echo "  all-foo         launch all tests beginning with foo"
-	@echo "  all-enabled     launch all enabled tests"
-	@echo "  parallel        launch all tests using GNU parallel"
-	@echo "  parallel-foo    launch all tests beginning with foo using \
-	GNU parallel"
+	@echo "  all-enabled     launch all Multicore-enabled tests"
+	@echo "  really-all      launch all tests, including known-broken ones"
+	@echo "  really-all-foo  launch all tests beginning with foo, including known-broken ones"
+	@echo "  really-parallel     launch all tests using GNU parallel; this is broken with Multicore"
+	@echo "  really-parallel-foo launch all tests beginning with foo using \
+	GNU parallel; this is broken with Multicore"
 	@echo "  one TEST=f      launch just this single test"
 	@echo "  one DIR=p       launch the tests located in path p"
 	@echo "  one LIST=f      launch the tests listed in f (one per line)"
@@ -148,12 +148,17 @@ default:
 	@echo "  clean           delete generated files"
 	@echo "  report          print the report for the last execution"
 	@echo
-	@echo "all*, parallel* and list can automatically re-run failed test"
-	@echo "directories if MAX_TESTSUITE_DIR_RETRIES permits"
-	@echo "(default value = $(MAX_TESTSUITE_DIR_RETRIES))"
+	#@echo "all*, parallel* and list can automatically re-run failed test"
+	#@echo "directories if MAX_TESTSUITE_DIR_RETRIES permits"
+	#@echo "(default value = $(MAX_TESTSUITE_DIR_RETRIES))"
 
 .PHONY: all
 all:
+	@echo "'make all' is not supported on Multicore OCaml"
+	@echo "Please call 'make' to see the appropriate Multicore targets"
+
+.PHONY: really-all
+really-all:
 	@$(MAKE) --no-print-directory new-without-report
 	@$(MAKE) --no-print-directory report
 
@@ -188,7 +193,12 @@ all-enabled: lib tools
 	@$(MAKE) report
 
 .PHONY: all-%
-all-%: lib tools
+all-%:
+	@echo "'make all-*' targets are not supported on Multicore OCaml"
+	@echo "Please call 'make' to see the appropriate Multicore targets"
+
+.PHONY: really-all-%
+really-all-%: lib tools
 	@for dir in tests/$**; do \
 	  $(MAKE) --no-print-directory exec-one DIR=$$dir; \
 	done 2>&1 | tee $(TESTLOG)
@@ -219,7 +229,12 @@ all-%: lib tools
 # but the demangling separation is arguably nicer behavior that we might
 # want to implement at the exec-one level to also have it in the 'all' target.
 .PHONY: parallel-%
-parallel-%: lib tools
+parallel-%:
+	@echo "'make parallel-*' targets are not supported on Multicore OCaml"
+	@echo "Please call 'make' to see the appropriate Multicore targets"
+
+.PHONY: really-parallel-%
+really-parallel-%: lib tools
 	@echo | parallel >/dev/null 2>/dev/null \
 	 || (echo "Unable to run the GNU parallel tool;";\
 	     echo "You should install it before using the parallel* targets.";\
@@ -235,7 +250,12 @@ parallel-%: lib tools
 	@$(MAKE) report
 
 .PHONY: parallel
-parallel: parallel-*
+parallel:
+	@echo "'make parallel' targets are not supported on Multicore OCaml"
+	@echo "Please call 'make' to see the appropriate Multicore targets"
+
+.PHONY: really-parallel
+really-parallel: really-parallel-*
 
 .PHONY: list
 list: lib tools

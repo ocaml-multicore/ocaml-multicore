@@ -4,14 +4,10 @@
 
 == Useful Makefile targets
 
-`make parallel`::
-  runs the tests in parallel using the
-  link:https://www.gnu.org/software/parallel/[GNU parallel] tool: tests run
-  twice as fast with no difference in output order.
+Note: Multicore OCaml's testsuite is in flux, the upstream-OCaml test targets do not work.
 
-`make all-foo`, `make parallel-foo`::
-  runs only the tests in the directories whose name starts with `foo`:
-  `parallel-typing`, `all-lib`, etc.
+`make all-enabled`::
+  calls the whole testsuite (see `make` default output for other less-working options)
 
 `make one DIR=tests/foo`::
   runs only the tests in the directory `tests/foo`. This is often equivalent to
