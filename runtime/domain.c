@@ -739,6 +739,7 @@ static void* domain_thread_func(void* v)
     caml_gc_log("Domain starting (unique_id = %"ARCH_INTNAT_PRINTF_FORMAT"u)",
                 domain_self->interruptor.unique_id);
     caml_domain_set_name(T("Domain"));
+    caml_ev_lifecycle(EV_DOMAIN_SPAWN, getpid());
     caml_domain_start_hook();
     caml_callback(ml_values->callback, Val_unit);
     domain_terminate();
@@ -760,7 +761,6 @@ CAMLprim value caml_domain_spawn(value callback, value mutex)
   int err;
   sigset_t mask, old_mask;
 
-  caml_ev_begin(EV_DOMAIN_SPAWN);
   p.parent = &domain_self->interruptor;
   p.status = Dom_starting;
 
@@ -816,7 +816,7 @@ CAMLprim value caml_domain_spawn(value callback, value mutex)
      the backup thread is not active, we ensure
      it is started here. */
   install_backup_thread(domain_self);
-  caml_ev_end(EV_DOMAIN_SPAWN);
+
   CAMLreturn (Val_long(p.unique_id));
 }
 

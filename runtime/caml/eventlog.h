@@ -134,26 +134,4 @@ typedef enum {
 #define CAML_INSTR_DO(f) /**/
 #endif
 
-/* General note about the public API for the eventlog framework
-   The caml_ev_* functions are no-op when called with the eventlog framework
-   paused or disabled.
-   caml_eventlog_* functions on the other hand may introduce side effects
-   (such as write buffer flushes, or side effects in the eventlog internals.)
-
-   All these functions should be called while holding the runtime lock.
-*/
-
-/*
-void caml_eventlog_init(void);
-void caml_eventlog_disable(void);
-void caml_eventlog_teardown(void);
-void caml_eventlog_is_backup_thread(void);
-void caml_ev_begin(ev_gc_phase phase);
-void caml_ev_end(ev_gc_phase phase);
-void caml_ev_counter(ev_runtime_phase counter, uint64_t val);
-void caml_ev_alloc(uint64_t size);
-void caml_ev_alloc_flush(void);
-void caml_ev_flush(void);
-*/
-
 #endif /*CAML_EVENTLOG_H*/
