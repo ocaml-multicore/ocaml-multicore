@@ -63,7 +63,7 @@ value get_event_counts(void) {
     CAMLparam0();
     CAMLlocal1(counts_tuple);
     eventring_error res;
-    int events_consumed;
+    uintnat events_consumed;
 
     struct counters tmp_counters = { 0 };
 
