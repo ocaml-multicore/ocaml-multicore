@@ -644,7 +644,10 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
   domain->stat_minor_words += Wsize_bsize (minor_allocated_bytes);
   domain->stat_minor_collections++;
   domain->stat_promoted_words += domain->allocated_words - prev_alloc_words;
-  caml_ev_counter(EV_C_MINOR_PROMOTED, Bsize_wsize(domain->allocated_words - prev_alloc_words));
+
+  caml_ev_counter(EV_C_MINOR_PROMOTED,
+                  Bsize_wsize(domain->allocated_words - prev_alloc_words));
+
   caml_ev_counter(EV_C_MINOR_ALLOCATED, minor_allocated_bytes);
 
   caml_ev_end(EV_MINOR);
