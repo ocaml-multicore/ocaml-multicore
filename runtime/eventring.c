@@ -607,8 +607,8 @@ void caml_eventring_free_cursor(struct caml_eventring_cursor *cursor) {
 
 eventring_error
 caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
-                         void *callback_data, uint max_events,
-                         uint *events_consumed) {
+                         void *callback_data, uintnat max_events,
+                         uintnat *events_consumed) {
   int consumed = 0;
   int start_domain = cursor->next_read_domain;
   uint64_t ring_head, ring_tail;
@@ -956,7 +956,7 @@ CAMLprim value caml_eventring_read_poll_wrapped(value wrapped_cursor,
                                                 value max_events_val) {
   CAMLparam2(wrapped_cursor, callbacks_val);
 
-  uint events_consumed = 0;
+  uintnat events_consumed = 0;
   int max_events = Is_some(max_events_val) ? Some_val(max_events_val) : 0;
   struct caml_eventring_cursor *cursor = Cursor_val(wrapped_cursor);
   eventring_error res;

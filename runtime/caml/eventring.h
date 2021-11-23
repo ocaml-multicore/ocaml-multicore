@@ -102,7 +102,7 @@ caml_eventring_free_cursor(struct caml_eventring_cursor *cursor);
 CAMLextern eventring_error caml_eventring_read_poll(
     struct caml_eventring_cursor *cursor,
     void *callback_data,
-    uint max_events, uint *events_consumed);
+    uintnat max_events, uintnat *events_consumed);
 
 /* OCaml API for reading from the eventring */
 extern value caml_eventring_create_wrapped_cursor(value path_pid);
