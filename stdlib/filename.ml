@@ -328,7 +328,10 @@ let remove_extension name =
 external open_desc: string -> open_flag list -> int -> int = "caml_sys_open"
 external close_desc: int -> unit = "caml_sys_close"
 
-let prng_key = Domain.DLS.new_key Random.State.make_self_init
+let prng_key =
+  Domain.DLS.new_key
+    ~split_from_parent:Random.State.split
+    Random.State.make_self_init
 
 let temp_file_name temp_dir prefix suffix =
   let random_state = Domain.DLS.get prng_key in
