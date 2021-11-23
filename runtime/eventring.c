@@ -50,19 +50,21 @@
 
 typedef enum { EV_RUNTIME, EV_USER } ev_category;
 
-struct ring_buffer {
+struct ring_buffer_header {
   atomic_uint_fast64_t ring_head;
   atomic_uint_fast64_t ring_tail;
-  uint64_t data_offset; /* Offset from this struct to ring buffer's data */
+  uint64_t padding[6]; /* Padding so headers don't share cache lines */
 };
 
 struct metadata_header {
   uint64_t version;
   uint64_t max_domains;
-  uint64_t
-      ring_with_header_size_bytes; /* Ring data plus header size in bytes */
-  uint64_t ring_size_elements;     /* Ring size in 64-bit elements */
-  uint64_t first_ring_offset; /* Offset from this struct to first ring buffer */
+  uint64_t ring_header_size_bytes; /* Ring buffer header size (bytes) */
+  uint64_t ring_size_bytes; /* Ring data size (bytes) */
+  uint64_t ring_size_elements; /* Ring size in 64-bit elements */
+  uint64_t headers_offset; /* Offset from this struct to first header (bytes) */
+  uint64_t data_offset; /* Offset from this struct to first data (byte) */
+  uint64_t padding; /* Make the header a multiple of 64 bytes */
 };
 
 /* event header fields (for runtime events):
@@ -173,7 +175,7 @@ create_and_start_ring_buffers(caml_domain_state *domain_state, void *data,
   if (participanting_domains[0] == domain_state) {
     /* Don't initialise eventring twice */
     if (!atomic_load_acq(&eventring_enabled)) {
-      int ring_fd, ret;
+      int ring_fd, ret, ring_headers_length;
       long int pid;
 
       current_ring_buffer_loc = caml_stat_alloc(RING_FILE_NAME_LEN);
@@ -190,7 +192,7 @@ create_and_start_ring_buffers(caml_domain_state *domain_state, void *data,
 
       current_ring_total_size =
           Max_domains * (ring_size_words * sizeof(uint64_t) +
-                         sizeof(struct ring_buffer)) +
+                         sizeof(struct ring_buffer_header)) +
           sizeof(struct metadata_header);
 
       ring_fd =
@@ -211,23 +213,30 @@ create_and_start_ring_buffers(caml_domain_state *domain_state, void *data,
       current_metadata = mmap(NULL, current_ring_total_size,
                               PROT_READ | PROT_WRITE, MAP_SHARED, ring_fd, 0);
 
+      ring_headers_length = Max_domains * sizeof(struct ring_buffer_header);
+
       current_metadata->version = 1;
       current_metadata->max_domains = Max_domains;
-      current_metadata->ring_with_header_size_bytes =
-          ring_size_words * sizeof(uint64_t) + sizeof(struct ring_buffer);
+      current_metadata->ring_header_size_bytes =
+          sizeof(struct ring_buffer_header);
+      current_metadata->ring_size_bytes =
+          ring_size_words * sizeof(uint64_t);
       current_metadata->ring_size_elements = ring_size_words;
-      current_metadata->first_ring_offset = sizeof(struct metadata_header);
+      current_metadata->headers_offset = sizeof(struct metadata_header);
+      /* strictly we can calculate this in a consumer but for simplicity we
+         store it in the metadata header */
+      current_metadata->data_offset =
+        current_metadata->headers_offset + ring_headers_length;
 
       for (int domain_num = 0; domain_num < Max_domains; domain_num++) {
-        struct ring_buffer *ring_buffer =
-            (struct ring_buffer
+        struct ring_buffer_header *ring_buffer =
+            (struct ring_buffer_header
                  *)((char *)current_metadata +
-                    current_metadata->first_ring_offset +
-                    domain_num * current_metadata->ring_with_header_size_bytes);
+                    current_metadata->headers_offset +
+                    domain_num * sizeof(struct ring_buffer_header));
 
         ring_buffer->ring_head = 0;
         ring_buffer->ring_tail = 0;
-        ring_buffer->data_offset = sizeof(struct ring_buffer);
       }
 
       close(ring_fd);
@@ -268,12 +277,12 @@ CAMLprim value caml_eventring_resume() {
 
   return Val_unit;
 }
-static struct ring_buffer *get_ring_buffer_by_domain_id(int domain_id) {
+static struct ring_buffer_header *get_ring_buffer_by_domain_id(int domain_id) {
   return (
-      struct ring_buffer *)((char *)current_metadata +
-                            current_metadata->first_ring_offset +
+      struct ring_buffer_header *)((char *)current_metadata +
+                            current_metadata->headers_offset +
                             domain_id *
-                                current_metadata->ring_with_header_size_bytes);
+                                current_metadata->ring_header_size_bytes);
 }
 
 static void write_to_ring(ev_category category, ev_message_type type,
@@ -282,15 +291,16 @@ static void write_to_ring(ev_category category, ev_message_type type,
   /* account for header and timestamp */
   uint64_t length_with_header_ts = event_length + 2;
 
-  struct ring_buffer *domain_ring_buffer =
+  struct ring_buffer_header *domain_ring_header =
       get_ring_buffer_by_domain_id(Caml_state->id);
 
-  uint64_t *ring_ptr = (uint64_t *)((char *)domain_ring_buffer +
-                                    domain_ring_buffer->data_offset);
+  uint64_t *ring_ptr = (uint64_t *)((char*)current_metadata +
+                                    current_metadata->data_offset
+                        + Caml_state->id * current_metadata->ring_size_bytes);
 
-  uint64_t ring_head = atomic_load_explicit(&domain_ring_buffer->ring_head,
+  uint64_t ring_head = atomic_load_explicit(&domain_ring_header->ring_head,
                                             memory_order_acquire);
-  uint64_t ring_tail = atomic_load_explicit(&domain_ring_buffer->ring_tail,
+  uint64_t ring_tail = atomic_load_explicit(&domain_ring_header->ring_tail,
                                             memory_order_acquire);
 
   uint64_t ring_mask = current_metadata->ring_size_elements - 1;
@@ -320,7 +330,7 @@ static void write_to_ring(ev_category category, ev_message_type type,
 
     ring_head += RING_ITEM_LENGTH(head_header);
 
-    atomic_store_explicit(&domain_ring_buffer->ring_head, ring_head,
+    atomic_store_explicit(&domain_ring_header->ring_head, ring_head,
                           memory_order_release); // advance the ring head
   }
 
@@ -333,7 +343,7 @@ static void write_to_ring(ev_category category, ev_message_type type,
 
     ring_tail += ring_distance_to_end;
 
-    atomic_store_explicit(&domain_ring_buffer->ring_tail, ring_tail,
+    atomic_store_explicit(&domain_ring_header->ring_tail, ring_tail,
                           memory_order_release);
 
     ring_tail_offset = 0;
@@ -359,7 +369,7 @@ static void write_to_ring(ev_category category, ev_message_type type,
     memcpy(&ring_ptr[ring_tail_offset], content + word_offset,
            event_length * sizeof(uint64_t));
   }
-  atomic_store_explicit(&domain_ring_buffer->ring_tail,
+  atomic_store_explicit(&domain_ring_header->ring_tail,
                         ring_tail + length_with_header_ts,
                         memory_order_release);
 }
@@ -602,25 +612,27 @@ caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
   int consumed = 0;
   int start_domain = cursor->next_read_domain;
   uint64_t ring_head, ring_tail;
-  char *raw_header_ptr;
   int early_exit = 0;
 
   if (!cursor->cursor_open) {
     return E_CURSOR_NOT_OPEN;
   }
 
-  raw_header_ptr =
-      (char *)cursor->metadata + cursor->metadata->first_ring_offset;
-
   /* this loop looks a bit odd because we're iterating from the last domain
      that we read from on the last read_poll call and then looping around. */
   for (int i = 0; i < cursor->metadata->max_domains && !early_exit; i++) {
     int domain_num = (start_domain + i) % cursor->metadata->max_domains;
 
-    struct ring_buffer *ring_buffer_header =
-        (struct ring_buffer *)raw_header_ptr;
-    uint64_t *ring_ptr = (uint64_t *)((char *)ring_buffer_header +
-                                      ring_buffer_header->data_offset);
+    struct ring_buffer_header *ring_buffer_header =
+        (struct ring_buffer_header *)(
+          (char*)cursor->metadata +
+          cursor->metadata->headers_offset +
+          domain_num * cursor->metadata->ring_header_size_bytes
+        );
+
+    uint64_t *ring_ptr = (uint64_t *)((char*)cursor->metadata +
+                                      cursor->metadata->data_offset +
+                                domain_num * cursor->metadata->ring_size_bytes);
 
     do {
       uint64_t buf[MAX_MSG_LENGTH];
@@ -729,8 +741,6 @@ caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
              (max_events == 0 || consumed < max_events) && !early_exit);
 
     cursor->next_read_domain = (domain_num + 1) % cursor->metadata->max_domains;
-
-    raw_header_ptr += cursor->metadata->ring_with_header_size_bytes;
   }
 
   if (events_consumed != NULL) {
