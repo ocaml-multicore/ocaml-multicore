@@ -27,7 +27,7 @@ let lost_events domain_id words =
 let () =
     start ();
     let cursor = create_cursor None in
-    Gc.minor ();
+    Gc.full_major ();
     for a = 0 to 1_000_000 do
       list_ref := (Sys.opaque_identity(ref 42)) :: !list_ref
     done;
