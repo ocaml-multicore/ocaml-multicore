@@ -37,6 +37,8 @@ int ev_begin(int domain_id, void* callback_data,
         default:
             break;
     }
+
+    return 1;
 }
 
 int ev_end(int domain_id, void* callback_data, uint64_t timestamp,
@@ -61,6 +63,8 @@ int ev_end(int domain_id, void* callback_data, uint64_t timestamp,
         default:
             break;
     }
+
+    return 1;
 }
 
 value get_event_counts(void) {
