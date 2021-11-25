@@ -34,6 +34,8 @@ int ev_begin(int domain_id, void* callback_data,
         case EV_COMPACT_MAIN:
             tmp_counters->compact_started = 1;
             break;
+        default:
+            break;
     }
 }
 
@@ -55,6 +57,8 @@ int ev_end(int domain_id, void* callback_data, uint64_t timestamp,
             assert(tmp_counters->compact_started);
             tmp_counters->compact_started = 0;
             tmp_counters->compacts++;
+            break;
+        default:
             break;
     }
 }
