@@ -224,6 +224,25 @@ extern value caml_eventring_read_poll_ml(value wrapped_cursor,
 
 #ifdef CAML_INTERNALS
 
+struct eventring_buffer_header {
+  atomic_uint_fast64_t ring_head;
+  atomic_uint_fast64_t ring_tail;
+  uint64_t padding[6]; /* Padding so headers don't share cache lines */
+};
+
+struct eventring_metadata_header {
+  uint64_t version;
+  uint64_t max_domains;
+  uint64_t ring_header_size_bytes; /* Ring buffer header size (bytes) */
+  uint64_t ring_size_bytes; /* Ring data size (bytes) */
+  uint64_t ring_size_elements; /* Ring size in 64-bit elements */
+  uint64_t headers_offset; /* Offset from this struct to first header (bytes) */
+  uint64_t data_offset; /* Offset from this struct to first data (byte) */
+  uint64_t padding; /* Make the header a multiple of 64 bytes */
+};
+
+#define EVENTRING_MAX_MSG_LENGTH (1 << 10)
+
 /* Functions for putting runtime data on to the eventring */
 
 void caml_eventring_init();
