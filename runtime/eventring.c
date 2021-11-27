@@ -345,23 +345,26 @@ static void write_to_ring(ev_category category, ev_message_type type,
 
 /* Functions for putting runtime data on to the eventring */
 
+static inline int ring_is_active() {
+    return
+      atomic_load_explicit(&eventring_enabled, memory_order_relaxed)
+      && !atomic_load_explicit(&eventring_paused, memory_order_relaxed);
+}
+
 void caml_ev_begin(ev_runtime_phase phase) {
-  if (atomic_load_acq(&eventring_enabled) &&
-      !atomic_load_acq(&eventring_paused)) {
+  if ( ring_is_active() ) {
     write_to_ring(EV_RUNTIME, EV_BEGIN, phase, 0, NULL, 0);
   }
 }
 
 void caml_ev_end(ev_runtime_phase phase) {
-  if (atomic_load_acq(&eventring_enabled) &&
-      !atomic_load_acq(&eventring_paused)) {
+  if ( ring_is_active() ) {
     write_to_ring(EV_RUNTIME, EV_EXIT, phase, 0, NULL, 0);
   }
 }
 
 void caml_ev_counter(ev_runtime_counter counter, uint64_t val) {
-  if (atomic_load_acq(&eventring_enabled) &&
-      !atomic_load_acq(&eventring_paused)) {
+  if ( ring_is_active() ) {
     uint64_t buf[1];
     buf[0] = val;
 
@@ -370,8 +373,7 @@ void caml_ev_counter(ev_runtime_counter counter, uint64_t val) {
 }
 
 void caml_ev_lifecycle(ev_lifecycle lifecycle, int64_t data) {
-  if (atomic_load_acq(&eventring_enabled) &&
-      !atomic_load_acq(&eventring_paused)) {
+  if ( ring_is_active() ) {
     write_to_ring(EV_RUNTIME, EV_LIFECYCLE, lifecycle, 1, (uint64_t *)&data, 0);
   }
 }
@@ -385,9 +387,7 @@ static uint64_t alloc_buckets[EVENTRING_NUM_ALLOC_BUCKETS] = {
    flushed.
 */
 void caml_ev_alloc(uint64_t sz) {
-  if (!atomic_load_acq(&eventring_enabled))
-    return;
-  if (atomic_load_acq(&eventring_paused))
+  if ( !ring_is_active() )
     return;
 
   if (sz < (EVENTRING_NUM_ALLOC_BUCKETS / 2)) {
@@ -405,9 +405,7 @@ void caml_ev_alloc(uint64_t sz) {
 void caml_ev_alloc_flush() {
   int i;
 
-  if (!atomic_load_acq(&eventring_enabled))
-    return;
-  if (atomic_load_acq(&eventring_paused))
+  if ( !ring_is_active() )
     return;
 
   write_to_ring(EV_RUNTIME, EV_ALLOC, 0, EVENTRING_NUM_ALLOC_BUCKETS, alloc_buckets, 0);
