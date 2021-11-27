@@ -268,12 +268,6 @@ clean::
 	rm -f -- lintapidiff.opt lintapidiff.opt.exe
 	rm -f lintapidiff.cm? lintapidiff.o lintapidiff.obj
 
-# Eventlog metadata file
-
-install::
-	$(INSTALL_DATA) \
-	  "$(INSTALL_LIBDIR)"
-
 # Copy a bytecode executable, stripping debug info
 
 STRIPDEBUG=$(ROOTDIR)/compilerlibs/ocamlcommon.cma \
