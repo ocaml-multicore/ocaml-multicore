@@ -736,8 +736,7 @@ static void* domain_thread_func(void* v)
     caml_gc_log("Domain starting (unique_id = %"ARCH_INTNAT_PRINTF_FORMAT"u)",
                 domain_self->interruptor.unique_id);
     caml_domain_set_name(T("Domain"));
-    caml_ev_lifecycle(EV_DOMAIN_SPAWN, getpid());
-    caml_domain_start_hook();
+    CAML_EV_LIFECYCLE(EV_DOMAIN_SPAWN, getpid());
     caml_callback(ml_values->callback, Val_unit);
     domain_terminate();
     /* joining domains will lock/unlock the terminate_mutex
@@ -889,8 +888,8 @@ static void decrement_stw_domains_still_processing()
 static void caml_poll_gc_work();
 static void stw_handler(caml_domain_state* domain)
 {
-  caml_ev_begin(EV_STW_HANDLER);
-  caml_ev_begin(EV_STW_API_BARRIER);
+  CAML_EV_BEGIN(EV_STW_HANDLER);
+  CAML_EV_BEGIN(EV_STW_API_BARRIER);
   {
     SPIN_WAIT {
       if (atomic_load_acq(&stw_request.domains_still_running) == 0)
@@ -900,7 +899,7 @@ static void stw_handler(caml_domain_state* domain)
         stw_request.enter_spin_callback(domain, stw_request.enter_spin_data);
     }
   }
-  caml_ev_end(EV_STW_API_BARRIER);
+  CAML_EV_END(EV_STW_API_BARRIER);
 
   #ifdef DEBUG
   Caml_state->inside_stw_handler = 1;
@@ -916,7 +915,7 @@ static void stw_handler(caml_domain_state* domain)
 
   decrement_stw_domains_still_processing();
 
-  caml_ev_end(EV_STW_HANDLER);
+  CAML_EV_END(EV_STW_HANDLER);
 
   /* poll the GC to check for deferred work
      we do this here because blocking or waiting threads only execute
@@ -961,7 +960,7 @@ int caml_try_run_on_all_domains_with_spin_work(
   /* we have the lock and can claim the stw_leader */
   atomic_store_rel(&stw_leader, (uintnat)domain_self);
 
-  caml_ev_begin(EV_STW_LEADER);
+  CAML_EV_BEGIN(EV_STW_LEADER);
   caml_gc_log("causing STW");
 
   /* setup all fields for this stw_request, must have those needed
@@ -1025,7 +1024,7 @@ int caml_try_run_on_all_domains_with_spin_work(
 
   decrement_stw_domains_still_processing();
 
-  caml_ev_end(EV_STW_LEADER);
+  CAML_EV_END(EV_STW_LEADER);
 
   return 1;
 }
@@ -1067,16 +1066,16 @@ static void caml_poll_gc_work()
       is waiting in a blocking section and serviced by the backup
       thread.
       */
-    caml_ev_begin(EV_MINOR_FINALIZED);
+    CAML_EV_BEGIN(EV_MINOR_FINALIZED);
     caml_final_do_calls();
-    caml_ev_end(EV_MINOR_FINALIZED);
+    CAML_EV_END(EV_MINOR_FINALIZED);
   }
 
   if (Caml_state->requested_major_slice) {
-    caml_ev_begin(EV_MAJOR);
+    CAML_EV_BEGIN(EV_MAJOR);
     Caml_state->requested_major_slice = 0;
     caml_major_collection_slice(AUTO_TRIGGERED_MAJOR_SLICE);
-    caml_ev_end(EV_MAJOR);
+    CAML_EV_END(EV_MAJOR);
   }
 
   if (atomic_load_acq(
@@ -1090,22 +1089,22 @@ static void handle_gc_interrupt() {
   atomic_uintnat* young_limit = domain_self->interruptor.interrupt_word;
   CAMLalloc_point_here;
 
-  caml_ev_begin(EV_INTERRUPT_GC);
+  CAML_EV_BEGIN(EV_INTERRUPT_GC);
   if (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
     /* interrupt */
-    caml_ev_begin(EV_INTERRUPT_REMOTE);
+    CAML_EV_BEGIN(EV_INTERRUPT_REMOTE);
     while (atomic_load_acq(young_limit) == INTERRUPT_MAGIC) {
       uintnat i = INTERRUPT_MAGIC;
       atomic_compare_exchange_strong(
           young_limit, &i, (uintnat)Caml_state->young_start);
     }
     caml_handle_incoming_interrupts();
-    caml_ev_end(EV_INTERRUPT_REMOTE);
+    CAML_EV_END(EV_INTERRUPT_REMOTE);
   }
 
   caml_poll_gc_work();
 
-  caml_ev_end(EV_INTERRUPT_GC);
+  CAML_EV_END(EV_INTERRUPT_GC);
 }
 
 

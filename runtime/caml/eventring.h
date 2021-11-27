@@ -30,6 +30,13 @@
 #define CAML_EV_ALLOC_FLUSH() /**/
 #endif
 
+#define CAML_EV_BEGIN(p) caml_ev_begin(p)
+#define CAML_EV_END(p) caml_ev_end(p)
+#define CAML_EV_COUNTER(c,v) caml_ev_counter(c,v)
+#define CAML_EV_LIFECYCLE(l,d) caml_ev_lifecycle(l,d)
+#define CAML_EVENTRING_INIT() caml_eventring_init()
+#define CAML_EVENTRING_DESTROY() caml_eventring_destroy()
+
 #define CAML_EV_FLUSH() caml_ev_flush()
 
 typedef enum {

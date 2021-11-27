@@ -229,7 +229,7 @@ CAMLprim value caml_make_vect(value len, value init)
       if (Is_block(init) && Is_young(init)) {
         /* We don't want to create so many major-to-minor references,
            so [init] is moved to the major heap by doing a minor GC. */
-        caml_ev_counter (EV_C_FORCE_MINOR_MAKE_VECT, 1);
+        CAML_EV_COUNTER (EV_C_FORCE_MINOR_MAKE_VECT, 1);
         caml_minor_collection ();
       }
       CAMLassert(!(Is_block(init) && Is_young(init)));

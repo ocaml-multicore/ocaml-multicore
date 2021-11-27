@@ -37,11 +37,11 @@ CAMLprim value unix_fork(value unit)
   if (ret == -1) uerror("fork", Nothing);
 
   if (ret == 0) {
-    caml_eventring_destroy();
-    caml_eventring_init();
-    caml_ev_lifecycle(EV_FORK_CHILD, 0);
+    CAML_EVENTRING_DESTROY();
+    CAML_EVENTRING_INIT();
+    CAML_EV_LIFECYCLE(EV_FORK_CHILD, 0);
   } else {
-    caml_ev_lifecycle(EV_FORK_PARENT, ret);
+    CAML_EV_LIFECYCLE(EV_FORK_PARENT, ret);
   }
 
   if (caml_debugger_in_use)
