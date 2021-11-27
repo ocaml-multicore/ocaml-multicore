@@ -93,11 +93,12 @@ caml_eventring_create_cursor(const char *eventring_path, int pid,
   }
 
   if (eventring_path) {
-    ret = snprintf_os(eventring_loc, RING_FILE_NAME_MAX_LEN, T("%s/%d.eventring"),
-                      eventring_path, pid);
+    ret = snprintf_os(eventring_loc, RING_FILE_NAME_MAX_LEN,
+                    T("%s/%d.eventring"), eventring_path, pid);
   } else {
     ret =
-        snprintf_os(eventring_loc, RING_FILE_NAME_MAX_LEN, T("%d.eventring"), pid);
+        snprintf_os(eventring_loc, RING_FILE_NAME_MAX_LEN,
+                    T("%d.eventring"), pid);
   }
 
   if (ret < 0) {

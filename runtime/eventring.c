@@ -182,7 +182,8 @@ create_and_start_ring_buffers(caml_domain_state *domain_state, void *data,
       current_metadata = mmap(NULL, current_ring_total_size,
                               PROT_READ | PROT_WRITE, MAP_SHARED, ring_fd, 0);
 
-      ring_headers_length = Max_domains * sizeof(struct eventring_buffer_header);
+      ring_headers_length =
+          Max_domains * sizeof(struct eventring_buffer_header);
 
       current_metadata->version = 1;
       current_metadata->max_domains = Max_domains;
@@ -191,7 +192,8 @@ create_and_start_ring_buffers(caml_domain_state *domain_state, void *data,
       current_metadata->ring_size_bytes =
           ring_size_words * sizeof(uint64_t);
       current_metadata->ring_size_elements = ring_size_words;
-      current_metadata->headers_offset = sizeof(struct eventring_metadata_header);
+      current_metadata->headers_offset =
+          sizeof(struct eventring_metadata_header);
       /* strictly we can calculate this in a consumer but for simplicity we
          store it in the metadata header */
       current_metadata->data_offset =
@@ -246,7 +248,8 @@ CAMLprim value caml_eventring_resume() {
 
   return Val_unit;
 }
-static struct eventring_buffer_header *get_ring_buffer_by_domain_id(int domain_id) {
+static struct eventring_buffer_header *get_ring_buffer_by_domain_id
+                                                              (int domain_id) {
   return (
       struct eventring_buffer_header *)((char *)current_metadata +
                             current_metadata->headers_offset +
@@ -393,7 +396,8 @@ void caml_ev_alloc(uint64_t sz) {
   if (sz < (EVENTRING_NUM_ALLOC_BUCKETS / 2)) {
     ++alloc_buckets[sz];
   } else if (sz < (EVENTRING_NUM_ALLOC_BUCKETS * 10 / 2)) {
-    ++alloc_buckets[sz / (EVENTRING_NUM_ALLOC_BUCKETS / 2) + (EVENTRING_NUM_ALLOC_BUCKETS / 2 - 1)];
+    ++alloc_buckets[sz / (EVENTRING_NUM_ALLOC_BUCKETS / 2)
+      + (EVENTRING_NUM_ALLOC_BUCKETS / 2 - 1)];
   } else {
     ++alloc_buckets[EVENTRING_NUM_ALLOC_BUCKETS - 1];
   }
@@ -408,7 +412,8 @@ void caml_ev_alloc_flush() {
   if ( !ring_is_active() )
     return;
 
-  write_to_ring(EV_RUNTIME, EV_ALLOC, 0, EVENTRING_NUM_ALLOC_BUCKETS, alloc_buckets, 0);
+  write_to_ring(EV_RUNTIME, EV_ALLOC, 0, EVENTRING_NUM_ALLOC_BUCKETS,
+                                                              alloc_buckets, 0);
 
   for (i = 1; i < EVENTRING_NUM_ALLOC_BUCKETS; i++) {
     alloc_buckets[i] = 0;
