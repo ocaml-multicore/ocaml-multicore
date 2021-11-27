@@ -12,12 +12,32 @@
 /*                                                                        */
 /**************************************************************************/
 
+#define CAML_INTERNALS
+
+#include "caml/alloc.h"
+#include "caml/callback.h"
+#include "caml/custom.h"
 #include "caml/eventring.h"
+#include "caml/fail.h"
+#include "caml/memory.h"
+#include "caml/misc.h"
+#include "caml/mlvalues.h"
+#include "caml/osdeps.h"
 
-
+#include <fcntl.h>
 #include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+
+#ifdef _WIN32
+#include <process.h>
+#include <wtypes.h>
+#elif defined(HAS_UNISTD)
+#include <unistd.h>
+#endif
 
 #define RING_FILE_NAME_MAX_LEN 512
 
@@ -62,7 +82,7 @@ caml_eventring_create_cursor(const char *eventring_path, int pid,
     return E_ALLOC_FAIL;
   }
 
-  eventring_loc = caml_stat_alloc_noexc(RING_FILE_NAME_LEN);
+  eventring_loc = caml_stat_alloc_noexc(RING_FILE_NAME_MAX_LEN);
 
   if (eventring_loc == NULL) {
     return E_ALLOC_FAIL;
@@ -73,11 +93,11 @@ caml_eventring_create_cursor(const char *eventring_path, int pid,
   }
 
   if (eventring_path) {
-    ret = snprintf_os(eventring_loc, RING_FILE_NAME_LEN, T("%s/%d.eventring"),
+    ret = snprintf_os(eventring_loc, RING_FILE_NAME_MAX_LEN, T("%s/%d.eventring"),
                       eventring_path, pid);
   } else {
     ret =
-        snprintf_os(eventring_loc, RING_FILE_NAME_LEN, T("%d.eventring"), pid);
+        snprintf_os(eventring_loc, RING_FILE_NAME_MAX_LEN, T("%d.eventring"), pid);
   }
 
   if (ret < 0) {
@@ -221,9 +241,9 @@ caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
         break;
       }
 
-      ring_mask = current_metadata->ring_size_elements - 1;
+      ring_mask = cursor->metadata->ring_size_elements - 1;
       header = ring_ptr[cursor->current_positions[domain_num] & ring_mask];
-      msg_length = RING_ITEM_LENGTH(header);
+      msg_length = EVENTRING_ITEM_LENGTH(header);
 
       if (msg_length > EVENTRING_MAX_MSG_LENGTH) {
         return E_CORRUPT_STREAM;
@@ -252,11 +272,11 @@ caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
         }
       }
 
-      switch (RING_ITEM_TYPE(header)) {
+      switch (EVENTRING_ITEM_TYPE(header)) {
       case EV_BEGIN:
         if (cursor->runtime_begin) {
           if( !cursor->runtime_begin(domain_num, callback_data, buf[1],
-                                      RING_ITEM_ID(header)) ) {
+                                      EVENTRING_ITEM_ID(header)) ) {
                                         early_exit = 1;
                                         continue;
                                       }
@@ -265,7 +285,7 @@ caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
       case EV_EXIT:
         if (cursor->runtime_end) {
           if( !cursor->runtime_end(domain_num, callback_data, buf[1],
-                                    RING_ITEM_ID(header)) ) {
+                                    EVENTRING_ITEM_ID(header)) ) {
                                       early_exit = 1;
                                       continue;
                                     };
@@ -274,7 +294,7 @@ caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
       case EV_COUNTER:
         if (cursor->runtime_counter) {
           if( !cursor->runtime_counter(domain_num, callback_data, buf[1],
-                                        RING_ITEM_ID(header), buf[2]) ) {
+                                        EVENTRING_ITEM_ID(header), buf[2]) ) {
                                           early_exit = 1;
                                           continue;
                                         };
@@ -291,14 +311,14 @@ caml_eventring_read_poll(struct caml_eventring_cursor *cursor,
       case EV_LIFECYCLE:
         if (cursor->lifecycle) {
           if( !cursor->lifecycle(domain_num, callback_data, buf[1],
-                                  RING_ITEM_ID(header), buf[2]) ) {
+                                  EVENTRING_ITEM_ID(header), buf[2]) ) {
                                     early_exit = 1;
                                     continue;
                                   }
         }
       }
 
-      if (RING_ITEM_TYPE(header) != EV_INTERNAL) {
+      if (EVENTRING_ITEM_TYPE(header) != EV_INTERNAL) {
         consumed++;
       }
 
@@ -403,9 +423,9 @@ static int ml_alloc(int domain_id, void *callback_data, uint64_t timestamp,
     int i;
 
     ts_val = caml_copy_int64(timestamp);
-    misc_val = caml_alloc(NUM_ALLOC_BUCKETS, 0);
+    misc_val = caml_alloc(EVENTRING_NUM_ALLOC_BUCKETS, 0);
 
-    for (i = 0; i < NUM_ALLOC_BUCKETS; i++) {
+    for (i = 0; i < EVENTRING_NUM_ALLOC_BUCKETS; i++) {
       Store_field(misc_val, i, Val_long(sz[i]));
     }
 

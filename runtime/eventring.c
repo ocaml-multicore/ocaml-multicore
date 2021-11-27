@@ -47,17 +47,6 @@
 
 typedef enum { EV_RUNTIME, EV_USER } ev_category;
 
-/* event header fields (for runtime events):
-| -- length (10 bits) -- | runtime or user event (1 bit) | event type (4 bits) |
-event id (13 bits)
-*/
-
-#define RING_ITEM_LENGTH(header) (((header) >> 54) & ((1UL << 10) - 1))
-#define RING_ITEM_IS_RUNTIME(header) !((header) | (1UL << 53))
-#define RING_ITEM_IS_USER(header) ((header) | (1UL << 53))
-#define RING_ITEM_TYPE(header) (((header) >> 49) & ((1UL << 4) - 1))
-#define RING_ITEM_ID(header) (((header) >> 36) & ((1UL << 13) - 1))
-
 static char *eventring_path;
 static struct eventring_metadata_header *current_metadata = NULL;
 static char *current_ring_buffer_loc = NULL;
@@ -308,7 +297,7 @@ static void write_to_ring(ev_category category, ev_message_type type,
     // head.
     uint64_t head_header = ring_ptr[ring_head & ring_mask];
 
-    ring_head += RING_ITEM_LENGTH(head_header);
+    ring_head += EVENTRING_ITEM_LENGTH(head_header);
 
     atomic_store_explicit(&domain_ring_header->ring_head, ring_head,
                           memory_order_release); // advance the ring head
@@ -387,8 +376,7 @@ void caml_ev_lifecycle(ev_lifecycle lifecycle, int64_t data) {
   }
 }
 
-#define NUM_ALLOC_BUCKETS 20
-static uint64_t alloc_buckets[NUM_ALLOC_BUCKETS] = {
+static uint64_t alloc_buckets[EVENTRING_NUM_ALLOC_BUCKETS] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 /* This function records allocations in caml_alloc_shr_aux in given bucket sizes
@@ -402,12 +390,12 @@ void caml_ev_alloc(uint64_t sz) {
   if (atomic_load_acq(&eventring_paused))
     return;
 
-  if (sz < (NUM_ALLOC_BUCKETS / 2)) {
+  if (sz < (EVENTRING_NUM_ALLOC_BUCKETS / 2)) {
     ++alloc_buckets[sz];
-  } else if (sz < (NUM_ALLOC_BUCKETS * 10 / 2)) {
-    ++alloc_buckets[sz / (NUM_ALLOC_BUCKETS / 2) + (NUM_ALLOC_BUCKETS / 2 - 1)];
+  } else if (sz < (EVENTRING_NUM_ALLOC_BUCKETS * 10 / 2)) {
+    ++alloc_buckets[sz / (EVENTRING_NUM_ALLOC_BUCKETS / 2) + (EVENTRING_NUM_ALLOC_BUCKETS / 2 - 1)];
   } else {
-    ++alloc_buckets[NUM_ALLOC_BUCKETS - 1];
+    ++alloc_buckets[EVENTRING_NUM_ALLOC_BUCKETS - 1];
   }
 }
 
@@ -422,9 +410,9 @@ void caml_ev_alloc_flush() {
   if (atomic_load_acq(&eventring_paused))
     return;
 
-  write_to_ring(EV_RUNTIME, EV_ALLOC, 0, NUM_ALLOC_BUCKETS, alloc_buckets, 0);
+  write_to_ring(EV_RUNTIME, EV_ALLOC, 0, EVENTRING_NUM_ALLOC_BUCKETS, alloc_buckets, 0);
 
-  for (i = 1; i < NUM_ALLOC_BUCKETS; i++) {
+  for (i = 1; i < EVENTRING_NUM_ALLOC_BUCKETS; i++) {
     alloc_buckets[i] = 0;
   }
 }

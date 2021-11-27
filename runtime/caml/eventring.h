@@ -161,7 +161,7 @@ extern value caml_eventring_resume();
     process id (or equivalent) of the startup OCaml process. This function will
     return a cursor which can we be used with caml_eventring_read_poll to read
     events from the eventrings. */
-CAMLextern eventring_error
+extern eventring_error
 caml_eventring_create_cursor(const char *eventring_path, int pid,
                              struct caml_eventring_cursor **cursor_res);
 
@@ -201,7 +201,7 @@ extern void caml_eventring_set_lost_events(
     int (*f)(int domain_id, void *callback_data, int lost_words));
 
 /* frees a cursor obtained from caml_eventring_creator_cursor */
-CAMLextern void
+extern void
 caml_eventring_free_cursor(struct caml_eventring_cursor *cursor);
 
 /* polls the eventring pointed to by [cursor] and calls the appropriate callback
@@ -241,8 +241,19 @@ struct eventring_metadata_header {
   uint64_t padding; /* Make the header a multiple of 64 bytes */
 };
 
+#define EVENTRING_NUM_ALLOC_BUCKETS 20
 #define EVENTRING_MAX_MSG_LENGTH (1 << 10)
 
+/* event header fields (for runtime events):
+| -- length (10 bits) -- | runtime or user event (1 bit) | event type (4 bits) |
+event id (13 bits)
+*/
+
+#define EVENTRING_ITEM_LENGTH(header) (((header) >> 54) & ((1UL << 10) - 1))
+#define EVENTRING_ITEM_IS_RUNTIME(header) !((header) | (1UL << 53))
+#define EVENTRING_ITEM_IS_USER(header) ((header) | (1UL << 53))
+#define EVENTRING_ITEM_TYPE(header) (((header) >> 49) & ((1UL << 4) - 1))
+#define EVENTRING_ITEM_ID(header) (((header) >> 36) & ((1UL << 13) - 1))
 /* Functions for putting runtime data on to the eventring */
 
 void caml_eventring_init();
