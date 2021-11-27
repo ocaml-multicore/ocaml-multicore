@@ -596,9 +596,6 @@ static void* backup_thread_func(void* v)
   SET_Caml_state((void*)(di->tls_area));
   caml_domain_set_name(T("BackupThread"));
 
-  /* TODO: how does the backup thread interact with the eventlog infra?
-   * caml_ev_tag_self_as_backup_thread(); */
-
   msg = atomic_load_acq (&di->backup_thread_msg);
   while (msg != BT_TERMINATE) {
     CAMLassert (msg <= BT_TERMINATE);

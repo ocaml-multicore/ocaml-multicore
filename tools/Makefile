@@ -272,7 +272,6 @@ clean::
 
 install::
 	$(INSTALL_DATA) \
-	  eventlog_metadata \
 	  "$(INSTALL_LIBDIR)"
 
 # Copy a bytecode executable, stripping debug info

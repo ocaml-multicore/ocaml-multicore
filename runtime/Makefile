@@ -22,7 +22,7 @@ include $(ROOTDIR)/Makefile.common
 BYTECODE_C_SOURCES := $(addsuffix .c, \
   interp misc fix_code startup_aux startup_byt major_gc \
   minor_gc memory alloc roots globroots fail_byt signals \
-  signals_byt printexc backtrace_byt backtrace compare ints eventring eventlog \
+  signals_byt printexc backtrace_byt backtrace compare ints eventring \
   floats str array io extern intern hash sys meta parsing gc_ctrl md5 obj \
   lexing callback debugger weak finalise custom dynlink \
   platform fiber shared_heap addrmap \
@@ -32,7 +32,7 @@ BYTECODE_C_SOURCES := $(addsuffix .c, \
 NATIVE_C_SOURCES := $(addsuffix .c, \
   startup_aux startup_nat main fail_nat roots signals \
   signals_nat misc major_gc minor_gc memory alloc compare ints \
-  floats str array io extern intern hash sys parsing gc_ctrl eventring eventlog\
+  floats str array io extern intern hash sys parsing gc_ctrl eventring \
   md5 obj lexing $(UNIX_OR_WIN32) printexc callback weak finalise custom \
   globroots backtrace_nat backtrace dynlink_nat debugger meta \
   platform fiber shared_heap addrmap frame_descriptors \
