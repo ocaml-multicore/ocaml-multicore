@@ -129,7 +129,7 @@ external start : unit -> unit = "caml_eventring_start"
 external pause : unit -> unit = "caml_eventring_pause"
 external resume : unit -> unit = "caml_eventring_resume"
 external create_cursor : (string * int) option -> cursor
-                                        = "caml_eventring_create_wrapped_cursor"
-external free_cursor : cursor -> unit = "caml_eventring_free_wrapped_cursor"
+                                        = "caml_eventring_create_cursor_ml"
+external free_cursor : cursor -> unit = "caml_eventring_free_cursor_ml"
 external read_poll : cursor -> Callbacks.t -> int option -> int
-                                        = "caml_eventring_read_poll_wrapped"
+                                        = "caml_eventring_read_poll_ml"
