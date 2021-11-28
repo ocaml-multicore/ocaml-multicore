@@ -13,7 +13,7 @@
 (**************************************************************************)
 
 type runtime_counter =
-    EV_C_ALLOC_JUMP
+  EV_C_ALLOC_JUMP
 | EV_C_FORCE_MINOR_ALLOC_SMALL
 | EV_C_FORCE_MINOR_MAKE_VECT
 | EV_C_FORCE_MINOR_SET_MINOR_HEAP_SIZE

@@ -142,11 +142,11 @@ CAMLexport void caml_do_exit(int retcode)
       }
 
       caml_gc_message(0x400, "allocated_words: %"ARCH_INTNAT_PRINTF_FORMAT"d\n",
-                      (intnat)allocated_words);
+                    (intnat)allocated_words);
       caml_gc_message(0x400, "minor_words: %"ARCH_INTNAT_PRINTF_FORMAT"d\n",
-                      (intnat) minwords);
+                    (intnat) minwords);
       caml_gc_message(0x400, "promoted_words: %"ARCH_INTNAT_PRINTF_FORMAT"d\n",
-                      (intnat) s.promoted_words);
+                    (intnat) s.promoted_words);
       caml_gc_message(0x400, "major_words: %"ARCH_INTNAT_PRINTF_FORMAT"d\n",
                       (intnat) majwords);
       caml_gc_message(0x400,
@@ -159,7 +159,7 @@ CAMLexport void caml_do_exit(int retcode)
           "forced_major_collections: %"ARCH_INTNAT_PRINTF_FORMAT"d\n",
           (intnat)s.forced_major_collections);
       caml_gc_message(0x400, "heap_words: %"ARCH_INTNAT_PRINTF_FORMAT"d\n",
-                      heap_words);
+                    heap_words);
       caml_gc_message(0x400, "top_heap_words: %"ARCH_INTNAT_PRINTF_FORMAT"d\n",
                       top_heap_words);
       caml_gc_message(0x400, "mean_space_overhead: %lf\n",

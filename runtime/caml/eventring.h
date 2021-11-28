@@ -162,7 +162,13 @@ typedef enum {
 
 /* Starts eventring. Needs to be called before [caml_eventring_create_cursor] */
 extern value caml_eventring_start();
+
+/* Pauses eventring. No new events (other than the pause itself) will be written
+   to the eventrings by this domain immediately and all other domains soon. */
 extern value caml_eventring_pause();
+
+/* Removes eventring. New events (as well as a resume event) will be written to
+   this domain immediately and all other domains soon. */
 extern value caml_eventring_resume();
 
 /* [eventring_path] is a path to a directory containing eventrings or NULL.
