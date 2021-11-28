@@ -1284,7 +1284,7 @@ static void domain_terminate()
   caml_free_intern_state();
   caml_free_extern_state();
   caml_teardown_major_gc();
-  // FIXME: CAML_EVENTRING_DESTROY();
+
   caml_teardown_shared_heap(domain_state->shared_heap);
   domain_state->shared_heap = 0;
   caml_free_minor_tables(domain_state->minor_tables);

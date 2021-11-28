@@ -98,7 +98,7 @@ value caml_startup_common(char_os **argv, int pooling)
 
   /* Determine options */
   caml_parse_ocamlrunparam();
-  CAML_EVENTRING_INIT();
+
 #ifdef DEBUG
   caml_gc_message (-1, "### OCaml runtime: debug mode ###\n");
 #endif
@@ -115,6 +115,10 @@ value caml_startup_common(char_os **argv, int pooling)
 #endif
   caml_init_custom_operations();
   caml_init_gc ();
+
+  /* eventring's init can cause a stop-the-world pause, so it must be done
+     after we've initialised the garbage collector */
+  CAML_EVENTRING_INIT();
 
   init_segments();
   caml_init_signals();

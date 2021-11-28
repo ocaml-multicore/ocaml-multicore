@@ -47,6 +47,7 @@
 #endif
 #include "caml/alloc.h"
 #include "caml/debugger.h"
+#include "caml/eventring.h"
 #include "caml/fail.h"
 #include "caml/gc_ctrl.h"
 #include "caml/major_gc.h"
@@ -165,6 +166,9 @@ CAMLexport void caml_do_exit(int retcode)
                       caml_mean_space_overhead());
     }
   }
+
+/* Tear down eventring before we leave */
+CAML_EVENTRING_DESTROY();
 
 #ifndef NATIVE_CODE
   caml_debugger(PROGRAM_EXIT, Val_unit);

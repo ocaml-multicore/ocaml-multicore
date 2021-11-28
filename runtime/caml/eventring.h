@@ -156,7 +156,8 @@ typedef enum {
   E_CORRUPT_STREAM = -2,
   E_ALLOC_FAIL = -3,
   E_PATH_FAILURE = -4,
-  E_STAT_FAILURE = -5
+  E_STAT_FAILURE = -5,
+  E_NO_CURRENT_RING = -6
 } eventring_error;
 
 /* Starts eventring. Needs to be called before [caml_eventring_create_cursor] */
@@ -164,10 +165,11 @@ extern value caml_eventring_start();
 extern value caml_eventring_pause();
 extern value caml_eventring_resume();
 
-/* [eventring_path] is a path to a directory containing eventrings. [pid] is the
-    process id (or equivalent) of the startup OCaml process. This function will
-    return a cursor which can we be used with caml_eventring_read_poll to read
-    events from the eventrings. */
+/* [eventring_path] is a path to a directory containing eventrings or NULL.
+   [pid] is the process id (or equivalent) of the startup OCaml process, if < 0
+   then a cursor for the current process is created (and [eventring_path] is
+   ignored). This function will return a cursor which can we be used with
+   caml_eventring_read_poll to read events from the eventrings. */
 extern eventring_error
 caml_eventring_create_cursor(const char *eventring_path, int pid,
                              struct caml_eventring_cursor **cursor_res);
@@ -222,7 +224,7 @@ CAMLextern eventring_error caml_eventring_read_poll(
     void *callback_data,
     uintnat max_events, uintnat *events_consumed);
 
-/* OCaml API for reading from the eventring */
+/* OCaml API for reading from the eventring. Documented in eventring.ml */
 extern value caml_eventring_create_cursor_ml(value path_pid);
 extern value caml_eventring_free_cursor_ml(value wrapped_cursor);
 extern value caml_eventring_read_poll_ml(value wrapped_cursor,
@@ -261,10 +263,20 @@ event id (13 bits)
 #define EVENTRING_ITEM_IS_USER(header) ((header) | (1UL << 53))
 #define EVENTRING_ITEM_TYPE(header) (((header) >> 49) & ((1UL << 4) - 1))
 #define EVENTRING_ITEM_ID(header) (((header) >> 36) & ((1UL << 13) - 1))
-/* Functions for putting runtime data on to the eventring */
 
+/* Set up eventring (and check if we need to start it immediately). Called
+   from startup* */
 void caml_eventring_init();
+
+/* Destroy all allocated eventring structures and clear up the ring. Called
+   from [caml_sys_exit] */
 void caml_eventring_destroy();
+
+/* Returns the location of the eventring for the current process if started or
+   NULL otherwise */
+char* caml_eventring_current_location();
+
+/* Functions for putting runtime data on to the eventring */
 void caml_ev_begin(ev_runtime_phase phase);
 void caml_ev_end(ev_runtime_phase phase);
 void caml_ev_counter(ev_runtime_counter counter, uint64_t val);

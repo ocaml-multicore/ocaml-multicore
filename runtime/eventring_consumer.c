@@ -64,10 +64,6 @@ struct caml_eventring_cursor {
 
 /* C-API for reading from an eventring */
 
-/* [eventring_path] is a path to a directory containing eventrings. [pid] is the
-    process id (or equivalent) of the startup OCaml process. This function will
-    return a cursor which can we be used with [caml_eventring_read_poll] to read
-    events from the eventrings. */
 eventring_error
 caml_eventring_create_cursor(const char *eventring_path, int pid,
                              struct caml_eventring_cursor **cursor_res) {
@@ -88,23 +84,29 @@ caml_eventring_create_cursor(const char *eventring_path, int pid,
     return E_ALLOC_FAIL;
   }
 
+  /* If pid < 0 then we create a cursor for the current process */
   if (pid < 0) {
-    pid = getpid();
-  }
+    eventring_loc = caml_eventring_current_location();
 
-  if (eventring_path) {
-    ret = snprintf_os(eventring_loc, RING_FILE_NAME_MAX_LEN,
-                    T("%s/%d.eventring"), eventring_path, pid);
+    if( eventring_loc == NULL ) {
+      return E_NO_CURRENT_RING;
+    }
   } else {
-    ret =
-        snprintf_os(eventring_loc, RING_FILE_NAME_MAX_LEN,
-                    T("%d.eventring"), pid);
-  }
+  /* In this case we are reading the ring for a different process */
+    if (eventring_path) {
+      ret = snprintf_os(eventring_loc, RING_FILE_NAME_MAX_LEN,
+                      T("%s/%d.eventring"), eventring_path, pid);
+    } else {
+      ret =
+          snprintf_os(eventring_loc, RING_FILE_NAME_MAX_LEN,
+                      T("%d.eventring"), pid);
+    }
 
-  if (ret < 0) {
-    caml_stat_free(cursor);
-    caml_stat_free(eventring_loc);
-    return E_PATH_FAILURE;
+    if (ret < 0) {
+      caml_stat_free(cursor);
+      caml_stat_free(eventring_loc);
+      return E_PATH_FAILURE;
+    }
   }
 
   ring_fd = open(eventring_loc, O_RDONLY, 0);
@@ -510,7 +512,17 @@ CAMLprim value caml_eventring_create_cursor_ml(value path_pid_option) {
   res = caml_eventring_create_cursor(path, pid, &cursor);
 
   if (res != E_SUCCESS) {
-    caml_failwith("Could not obtain cursor");
+    switch(res) {
+      case E_PATH_FAILURE:
+        caml_failwith("Could not construct path for cursor");
+      case E_STAT_FAILURE:
+        caml_failwith(
+          "Could create cursor for specified path. Was eventring started?");
+      case E_NO_CURRENT_RING:
+        caml_failwith("No ring for current process. Was eventring started?");
+      default:
+        caml_failwith("Could not obtain cursor");
+    }
   }
 
   caml_eventring_set_runtime_begin(cursor, ml_runtime_begin);

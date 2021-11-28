@@ -49,7 +49,7 @@ typedef enum { EV_RUNTIME, EV_USER } ev_category;
 
 static char *eventring_path;
 static struct eventring_metadata_header *current_metadata = NULL;
-static char *current_ring_buffer_loc = NULL;
+static char *current_ring_loc = NULL;
 static int current_ring_total_size;
 
 static int ring_size_words;
@@ -101,11 +101,11 @@ static void write_to_ring(ev_category category, ev_message_type type,
                           int word_offset);
 
 void caml_eventring_init() {
-  eventring_path = caml_secure_getenv(T("OCAML_EVENTRING_PATH"));
+  eventring_path = caml_secure_getenv(T("OCAML_EVENTRING_PREFIX"));
 
   ring_size_words = 1 << caml_params->eventring_size;
 
-  if (caml_secure_getenv(T("OCAML_EVENTRING_ENABLED"))) {
+  if (caml_secure_getenv(T("OCAML_EVENTRING_START"))) {
     caml_eventring_start();
   }
 }
@@ -116,13 +116,22 @@ static void teardown_eventring(caml_domain_state *domain_state, void *data,
   caml_global_barrier();
   if (participanting_domains[0] == domain_state) {
     munmap(current_metadata, current_ring_total_size);
-    unlink(current_ring_buffer_loc);
+    unlink(current_ring_loc);
 
+    caml_stat_free(current_ring_loc);
     current_metadata = NULL;
 
     atomic_store_rel(&eventring_enabled, 0);
   }
   caml_global_barrier();
+}
+
+char* caml_eventring_current_location() {
+  if( atomic_load_acq(&eventring_enabled) ) {
+    return current_ring_loc;
+  } else {
+    return NULL;
+  }
 }
 
 void caml_eventring_destroy() {
@@ -147,15 +156,15 @@ create_and_start_ring_buffers(caml_domain_state *domain_state, void *data,
       int ring_fd, ret, ring_headers_length;
       long int pid;
 
-      current_ring_buffer_loc = caml_stat_alloc(EVENTRING_MAX_MSG_LENGTH);
+      current_ring_loc = caml_stat_alloc(EVENTRING_MAX_MSG_LENGTH);
 
       pid = getpid();
 
       if (eventring_path) {
-        snprintf_os(current_ring_buffer_loc, EVENTRING_MAX_MSG_LENGTH,
+        snprintf_os(current_ring_loc, EVENTRING_MAX_MSG_LENGTH,
                     T("%s/%ld.eventring"), eventring_path, pid);
       } else {
-        snprintf_os(current_ring_buffer_loc, EVENTRING_MAX_MSG_LENGTH,
+        snprintf_os(current_ring_loc, EVENTRING_MAX_MSG_LENGTH,
                     T("%ld.eventring"), pid);
       }
 
@@ -165,12 +174,11 @@ create_and_start_ring_buffers(caml_domain_state *domain_state, void *data,
           sizeof(struct eventring_metadata_header);
 
       ring_fd =
-          open(current_ring_buffer_loc, O_RDWR | O_CREAT, (S_IRUSR | S_IWUSR));
-      caml_stat_free(current_ring_buffer_loc);
+          open(current_ring_loc, O_RDWR | O_CREAT, (S_IRUSR | S_IWUSR));
 
       if (ring_fd < 0) {
         caml_fatal_error("Couldn't open ring buffer loc: %s",
-                         current_ring_buffer_loc);
+                         current_ring_loc);
       }
 
       ret = ftruncate(ring_fd, current_ring_total_size);

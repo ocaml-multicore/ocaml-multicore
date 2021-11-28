@@ -290,7 +290,7 @@ CAMLexport void caml_main(char_os **argv)
 
   /* Determine options */
   caml_parse_ocamlrunparam();
-  CAML_EVENTRING_INIT();
+
 #ifdef DEBUG
   caml_gc_message (-1, "### OCaml runtime: debug mode ###\n");
 #endif
@@ -356,6 +356,10 @@ CAMLexport void caml_main(char_os **argv)
   caml_read_section_descriptors(fd, &trail);
   /* Initialize the abstract machine */
   caml_init_gc ();
+
+  /* bring up eventring after we've initialised the gc */
+  CAML_EVENTRING_INIT();
+
   Caml_state->external_raise = NULL;
   /* Initialize the interpreter */
   caml_interprete(NULL, 0);
@@ -423,7 +427,7 @@ CAMLexport value caml_startup_code_exn(
 
   /* Determine options */
   caml_parse_ocamlrunparam();
-  CAML_EVENTRING_INIT();
+
 #ifdef DEBUG
   caml_gc_message (-1, "### OCaml runtime: debug mode ###\n");
 #endif
@@ -442,6 +446,10 @@ CAMLexport value caml_startup_code_exn(
 
   /* Initialize the abstract machine */
   caml_init_gc ();
+
+  /* eventring has to be brought up after the gc */
+  CAML_EVENTRING_INIT();
+
   exe_name = caml_executable_name();
   if (exe_name == NULL) exe_name = caml_search_exe_in_path(argv[0]);
   Caml_state->external_raise = NULL;
