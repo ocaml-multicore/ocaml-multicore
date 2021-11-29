@@ -566,7 +566,6 @@ void caml_empty_minor_heap_promote(caml_domain_state* domain,
   #endif
 
   /* unconditionally promote custom blocks so accounting is correct */
-  CAML_EV_BEGIN(EV_MINOR_FINALIZERS_OLDIFY);
   for (elt = self_minor_tables->custom.base;
        elt < self_minor_tables->custom.ptr; elt++) {
     value *v = &elt->block;
