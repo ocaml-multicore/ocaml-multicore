@@ -491,7 +491,7 @@ static struct custom_operations cursor_operations = {
     custom_compare_ext_default, custom_fixed_length_default};
 
 CAMLprim value caml_eventring_create_cursor_ml(value path_pid_option) {
-  CAMLparam0();
+  CAMLparam1(path_pid_option);
   CAMLlocal1(wrapper);
   struct caml_eventring_cursor *cursor;
   int pid;
@@ -553,7 +553,7 @@ CAMLprim value caml_eventring_free_cursor_ml(value wrapped_cursor) {
 CAMLprim value caml_eventring_read_poll_ml(value wrapped_cursor,
                                                 value callbacks_val,
                                                 value max_events_val) {
-  CAMLparam2(wrapped_cursor, callbacks_val);
+  CAMLparam3(wrapped_cursor, callbacks_val, max_events_val);
 
   uintnat events_consumed = 0;
   int max_events = Is_some(max_events_val) ? Some_val(max_events_val) : 0;
