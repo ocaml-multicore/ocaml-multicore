@@ -216,8 +216,12 @@ let join { termination_mutex; state; _ } =
 
 let get_id { domain; _ } = domain
 
+let string_of_id (id : id) = string_of_int (id :> int)
+
 let self () = Raw.self ()
 
 external set_name : string -> unit = "caml_ml_domain_set_name"
 
-external is_main_domain : unit -> bool = "caml_ml_domain_is_main_domain"
+let is_main_domain () =
+  let id = Raw.self () in
+  (id :> int) == 0

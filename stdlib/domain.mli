@@ -31,11 +31,14 @@ val join : 'a t -> 'a
     Domains may only be joined once: subsequent uses of [join d]
     raise Invalid_argument. *)
 
-type id = private int
+type id
 (** Domains have unique integer identifiers *)
 
 val get_id : 'a t -> id
 (** [get_id d] returns the identifier of the domain [d] *)
+
+val string_of_id : id -> string
+(** [string_of_id id] converts the argument to its string representation *)
 
 val self : unit -> id
 (** [self ()] is the identifier of the currently running domain *)
