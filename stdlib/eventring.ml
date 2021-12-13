@@ -33,7 +33,7 @@ type runtime_counter =
 | EV_C_REQUEST_MINOR_REALLOC_CUSTOM_TABLE
 
 type runtime_phase =
-EV_COMPACT_MAIN
+  EV_COMPACT_MAIN
 | EV_COMPACT_RECOMPACT
 | EV_EXPLICIT_GC_SET
 | EV_EXPLICIT_GC_STAT
@@ -93,17 +93,21 @@ EV_COMPACT_MAIN
 | EV_DOMAIN_CONDITION_WAIT
 
 type ev_lifecycle =
-    EV_RING_START
-|   EV_RING_STOP
-|   EV_RING_PAUSE
-|   EV_RING_RESUME
+  EV_RING_START
+| EV_RING_STOP
+| EV_RING_PAUSE
+| EV_RING_RESUME
+| EV_FORK_PARENT
+| EV_FORK_CHILD
+| EV_DOMAIN_SPAWN
+| EV_DOMAIN_TERMINATE
 
 type cursor
 
 module Timestamp = struct
   type t = int64
 
-  let of_int64 t =
+  let to_int64 t =
     t
 end
 

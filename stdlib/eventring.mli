@@ -12,8 +12,28 @@
 (*                                                                        *)
 (**************************************************************************)
 
+(** Eventring - ring buffer-based runtime tracing
+
+    This module enables users to enable and subscribe to tracing events
+    from the Garbage Collector and othe parts of the OCaml runtime. This can
+    be useful for diagnostic or performance monitoring purposes. This module
+    can be used to subscribe to events for the current process or external
+    processes asynchronously.
+
+    When enabled (either via setting the OCAML_EVENTRING_START environment
+    variable or calling Eventring.start) a file with the pid of the process and
+    extension .eventring will be created. By default this is in the current
+    directory but can be over-ridden by the OCAML_EVENTRING_PREFIX environent
+    variable. Each domain maintains its own ring buffer in a section of the
+    larger file into which it emits events.
+
+    There is additionally a set of C APIs in eventring.h that can enable
+    zero-impact monitoring of the current process or bindings for other
+    languages.
+*)
+
 type runtime_counter =
-    EV_C_ALLOC_JUMP
+  EV_C_ALLOC_JUMP
 | EV_C_FORCE_MINOR_ALLOC_SMALL
 | EV_C_FORCE_MINOR_MAKE_VECT
 | EV_C_FORCE_MINOR_SET_MINOR_HEAP_SIZE
@@ -31,9 +51,10 @@ type runtime_counter =
 | EV_C_REQUEST_MINOR_REALLOC_REF_TABLE
 | EV_C_REQUEST_MINOR_REALLOC_EPHE_REF_TABLE
 | EV_C_REQUEST_MINOR_REALLOC_CUSTOM_TABLE
+(** The type for counter events emitted by the runtime *)
 
 type runtime_phase =
-    EV_COMPACT_MAIN
+  EV_COMPACT_MAIN
 | EV_COMPACT_RECOMPACT
 | EV_EXPLICIT_GC_SET
 | EV_EXPLICIT_GC_STAT
@@ -91,24 +112,32 @@ type runtime_phase =
 | EV_MINOR_REMEMBERED_SET_PROMOTE
 | EV_MINOR_LOCAL_ROOTS_PROMOTE
 | EV_DOMAIN_CONDITION_WAIT
+(** The type for span events emitted by the runtime *)
 
 type ev_lifecycle =
-    EV_RING_START
-|   EV_RING_STOP
-|   EV_RING_PAUSE
-|   EV_RING_RESUME
+  EV_RING_START
+| EV_RING_STOP
+| EV_RING_PAUSE
+| EV_RING_RESUME
+| EV_FORK_PARENT
+| EV_FORK_CHILD
+| EV_DOMAIN_SPAWN
+| EV_DOMAIN_TERMINATE
+(** Lifecycle events for the ring itself *)
 
 type cursor
+(** Type of the cursor used when consuming *)
 
-(* abstract the int64 to allow for future changes *)
 module Timestamp : sig
     type t
+    (** Type for the int64 timestamp to allow for future changes *)
 
-    val of_int64 : t -> int64
+    val to_int64 : t -> int64
 end
 
 module Callbacks : sig
   type t
+  (** Type of callbacks *)
 
   val create : ?runtime_begin:(Domain.id -> Timestamp.t -> runtime_phase
                                 -> unit) ->
@@ -120,11 +149,38 @@ module Callbacks : sig
              ?lifecycle:(Domain.id -> Timestamp.t -> ev_lifecycle
                             -> int option -> unit) ->
              ?lost_events:(Domain.id -> int -> unit) -> unit -> t
+  (** Create a [Callback] that optionally subscribes to one or more runtime
+      events. A [runtime_begin] callback is called when the runtime enters a new
+      phase (e.g a runtime_begin with EV_MINOR is called at the start of a minor
+      GC). A [runtime_end] callback is called when the runtime leaves a certain
+      phase. The [runtime_counter] callback is called when a counter is emitted
+      by the runtime. [lifecycle] callbacks are called when the ring undergoes
+      a change in lifecycle and a consumer may need to respond. [alloc]
+      callbacks are currently only called on the instrumented runtime.
+      [lost_events] callbacks are called if the consumer code detects some
+      unconsumed events have been overwritten.
+      *)
 end
 
 val start : unit -> unit
+(** Start eventring on the current process *)
+
 val pause : unit -> unit
+(** Pause eventring on the current process *)
+
 val resume : unit -> unit
+(** Resume eventring on the current process *)
+
 val create_cursor : (string * int) option -> cursor
+(** [create_cursor path_pid] creates a cursor to read from an eventring. If
+    [path_pid] is None then a cursor is created for the current process.
+    Otherwise the pair contains a string [path] and int [pid] for the
+    eventring of an external process to monitor. *)
+
 val free_cursor : cursor -> unit
+(** Free a previously created eventring cursor *)
+
 val read_poll : cursor -> Callbacks.t -> int option -> int
+(** [read_poll cursor callbacks max_option] calls the corresponding functions
+    on [callbacks] for up to [max_option] events read off [cursor]'s eventring
+    and returns the number of events read. *)
