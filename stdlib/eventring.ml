@@ -128,8 +128,9 @@ module Callbacks = struct
 external start : unit -> unit = "caml_eventring_start"
 external pause : unit -> unit = "caml_eventring_pause"
 external resume : unit -> unit = "caml_eventring_resume"
+
 external create_cursor : (string * int) option -> cursor
-                                        = "caml_eventring_create_cursor_ml"
-external free_cursor : cursor -> unit = "caml_eventring_free_cursor_ml"
+                                        = "caml_ml_eventring_create_cursor"
+external free_cursor : cursor -> unit = "caml_ml_eventring_free_cursor"
 external read_poll : cursor -> Callbacks.t -> int option -> int
-                                        = "caml_eventring_read_poll_ml"
+                                        = "caml_ml_eventring_read_poll"
