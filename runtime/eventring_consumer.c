@@ -501,6 +501,8 @@ CAMLprim value caml_ml_eventring_create_cursor(value path_pid_option) {
   wrapper = caml_alloc_custom(&cursor_operations,
                               sizeof(struct caml_eventring_cursor *), 0, 1);
 
+  Cursor_val(wrapper) = NULL;
+
   if (Is_some(path_pid_option)) {
     path = String_val(Field(path_pid_option, 0));
     pid = Int_val(Field(path_pid_option, 1));
