@@ -12,9 +12,9 @@ let id () = ()
 
 let newdom_id () =
   let d = Domain.spawn id in
-  let n = Domain.get_id d in
+  let n = Domain.get_id d |> string_of_id |> int_of_string in
   join d;
-  (n :> int)
+  n
 
 let test_domain_reuse () =
   (* checks that domain slots are getting reused quickly,

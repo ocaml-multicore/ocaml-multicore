@@ -25,7 +25,7 @@ let test_fetch_add () =
   let r = Atomic.make 0 in
   (* step is relatively prime to Array.length arr *)
   let loop () =
-    let self = (Domain.self () :> int) in
+    let self = (Domain.self () |> Domain.string_of_id |> int_of_string) in
     for i = 1 to count do
       let n = Atomic.fetch_and_add r step mod Array.length arr in
       assert (arr.(n) == (-1));
