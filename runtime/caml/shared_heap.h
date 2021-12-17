@@ -23,7 +23,10 @@ uintnat caml_top_heap_words(struct caml_heap_state*);
 uintnat caml_heap_blocks(struct caml_heap_state*);
 
 struct pool* caml_pool_of_shared_block(value v);
-struct domain* caml_owner_of_shared_block(value v);
+struct domain* caml_owner_of_pool(struct pool* p);
+
+void caml_acquire_pool_adoption_lock();
+void caml_release_pool_adoption_lock();
 
 void caml_shared_unpin(value v);
 

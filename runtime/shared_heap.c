@@ -90,11 +90,12 @@ struct caml_heap_state* caml_init_shared_heap() {
   return heap;
 }
 
-static int move_all_pools(pool** src, pool** dst, struct domain* new_owner) {
+static int move_all_pools(pool** src, struct domain* old_owner, pool** dst, struct domain* new_owner) {
   int count = 0;
   while (*src) {
     pool* p = *src;
     *src = p->next;
+    Assert(p->owner == old_owner);
     p->owner = new_owner;
     p->next = *dst;
     *dst = p;
@@ -109,9 +110,9 @@ void caml_teardown_shared_heap(struct caml_heap_state* heap) {
   caml_plat_lock(&pool_freelist.lock);
   for (i = 0; i < NUM_SIZECLASSES; i++) {
     released +=
-      move_all_pools(&heap->avail_pools[i], &pool_freelist.global_avail_pools[i], NULL);
+      move_all_pools(&heap->avail_pools[i], heap->owner, &pool_freelist.global_avail_pools[i], NULL);
     released +=
-      move_all_pools(&heap->full_pools[i], &pool_freelist.global_full_pools[i], NULL);
+      move_all_pools(&heap->full_pools[i], heap->owner, &pool_freelist.global_full_pools[i], NULL);
     /* should be swept by now */
     Assert(!heap->unswept_avail_pools[i]);
     Assert(!heap->unswept_full_pools[i]);
@@ -246,6 +247,7 @@ static pool* pool_global_adopt(struct caml_heap_state* local, sizeclass sz)
 
     if( r ) {
       pool_freelist.global_avail_pools[sz] = r->next;
+      r->owner = local->owner;
       r->next = 0;
       local->avail_pools[sz] = r;
 
@@ -279,6 +281,7 @@ static pool* pool_global_adopt(struct caml_heap_state* local, sizeclass sz)
 
     if( r ) {
       pool_freelist.global_full_pools[sz] = r->next;
+      r->owner = local->owner;
       r->next = local->full_pools[sz];
       local->full_pools[sz] = r;
 
@@ -418,6 +421,18 @@ struct pool* caml_pool_of_shared_block(value v)
   } else {
     return 0;
   }
+}
+
+struct domain* caml_owner_of_pool(struct pool* p) {
+  return p->owner;
+}
+
+void caml_acquire_pool_adoption_lock() {
+  caml_plat_lock(&pool_freelist.lock);
+}
+
+void caml_release_pool_adoption_lock() {
+  caml_plat_unlock(&pool_freelist.lock);
 }
 
 /* Sweeping */
@@ -808,9 +823,11 @@ void caml_cycle_heap(struct caml_heap_state* local) {
   caml_plat_lock(&pool_freelist.lock);
   for (i = 0; i < NUM_SIZECLASSES; i++) {
     received_p += move_all_pools(&pool_freelist.global_avail_pools[i],
+                                 NULL,
                                  &local->unswept_avail_pools[i],
                                  local->owner);
     received_p += move_all_pools(&pool_freelist.global_full_pools[i],
+                                 NULL,
                                  &local->unswept_full_pools[i],
                                  local->owner);
   }
