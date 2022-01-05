@@ -50,6 +50,9 @@
 #include <mach-o/dyld.h>
 #endif
 #include <pthread.h>
+#if defined(__OpenBSD__) || defined(__FreeBSD__)
+#include <pthread_np.h>
+#endif
 #include "caml/fail.h"
 #include "caml/memory.h"
 #include "caml/misc.h"
@@ -441,20 +444,16 @@ int caml_thread_setname(const char* name)
 {
 #ifdef __APPLE__
   pthread_setname_np(name);
-  return 0;
-#else
-#ifdef _GNU_SOURCE
-  int ret;
+#else /* not apple */
   pthread_t self = pthread_self();
-
-  ret = pthread_setname_np(self, name);
-  if (ret == ERANGE)
+#if defined(__OpenBSD__) || defined(__FreeBSD__)
+  pthread_set_name_np(self, name);
+#else /* linux glibc/musl or NetBSD */
+  if (pthread_setname_np(self, name) != 0)
     return -1;
-  return 0;
-#else /* not glibc, not apple */
-  return 0;
 #endif
 #endif
+  return 0;
 }
 
 void caml_init_os_params(void)
