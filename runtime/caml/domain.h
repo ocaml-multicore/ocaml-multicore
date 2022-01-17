@@ -42,7 +42,7 @@ void caml_handle_gc_interrupt(void);
 void caml_handle_gc_interrupt_no_async_exceptions(void);
 void caml_handle_incoming_interrupts(void);
 
-void caml_interrupt_self(void);
+CAMLextern void caml_interrupt_self(void);
 
 void caml_print_stats(void);
 
