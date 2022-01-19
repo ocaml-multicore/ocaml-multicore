@@ -80,7 +80,7 @@ CAMLdeprecated_typedef(addr, char *);
 
 #ifndef CAMLDLLIMPORT
   #if defined(SUPPORT_DYNAMIC_LINKING) && defined(ARCH_SIXTYFOUR) \
-      && defined(__CYGWIN__)
+      && (defined(__CYGWIN__) || defined(__MINGW32__))
     #define CAMLDLLIMPORT __declspec(dllimport)
   #else
     #define CAMLDLLIMPORT
@@ -418,7 +418,7 @@ int caml_runtime_warnings_active(void);
                       | ((uintnat) (x) << 16) \
                       | ((uintnat) (x) << 48))
 #define Is_debug_tag(x) \
-  (((x) & 0xff00ffffff00fffful) == 0xD700D7D7D700D6D7ul)
+  (((x) & INT64_LITERAL(0xff00ffffff00ffffu)) == INT64_LITERAL(0xD700D7D7D700D6D7u))
 #else
 #define Debug_tag(x) (0xD700D6D7ul | ((uintnat) (x) << 16))
 #define Is_debug_tag(x) \

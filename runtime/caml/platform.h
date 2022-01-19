@@ -78,7 +78,7 @@ Caml_inline int caml_plat_try_lock(caml_plat_mutex*);
 void caml_plat_assert_locked(caml_plat_mutex*);
 void caml_plat_assert_all_locks_unlocked();
 Caml_inline void caml_plat_unlock(caml_plat_mutex*);
-void caml_plat_mutex_free(caml_plat_mutex*);
+CAMLextern void caml_plat_mutex_free(caml_plat_mutex*);
 typedef struct { pthread_cond_t cond; caml_plat_mutex* mutex; } caml_plat_cond;
 #define CAML_PLAT_COND_INITIALIZER(m) { PTHREAD_COND_INITIALIZER, m }
 void caml_plat_cond_init(caml_plat_cond*, caml_plat_mutex*);
@@ -144,5 +144,8 @@ Caml_inline void caml_plat_unlock(caml_plat_mutex* m)
   check_err("unlock", pthread_mutex_unlock(m));
 }
 
+/* On Windows, the SYSTEM_INFO.dwPageSize is a DWORD (32-bit), but conveniently
+   long is also 32-bit */
+extern long caml_sys_pagesize;
 
 #endif /* CAML_PLATFORM_H */

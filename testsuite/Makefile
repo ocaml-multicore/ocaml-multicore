@@ -93,20 +93,21 @@ OCAMLTESTFLAGS := \
 .PHONY: default
 default:
 	@echo "Available targets:"
-	@echo "  all             launch all tests"
-	@echo "  all-foo         launch all tests beginning with foo"
-	@echo "  all-enabled     launch all enabled tests"
-	@echo "  parallel        launch all tests using GNU parallel"
-	@echo "  parallel-foo    launch all tests beginning with foo using \
+	@echo "  all              launch all tests"
+	@echo "  all-foo          launch all tests beginning with foo"
+	@echo "  all-enabled      launch all enabled tests"
+	@echo "  parallel         launch all tests using GNU parallel"
+	@echo "  parallel-enabled launch all enabled tests using GNU parallel"
+	@echo "  parallel-foo     launch all tests beginning with foo using \
 	GNU parallel"
-	@echo "  one TEST=f      launch just this single test"
-	@echo "  one DIR=p       launch the tests located in path p"
-	@echo "  one LIST=f      launch the tests listed in f (one per line)"
-	@echo "  promote DIR=p   promote the reference files for the tests in p"
-	@echo "  lib             build library modules"
-	@echo "  tools           build test tools"
-	@echo "  clean           delete generated files"
-	@echo "  report          print the report for the last execution"
+	@echo "  one TEST=f       launch just this single test"
+	@echo "  one DIR=p        launch the tests located in path p"
+	@echo "  one LIST=f       launch the tests listed in f (one per line)"
+	@echo "  promote DIR=p    promote the reference files for the tests in p"
+	@echo "  lib              build library modules"
+	@echo "  tools            build test tools"
+	@echo "  clean            delete generated files"
+	@echo "  report           print the report for the last execution"
 	@echo
 	@echo "all*, parallel* and list can automatically re-run failed test"
 	@echo "directories if MAX_TESTSUITE_DIR_RETRIES permits"
@@ -140,7 +141,7 @@ check-failstamp:
 
 .PHONY: all-enabled
 all-enabled: lib tools
-	@sed -n 's/#.*//; /\//d; /./p' disabled > disabled-dirs
+	@cat disabled | tr -d '\r' | sed -n 's/#.*//; /\//d; /./p' > disabled-dirs
 	@ls tests | fgrep -v -f disabled-dirs | \
 	  while read LINE; do \
 	    $(MAKE) $(NO_PRINT) exec-one DIR=tests/$$LINE; \
@@ -197,6 +198,27 @@ parallel-%: lib tools
 
 .PHONY: parallel
 parallel: parallel-*
+
+.PHONY: parallel-enabled
+parallel-enabled: parallel-enabled-*
+
+.PHONY: parallel-enabled-%
+parallel-enabled-%: lib tools
+	@echo | parallel >/dev/null 2>/dev/null \
+	 || (echo "Unable to run the GNU parallel tool;";\
+	     echo "You should install it before using the parallel* targets.";\
+	     exit 1)
+	@echo | parallel --gnu --no-notice >/dev/null 2>/dev/null \
+	 || (echo "Your 'parallel' tool seems incompatible with GNU parallel.";\
+	     echo "This target requires GNU parallel.";\
+	     exit 1)
+	@cat disabled | tr -d '\r' | sed -n 's/#.*//; /\//d; /./p' > disabled-dirs
+	@(cd tests ; ls -d $**) | fgrep -v -f disabled-dirs | while read -r dir; do echo $$dir; done \
+	 | parallel --gnu --no-notice --keep-order \
+	     "$(MAKE) --no-print-directory exec-one DIR=tests/{} 2>&1" \
+	 | tee $(TESTLOG)
+	@rm disabled-dirs
+	@$(MAKE) report
 
 .PHONY: list
 list: lib tools

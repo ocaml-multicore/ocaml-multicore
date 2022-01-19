@@ -15,7 +15,6 @@
 
 #define CAML_INTERNALS
 
-#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 
@@ -37,7 +36,13 @@
 #include "caml/signals.h"
 
 #include "caml/sync.h"
+
+/* OS-specific code */
+#ifdef _WIN32
+#include "st_win32.h"
+#else
 #include "st_posix.h"
+#endif
 
 /* ML value for a thread descriptor */
 
