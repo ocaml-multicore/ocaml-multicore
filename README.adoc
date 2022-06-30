@@ -1,3 +1,9 @@
+= 📢 Note 📢 =
+
+Multicore OCaml project has now been https://github.com/ocaml/ocaml/pull/10831[merged] into OCaml 🎉. This repository is no longer developed or maintained. Please follow the updates at the https://github.com/ocaml/ocaml[OCaml Github repository]. 
+
+---
+
 |=====
 | Branch `trunk` | Branch `4.14` | Branch `4.13` | Branch `4.12`
 
