@@ -2,6 +2,10 @@
 
 Multicore OCaml project has now been https://github.com/ocaml/ocaml/pull/10831[merged] into OCaml 🎉. This repository is no longer developed or maintained. Please follow the updates at the https://github.com/ocaml/ocaml[OCaml Github repository]. 
 
+## Citation
+
+If you are citing this work in an academic paper, please cite the ICFP 2020 paper "Retrofitting Parallelism onto OCaml": https://dl.acm.org/doi/10.1145/3408995
+
 ---
 
 |=====
